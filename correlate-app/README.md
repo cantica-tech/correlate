@@ -1,5 +1,7 @@
 # correlate-app
 
+[![CI](https://github.com/oliben67/correlate/actions/workflows/ci.yml/badge.svg)](https://github.com/oliben67/correlate/actions/workflows/ci.yml)
+
 correlate-app correlates container telemetry with service logs on one shared,
 clickable timeline. It is a from-scratch rewrite of cttc; the plan is in
 `../docs/roadmap/correlate-app-rewrite.md`.
@@ -38,4 +40,6 @@ Run these from the repository root. Each one runs in both `app/` and
 `task app:<name>` or `task server:<name>` runs a task in one part only, and
 `task --list` shows every task. On a fresh clone, run `task install` and then
 `task check`; it must pass before code lands (rules `br-BUILD-000002` and
-`br-BUILD-000003`).
+`br-BUILD-000003`). CI runs the same checks on Linux, macOS and Windows on
+every push and pull request, and checks that every commit cites a catalyst ID
+or starts `chore:` (rules `br-BUILD-000004` and `br-BUILD-000005`).
