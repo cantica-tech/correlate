@@ -5,10 +5,14 @@
 
 version: "3"
 
+env:
+  # Ignore any virtualenv activated from another project: uv always uses this
+  # project's own .venv, and an empty value stops it warning about the other
+  # one. Task sets this itself, so it works on Windows too (no `env -u`).
+  VIRTUAL_ENV: ""
+
 vars:
-  # Ignore any virtualenv activated from another project, so uv always uses
-  # this project's own .venv.
-  UV: env -u VIRTUAL_ENV uv
+  UV: uv
 
 tasks:
   default:
@@ -47,4 +51,9 @@ tasks:
 
   clean:
     desc: Remove caches and the virtualenv (task install restores it)
-    cmd: rm -rf .venv .pytest_cache .ruff_cache && find . -type d -name __pycache__ -prune -exec rm -rf {} +
+    # Python rather than rm/find, so it works on Windows too.
+    cmd: >-
+      uv run --no-project python -c "import pathlib, shutil;
+      [shutil.rmtree(p, ignore_errors=True) for p in
+      [pathlib.Path(d) for d in ('.venv', '.pytest_cache', '.ruff_cache')]
+      + list(pathlib.Path('.').rglob('__pycache__'))]"

@@ -29,7 +29,8 @@ tasks:
 
   layout:
     desc: Check that product code lives only in app/ and server/ (br-BUILD-000001)
-    cmd: scripts/check-layout.sh
+    # Run through uv, so the same Python 3.13 is used on every operating system.
+    cmd: uv run --no-project --python 3.13 python scripts/check_layout.py
 
   lint:
     desc: Lint both parts (Biome, ruff)

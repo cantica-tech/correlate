@@ -5,10 +5,14 @@
 
 version: "3"
 
+env:
+  # Make sure Electron starts as an app, not as plain Node, even when an editor
+  # such as VS Code leaks this variable in: an empty value turns it off. Task
+  # sets this itself, so it works on Windows too (no `env -u`).
+  ELECTRON_RUN_AS_NODE: ""
+
 vars:
-  # Make sure Electron starts as an app, not as plain Node, even if the
-  # variable leaks in from another tool.
-  ELECTRON: env -u ELECTRON_RUN_AS_NODE npx electron
+  ELECTRON: npx electron
 
 tasks:
   default:

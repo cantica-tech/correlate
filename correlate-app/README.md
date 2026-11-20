@@ -11,7 +11,7 @@ clickable timeline. It is a from-scratch rewrite of cttc; the plan is in
 | `app/` | The Electron and React client (TypeScript, Jotai, esbuild, Vitest, Biome, npm) |
 | `server/` | The Sump, the containerized collector (Python 3.13, uv, ruff, ty, pytest) |
 | `server/plugins/` | Sump plugin packages, discovered through the `sump.plugins` entry points |
-| `scripts/` | Repository checks, such as `check-layout.sh` |
+| `scripts/` | Repository checks, such as `check_layout.py` |
 
 Product code lives only in `app/` and `server/` (rule `br-BUILD-000001`).
 
