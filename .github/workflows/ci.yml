@@ -1,0 +1,104 @@
+# CI for correlate-app (br-BUILD-000004, br-BUILD-000005; REQ-000002-sJpO9KMY).
+#
+# Runs the project's own `task` commands, the same ones developers run, for
+# app/ and server/ on Linux, macOS and Windows, and checks that every new
+# commit cites a catalyst ID or is a `chore:`. Actions are pinned by commit
+# SHA, with their release in a comment.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Read-only: CI checks code, it never writes to the repository.
+permissions:
+  contents: read
+
+# A newer run on the same branch or pull request cancels the one in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: correlate-app
+
+jobs:
+  # The Electron and React client: Biome, strict TypeScript, Vitest.
+  app:
+    name: app (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: correlate-app/app/package-lock.json
+      - run: task app:install
+      - run: task app:check
+
+  # The Sump server and the repository layout: ruff, ty, pytest, check_layout.py.
+  server:
+    name: server (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: correlate-app/server/uv.lock
+      - run: task layout
+      - run: task server:install
+      - run: task server:check
+
+  # Every new commit cites a catalyst artifact or rule ID, or its subject starts
+  # `chore:`. CI has no criterion, so IDs are checked by shape only, with the
+  # CLI of the catalyst release this deployment runs (catalyst.toml).
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Every new commit cites an artifact or rule ID, or is a chore
+        env:
+          CATALYST_VERSION: 0.125.1
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.sha }}
+          BEFORE: ${{ github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git clone --quiet --depth 1 --branch "$CATALYST_VERSION" \
+            https://github.com/oliben67/catalyst.git "$RUNNER_TEMP/catalyst"
+          export PYTHONPATH="$RUNNER_TEMP/catalyst/scripts"
+          range=$(python3 "$RUNNER_TEMP/catalyst/scripts/ci_range.py" \
+            --event "$EVENT" --sha "$SHA" --before "$BEFORE" --base "$BASE" --head "$HEAD")
+          echo "checking $range"
+          python3 -m catalyst trace --pattern-only "$range"

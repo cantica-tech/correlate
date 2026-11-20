@@ -1,0 +1,4 @@
+# Check every text file out with LF line endings on every system, Windows
+# included, so formatters (Biome, ruff) see the same bytes everywhere
+# (br-BUILD-000004).
+* text=auto eol=lf
