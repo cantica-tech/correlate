@@ -1,0 +1,36 @@
+{
+  "name": "correlate-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "correlate-app: correlate container telemetry with service logs on a shared, clickable timeline",
+  "type": "module",
+  "main": "main.cjs",
+  "scripts": {
+    "prestart": "npm run build:renderer",
+    "start": "electron .",
+    "build:renderer": "node build/build-renderer.js",
+    "watch:renderer": "node build/build-renderer.js --watch",
+    "typecheck": "tsc --noEmit -p renderer/src && tsc --noEmit -p build",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.10",
+    "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "electron": "^44.3.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "jotai": "^3.0.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

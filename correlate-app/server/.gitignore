@@ -1,0 +1,6 @@
+# Python build and tool output; uv.lock is committed (br-BUILD-000003).
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+dist/

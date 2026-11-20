@@ -1,0 +1,63 @@
+# https://taskfile.dev
+#
+# The client's developer commands (br-BUILD-000002). The root Taskfile
+# includes this file as `app:`, so `task check` at the root runs these too.
+
+version: "3"
+
+vars:
+  # Make sure Electron starts as an app, not as plain Node, even if the
+  # variable leaks in from another tool.
+  ELECTRON: env -u ELECTRON_RUN_AS_NODE npx electron
+
+tasks:
+  default:
+    desc: List the app tasks
+    silent: true
+    cmd: task --list
+
+  install:
+    desc: Install the app's dependencies from package-lock.json
+    cmd: npm ci
+
+  build:
+    desc: Bundle the renderer once
+    cmd: npm run build:renderer
+
+  start:
+    desc: Bundle the renderer, then open the app
+    cmds:
+      - task: build
+      - "{{.ELECTRON}} ."
+
+  watch:
+    desc: Rebuild the renderer bundle on every change (Ctrl+C to stop)
+    interactive: true
+    cmd: npm run watch:renderer
+
+  lint:
+    desc: Lint and check formatting with Biome
+    cmd: npm run lint
+
+  format:
+    desc: Format with Biome
+    cmd: npm run format
+
+  typecheck:
+    desc: Type-check the renderer and the build scripts (strict TypeScript)
+    cmd: npm run typecheck
+
+  test:
+    desc: Run the Vitest suite
+    cmd: npm test
+
+  check:
+    desc: Lint, type-check and test
+    cmds:
+      - task: lint
+      - task: typecheck
+      - task: test
+
+  clean:
+    desc: Remove the bundle and node_modules (task install restores them)
+    cmd: rm -rf renderer/dist dist node_modules

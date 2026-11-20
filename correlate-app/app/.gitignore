@@ -1,0 +1,4 @@
+# Node and build output; package-lock.json is committed (br-BUILD-000003).
+node_modules/
+renderer/dist/
+dist/

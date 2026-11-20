@@ -1,0 +1,50 @@
+# https://taskfile.dev
+#
+# The Sump server's developer commands (br-BUILD-000002). The root Taskfile
+# includes this file as `server:`, so `task check` at the root runs these too.
+
+version: "3"
+
+vars:
+  # Ignore any virtualenv activated from another project, so uv always uses
+  # this project's own .venv.
+  UV: env -u VIRTUAL_ENV uv
+
+tasks:
+  default:
+    desc: List the server tasks
+    silent: true
+    cmd: task --list
+
+  install:
+    desc: Install the server and its dev tools from uv.lock
+    cmd: "{{.UV}} sync --frozen"
+
+  lint:
+    desc: Lint with ruff and check formatting
+    cmds:
+      - "{{.UV}} run ruff check ."
+      - "{{.UV}} run ruff format --check ."
+
+  format:
+    desc: Format with ruff
+    cmd: "{{.UV}} run ruff format ."
+
+  typecheck:
+    desc: Type-check with ty
+    cmd: "{{.UV}} run ty check"
+
+  test:
+    desc: Run the pytest suite
+    cmd: "{{.UV}} run pytest"
+
+  check:
+    desc: Lint, type-check and test
+    cmds:
+      - task: lint
+      - task: typecheck
+      - task: test
+
+  clean:
+    desc: Remove caches and the virtualenv (task install restores it)
+    cmd: rm -rf .venv .pytest_cache .ruff_cache && find . -type d -name __pycache__ -prune -exec rm -rf {} +

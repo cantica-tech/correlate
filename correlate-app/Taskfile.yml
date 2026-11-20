@@ -1,0 +1,63 @@
+# https://taskfile.dev
+#
+# correlate-app's developer commands for the whole repository
+# (br-BUILD-000002). Each task runs the same task in app/ and server/, whose
+# own Taskfiles are included below; `task app:<name>` or `task server:<name>`
+# runs one part only. Run `task --list` to see them all.
+
+version: "3"
+
+includes:
+  app:
+    taskfile: ./app/Taskfile.yml
+    dir: ./app
+  server:
+    taskfile: ./server/Taskfile.yml
+    dir: ./server
+
+tasks:
+  default:
+    desc: List every task
+    silent: true
+    cmd: task --list
+
+  install:
+    desc: Install both parts' dependencies from their lockfiles
+    cmds:
+      - task: app:install
+      - task: server:install
+
+  layout:
+    desc: Check that product code lives only in app/ and server/ (br-BUILD-000001)
+    cmd: scripts/check-layout.sh
+
+  lint:
+    desc: Lint both parts (Biome, ruff)
+    cmds:
+      - task: app:lint
+      - task: server:lint
+
+  typecheck:
+    desc: Type-check both parts (strict TypeScript, ty)
+    cmds:
+      - task: app:typecheck
+      - task: server:typecheck
+
+  test:
+    desc: Run both parts' tests (Vitest, pytest)
+    cmds:
+      - task: app:test
+      - task: server:test
+
+  check:
+    desc: Layout, lint, type-check and test both parts; must pass before code lands
+    cmds:
+      - task: layout
+      - task: lint
+      - task: typecheck
+      - task: test
+
+  start:
+    desc: Open the app
+    cmds:
+      - task: app:start
