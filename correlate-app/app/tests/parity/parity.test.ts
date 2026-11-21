@@ -17,8 +17,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { _electron, type ElectronApplication, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ICONS } from "../../renderer/src/icons/icons.generated.js";
 import { COMPONENT_LIMIT, compare, type Mask, readPng, writePng } from "./compare.js";
-import { cttcChartBlock, cttcSwatchScript } from "./cttcCharts.js";
+import { cttcChartBlock, cttcNowButton, cttcSwatchScript } from "./cttcCharts.js";
 import { cttcLanesHead, cttcPanels, cttcRowsScript } from "./cttcLogs.js";
 import { cttcMenuBar } from "./cttcMenuBar.js";
 import { cttcSidebar, cttcWidthScript } from "./cttcSidebar.js";
@@ -311,6 +312,17 @@ async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer
     await page.evaluate("document.fonts.ready.then(() => true)");
     pictures.set(`charts-head-${theme}`, await shoot("#chart-head"));
     pictures.set(`charts-legend-${theme}`, await shoot("#legend"));
+    // Recentred: the head's "Now" (REQ-000030-sJpO9KMY).
+    await page.goto(`${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?paused`);
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.getElementById("stage").innerHTML = ${JSON.stringify(cttcChartBlock())}; document.getElementById("chart-head").insertAdjacentHTML("beforeend", ${JSON.stringify(cttcNowButton(ICONS.track))}); ${cttcSwatchScript()} })()`,
+      );
+    }
+    await page.waitForSelector("#chart-head .btn-flat");
+    await page.mouse.move(1, 1);
+    await page.evaluate("document.fonts.ready.then(() => true)");
+    pictures.set(`charts-head-now-${theme}`, await shoot("#chart-head"));
   }
 }
 
@@ -394,6 +406,7 @@ describe.skipIf(process.platform !== "darwin")(
       "remove-dialog",
       "charts-head",
       "charts-legend",
+      "charts-head-now",
       "logs-panel",
       "logs-lanes-head",
     ].flatMap((n) => THEMES.map((t) => `${n}-${t}`));

@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { bare, cssBlocks, cttcRules } from "../../testing/cttcCss.js";
-import { clock, density, findRow, levelOf, pageFetcher } from "../api.js";
+import { clock, density, findRow, levelOf, nearestRow, pageFetcher } from "../api.js";
 import { LANE_HEIGHT, laneTicks } from "../Lanes.js";
 import { PAGE, PageCache, pagesOf, retryDelay } from "../pages.js";
 
@@ -94,6 +94,15 @@ describe("REQ-000029-sJpO9KMY: the calls", () => {
     });
     expect(await density(request, "s", view, 5000)).toEqual([1, 2]);
     expect(seen[2]).toMatchObject({ path: "/records/density", query: { buckets: 2000 } });
+    // REQ-000030-sJpO9KMY: the row nearest the cursor.
+    expect(await nearestRow(request, "s", view, "oldest", view.t0 + 1000)).toEqual({
+      ok: true,
+      index: 7,
+    });
+    expect(seen[3]).toMatchObject({
+      path: "/records/logs/at",
+      query: { order: "oldest", t: "2026-11-21T18:00:01.000Z" },
+    });
   });
 
   it("throw on a failed page, so the cache does not keep it", async () => {

@@ -34,6 +34,7 @@ export { registerPickerIpc } from "./picker.js";
 export { registerProvisionIpc } from "./provision/ipc.js";
 export { runCommand } from "./provision/runner.js";
 export { connectSsh } from "./provision/ssh.js";
+export { registerSeriesIpc } from "./series.js";
 export {
   registerSidebarIpc,
   SIDEBAR_LAYOUT_EVENT,

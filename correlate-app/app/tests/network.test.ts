@@ -153,7 +153,18 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       "menu",
       "picker",
       "stream",
+      "series",
       "logs",
+    ]);
+    // Each stream's containers' order and hidden set: only their own channels (REQ-000030-sJpO9KMY).
+    const series = (exposed.correlate as { series: Record<string, (m?: unknown) => unknown> })
+      .series;
+    expect(Object.keys(series)).toEqual(["get", "set"]);
+    await series.get?.("self");
+    await series.set?.({ stream: "self", order: ["web"], hidden: [] });
+    expect(invoked.splice(0)).toEqual([
+      ["series:get", "self"],
+      ["series:set", { stream: "self", order: ["web"], hidden: [] }],
     ]);
     // The log panels' choices and Export .log: only their own channels (REQ-000029-sJpO9KMY).
     const logs = (exposed.correlate as { logs: Record<string, (m?: unknown) => unknown> }).logs;

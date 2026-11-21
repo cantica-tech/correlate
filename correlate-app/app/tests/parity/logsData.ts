@@ -20,3 +20,11 @@ export const LOG_ROWS = [
   ts: new Date(Date.UTC(2026, 10, 21, 18, 9, 59 - i * 3, 125)).toISOString(),
   text,
 }));
+
+/** The cursor: at the error row's time; rows within 5 s of it are highlighted. */
+export const LOG_CURSOR_INDEX = 3;
+export const LOG_CURSOR_T = Date.parse(LOG_ROWS[LOG_CURSOR_INDEX]?.ts ?? "");
+/** The rows within cttc's 5 s highlight window of the cursor. */
+export const LOG_HIGHLIGHTED = LOG_ROWS.map((r, i) => [i, Date.parse(r.ts)] as const)
+  .filter(([, t]) => Math.abs(t - LOG_CURSOR_T) <= 5_000)
+  .map(([i]) => i);

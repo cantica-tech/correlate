@@ -1129,6 +1129,26 @@ button:disabled:hover {
   margin-left: 0;
 }
 
+/* charts/charts.css: cttc style.css:1285-1302 */
+#chart-head .panel-head-right,
+#host-head .panel-head-right {
+  grid-row: 1;
+  /* the grid's justify-self (below) positions the cluster instead of
+     the auto-margin trick .panel-head-right's base rule above relies on
+     for the flex-based log panel header. */
+  margin-left: 0;
+}
+body.controls-left #chart-head .panel-head-right,
+body.controls-left #host-head .panel-head-right {
+  grid-column: 1;
+  justify-self: start;
+}
+body.controls-right #chart-head .panel-head-right,
+body.controls-right #host-head .panel-head-right {
+  grid-column: 3;
+  justify-self: end;
+}
+
 /* components/components.css: cttc style.css:1361-1377 */
 .btn-group {
   display: inline-flex;

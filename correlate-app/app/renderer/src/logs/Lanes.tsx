@@ -4,11 +4,15 @@
  * entries" head and its toggle, folded by default and remembered; one 8 px
  * lane per container, in the legend's order and color, a tick per bucket
  * with log rows, stronger where there are more, on the charts' time axis.
+ * The cursor is drawn across them, and a click sets it (REQ-000030-sJpO9KMY).
  */
 import { useEffect, useRef, useState } from "react";
+import { timeAt } from "../charts/ChartBlock.js";
 import type { Viewport } from "../correlate/atoms.js";
 import { PLOT_MARGIN_LEFT } from "../correlate/axes.js";
 import { colorForSlot, resolveColor, type SlotMap } from "../correlate/colorSlots.js";
+import { tToX } from "../correlate/timeMapping.js";
+import { isClick } from "../correlate/zoom.js";
 import type { SumpRequester } from "../shell/bridge.js";
 import { density } from "./api.js";
 
@@ -58,10 +62,25 @@ export interface LanesProps {
   view: Viewport;
   open: boolean;
   onToggle: (open: boolean) => void;
+  /** The window's cursor, or null. */
+  cursorT?: number | null;
+  /** A click on a lane sets the cursor. */
+  onCursor?: (t: number) => void;
 }
 
 /** The lanes. */
-export function Lanes({ request, stream, containers, slots, view, open, onToggle }: LanesProps) {
+export function Lanes({
+  request,
+  stream,
+  containers,
+  slots,
+  view,
+  open,
+  onToggle,
+  cursorT = null,
+  onCursor,
+}: LanesProps) {
+  const downX = useRef<number | null>(null);
   const [counts, setCounts] = useState<Record<string, number[]>>({});
   const [width, setWidth] = useState(0);
   const lanesRef = useRef<HTMLDivElement>(null);
@@ -119,8 +138,19 @@ export function Lanes({ request, stream, containers, slots, view, open, onToggle
         ctx.fillRect(tick.x, 1, tick.width, LANE_HEIGHT - 2);
       }
       ctx.globalAlpha = 1;
+      // The cursor, as cttc's drawVerticals.
+      const plot = width - PLOT_MARGIN_LEFT;
+      if (cursorT !== null && cursorT >= view.t0 && cursorT <= view.t1) {
+        const x = PLOT_MARGIN_LEFT + tToX(cursorT, view, plot);
+        ctx.strokeStyle = style.getPropertyValue("--accent").trim();
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, LANE_HEIGHT);
+        ctx.stroke();
+      }
     }
-  }, [open, width, counts, containers, slots]);
+  }, [open, width, counts, containers, slots, cursorT, view]);
 
   return (
     <>
@@ -147,6 +177,17 @@ export function Lanes({ request, stream, containers, slots, view, open, onToggle
             aria-label={`Log entries of ${name}`}
             ref={(el) => {
               canvases.current[name] = el;
+            }}
+            onMouseDown={(e) => {
+              downX.current = e.nativeEvent.offsetX;
+            }}
+            onMouseUp={(e) => {
+              const x = e.nativeEvent.offsetX;
+              const from = downX.current;
+              downX.current = null;
+              if (from === null || !isClick(from, x)) return;
+              const t = timeAt(x, view, e.currentTarget.clientWidth);
+              if (t !== null) onCursor?.(t);
             }}
           />
         ))}

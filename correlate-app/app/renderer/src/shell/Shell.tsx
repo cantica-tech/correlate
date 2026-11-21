@@ -148,6 +148,8 @@ export function Shell({ bridge, detached = false }: ShellProps) {
                 view={shown.view}
                 open={logs.lanesOpen}
                 onToggle={logs.setLanesOpen}
+                cursorT={shown.cursorT}
+                onCursor={shown.setCursor}
               />
             )}
             panels={(shown) => (

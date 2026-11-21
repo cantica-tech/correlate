@@ -24,7 +24,9 @@
  * `window.correlate.picker` remembers the data-stream picker's last stream
  * per Sump (REQ-000026-sJpO9KMY). `window.correlate.stream` reads and sets
  * this window's active data stream (REQ-000027-sJpO9KMY). `window.correlate.logs`
- * keeps the log panels' choices and runs Export .log (REQ-000029-sJpO9KMY).
+ * keeps the log panels' choices and runs Export .log (REQ-000029-sJpO9KMY);
+ * `window.correlate.series` keeps each stream's containers' order and hidden
+ * set (REQ-000030-sJpO9KMY).
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -65,6 +67,9 @@ const MENU_ACTION_CHANNEL = "menu:action";
 /** Must match the channels in `main/src/picker.ts`. */
 const PICKER_LAST_CHANNEL = "picker:lastStream";
 const PICKER_SET_LAST_CHANNEL = "picker:setLastStream";
+/** Must match the channels in `main/src/series.ts`. */
+const SERIES_GET_CHANNEL = "series:get";
+const SERIES_SET_CHANNEL = "series:set";
 /** Must match the channels in `main/src/logs.ts`. */
 const LOGS_PREFS_CHANNEL = "logs:prefs";
 const LOGS_SET_PREFS_CHANNEL = "logs:setPrefs";
@@ -162,6 +167,12 @@ contextBridge.exposeInMainWorld("correlate", {
     active: () => ipcRenderer.invoke(STREAM_ACTIVE_CHANNEL),
     /** Make a stream this window's active one: `{ ok, stream }` or `{ ok: false, message }`. */
     setActive: (stream) => ipcRenderer.invoke(STREAM_SET_ACTIVE_CHANNEL, stream),
+  },
+  series: {
+    /** A stream's containers' `{ order, hidden }` on this window's Sump. */
+    get: (stream) => ipcRenderer.invoke(SERIES_GET_CHANNEL, stream),
+    /** Keep `{ stream, order, hidden }`. */
+    set: (arrangement) => ipcRenderer.invoke(SERIES_SET_CHANNEL, arrangement),
   },
   logs: {
     /** The log panels' order and whether the lanes are open. */

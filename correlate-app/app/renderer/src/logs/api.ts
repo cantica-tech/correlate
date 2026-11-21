@@ -58,6 +58,23 @@ export async function findRow(
   return { ok: true, index: (reply.value as { index: number | null }).index };
 }
 
+/** The index of `source`'s row nearest `t` over `view` in `order`, or null with no rows. */
+export async function nearestRow(
+  request: SumpRequester,
+  source: string,
+  view: Viewport,
+  order: Order,
+  t: number,
+): Promise<{ ok: true; index: number | null } | { ok: false; message: string }> {
+  const reply = await request({
+    method: "GET",
+    path: "/records/logs/at",
+    query: { source, ...range(view), order, t: new Date(t).toISOString() },
+  });
+  if (!reply.ok) return { ok: false, message: reply.error.message };
+  return { ok: true, index: (reply.value as { index: number | null }).index };
+}
+
 /** How many rows of `source` fall in each of `buckets` buckets of `view`. */
 export async function density(
   request: SumpRequester,

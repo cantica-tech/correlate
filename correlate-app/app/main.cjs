@@ -37,6 +37,7 @@ const {
   registerMenuIpc,
   registerLogsIpc,
   registerPickerIpc,
+  registerSeriesIpc,
   registerProvisionIpc,
   registerSidebarIpc,
   registerStreamIpc,
@@ -194,6 +195,8 @@ app.whenReady().then(() => {
   registerSumpIpc(ipcMain, sumps, tokens, relogin, activeSumps, lifecycle);
   // Each window's active data stream, on its active Sump (REQ-000027).
   registerStreamIpc(ipcMain, activeStreams, activeSumps);
+  // Each stream's containers: their order and those hidden (REQ-000030).
+  registerSeriesIpc(ipcMain, settings, activeSumps);
   // The log panels' order and lanes, and Export .log: the save dialog
   // first, then the rows through the window's Sump (REQ-000029).
   registerLogsIpc(ipcMain, settings, {

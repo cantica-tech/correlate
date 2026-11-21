@@ -88,6 +88,13 @@ export interface ShellBridge {
     active(): Promise<string | null>;
     setActive(stream: string): Promise<{ ok: boolean; message?: string }>;
   };
+  /** Each stream's containers' order and hidden set (REQ-000030-sJpO9KMY). */
+  series?: {
+    get(stream: string): Promise<{ order: string[]; hidden: string[] }>;
+    set(arrangement: { stream: string; order: string[]; hidden: string[] }): Promise<{
+      ok: boolean;
+    }>;
+  };
   /** The log panels' choices and Export .log (REQ-000029-sJpO9KMY). */
   logs?: {
     prefs(): Promise<{ order: "newest" | "oldest"; lanesOpen: boolean }>;

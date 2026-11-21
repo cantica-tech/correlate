@@ -30,6 +30,15 @@ export function cttcChartBlock(): string {
   </div></section></main>`;
 }
 
+/**
+ * cttc's flat head button (`.btn-flat`, as its Bring Back,
+ * `index.html:234`), in the charts' head, labelled "Now" with the track icon:
+ * the app's way back to following now (REQ-000030-sJpO9KMY).
+ */
+export function cttcNowButton(trackSvg: string): string {
+  return `<div class="panel-head-right"><button class="btn-flat" title="Follow now again">${trackSvg.replace("<svg ", '<svg class="btn-flat-icon" ')}Now</button></div>`;
+}
+
 /** The script that colors the swatches, as cttc's `colorFor` did. */
 export function cttcSwatchScript(): string {
   return `document.querySelectorAll("#legend .legend-swatch").forEach((el, i) => { el.style.background = ${JSON.stringify(

@@ -78,6 +78,10 @@ export function Panels({ bridge, shown, order, onOrder }: PanelsProps) {
           onOrder={onOrder}
           onExport={() => void exportLog(name)}
           onHide={() => shown.hide(name)}
+          cursorT={shown.cursorT}
+          onCursor={shown.setCursor}
+          onRowClick={shown.recenter}
+          onReorder={(dragged) => shown.reorder(dragged, name)}
         />
       ))}
     </section>
