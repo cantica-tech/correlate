@@ -27,6 +27,7 @@ import { Vault, type VaultLogger } from "./vault/vault.js";
 
 export { Auditor } from "./catalog/audit.js";
 export { identityPublicKey, importIdentity, userName } from "./identity/identity.js";
+export { Notifications, notifyLifecycle, registerStatusIpc } from "./notify.js";
 export { registerProvisionIpc } from "./provision/ipc.js";
 export { runCommand } from "./provision/runner.js";
 export { connectSsh } from "./provision/ssh.js";

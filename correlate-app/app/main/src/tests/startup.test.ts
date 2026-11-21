@@ -84,6 +84,11 @@ describe("main.cjs starts", () => {
       "sidebar:get",
       "sidebar:set",
       "sidebar:action",
+      "status:history",
+      "status:add",
+      "status:clear",
+      "status:visible",
+      "status:setVisible",
     ]) {
       expect(channels).toContain(channel);
     }

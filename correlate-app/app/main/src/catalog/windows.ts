@@ -41,6 +41,13 @@ export class ActiveSumps {
     return [...this.byWindow].filter(([, id]) => id === sumpId).map(([window]) => window);
   }
 
+  /** Every Sump some window is on. */
+  inUse(): Set<string> {
+    return new Set(
+      [...this.byWindow.values()].filter((id): id is string => typeof id === "string"),
+    );
+  }
+
   /** A window closed. */
   close(windowId: number): void {
     this.byWindow.delete(windowId);

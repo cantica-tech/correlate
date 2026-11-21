@@ -136,7 +136,34 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
         request: (m: unknown) => Promise<unknown>;
       };
     };
-    expect(Object.keys(api)).toEqual(["theme", "sump", "sidebar"]);
+    expect(Object.keys(api)).toEqual(["theme", "sump", "sidebar", "status"]);
+    const status = (exposed.correlate as { status: Record<string, (m?: unknown) => unknown> })
+      .status;
+    expect(Object.keys(status)).toEqual([
+      "history",
+      "add",
+      "clear",
+      "visible",
+      "setVisible",
+      "onNotice",
+      "onVisibility",
+    ]);
+    await status.history?.();
+    await status.add?.("hello");
+    await status.clear?.();
+    await status.visible?.();
+    await status.setVisible?.(false);
+    expect(invoked.splice(0)).toEqual([
+      ["status:history"],
+      ["status:add", "hello"],
+      ["status:clear"],
+      ["status:visible"],
+      ["status:setVisible", false],
+    ]);
+    const stopNotice = status.onNotice?.(() => {}) as () => void;
+    expect(listeners.has("status:notice")).toBe(true);
+    stopNotice();
+    expect(listeners.has("status:notice")).toBe(false);
     const sidebar = (
       exposed.correlate as {
         sidebar: Record<string, (m?: unknown) => unknown>;

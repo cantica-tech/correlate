@@ -17,7 +17,9 @@
  * `main/src/sump/ipc.ts`). Every call is time-bounded in the main process
  * (br-CONN-000005-sJpO9KMY). `window.correlate.sidebar` reads and changes the
  * sidebar's layout, shared by every window, and asks for its actions by name
- * (REQ-000021-sJpO9KMY).
+ * (REQ-000021-sJpO9KMY). `window.correlate.status` reads and adds to the
+ * notifications' History and shows or hides the status bar
+ * (REQ-000022-sJpO9KMY).
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -45,6 +47,14 @@ const SIDEBAR_SET_CHANNEL = "sidebar:set";
 const SIDEBAR_ACTION_CHANNEL = "sidebar:action";
 const SIDEBAR_LAYOUT_EVENT = "sidebar:layout";
 const SIDEBAR_RUN_EVENT = "sidebar:run";
+/** Must match the channels in `main/src/notify.ts`. */
+const STATUS_HISTORY_CHANNEL = "status:history";
+const STATUS_ADD_CHANNEL = "status:add";
+const STATUS_CLEAR_CHANNEL = "status:clear";
+const STATUS_VISIBLE_CHANNEL = "status:visible";
+const STATUS_SET_VISIBLE_CHANNEL = "status:setVisible";
+const STATUS_NOTICE_EVENT = "status:notice";
+const STATUS_VISIBILITY_EVENT = "status:visibility";
 
 /** Listen on `channel`; returns the function that stops listening. */
 function listen(channel, listener) {
@@ -103,5 +113,21 @@ contextBridge.exposeInMainWorld("correlate", {
     onLayout: (listener) => listen(SIDEBAR_LAYOUT_EVENT, listener),
     /** Hear the actions this window should run; returns the function that stops listening. */
     onRun: (listener) => listen(SIDEBAR_RUN_EVENT, listener),
+  },
+  status: {
+    /** Every notification, oldest first: `[{ at, text }]`. */
+    history: () => ipcRenderer.invoke(STATUS_HISTORY_CHANNEL),
+    /** Add a message (plain text, at most 500 characters). */
+    add: (text) => ipcRenderer.invoke(STATUS_ADD_CHANNEL, text),
+    /** Forget every notification, for every window. */
+    clear: () => ipcRenderer.invoke(STATUS_CLEAR_CHANNEL),
+    /** Whether the status bar is shown. */
+    visible: () => ipcRenderer.invoke(STATUS_VISIBLE_CHANNEL),
+    /** Show or hide the status bar, remembered. */
+    setVisible: (visible) => ipcRenderer.invoke(STATUS_SET_VISIBLE_CHANNEL, visible),
+    /** Hear each new notification and each clear; returns the function that stops listening. */
+    onNotice: (listener) => listen(STATUS_NOTICE_EVENT, listener),
+    /** Hear the bar shown or hidden; returns the function that stops listening. */
+    onVisibility: (listener) => listen(STATUS_VISIBILITY_EVENT, listener),
   },
 });

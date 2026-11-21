@@ -56,6 +56,10 @@ export function registerProvisionIpc(ipcMain: IpcMainLike, ctx: RemoteContext): 
       name: e.name,
       kind: e.kind,
       sshTarget: e.sshTarget,
+      sshPort: e.sshPort,
+      sumpPort: e.sumpPort,
+      // Where a remote Sump is reached on this machine: its forward.
+      forwardUrl: e.kind === "remote" ? ctx.forwards?.urlOf(e.id) : undefined,
       state: ctx.lifecycle.get(e.id)?.state ?? "unreachable",
       current: e.id === current,
     }));

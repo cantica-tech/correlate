@@ -173,6 +173,33 @@ describe("br-SUMP-000011-sJpO9KMY: the health probe", () => {
     expect(l.get("s")).toMatchObject({ state: "active", reason: "answered /health with 503" });
   });
 
+  it("probes a Sump a window is on every tick, the others only every 30 s (REQ-000022-sJpO9KMY)", async () => {
+    const asked: string[] = [];
+    const answering = await serve((req, res) => {
+      asked.push(String(req.headers["x-sump"] ?? ""));
+      res.writeHead(200);
+      res.end("{}");
+    });
+    servers.push(answering);
+    const l = new Lifecycle(undefined, () => T0, quiet);
+    l.reachable("used", "start");
+    l.reachable("idle", "start");
+    let now = 0;
+    const counts = new Map<string, number>();
+    const probe = new HealthProbe(
+      l,
+      (id) => {
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+        return answering.sump;
+      },
+      { inUse: () => new Set(["used"]), now: () => now },
+    );
+    for (now = 0; now < 60_000; now += 5_000) await probe.tick();
+    // 12 ticks over a minute: the Sump in use every time, the other at 0 and 30 s.
+    expect(counts.get("used")).toBe(12);
+    expect(counts.get("idle")).toBe(2);
+  });
+
   it("never overlaps probes of one Sump, and skips Sumps it cannot resolve", async () => {
     let calls = 0;
     const slow = await serve(() => {

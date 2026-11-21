@@ -24,12 +24,15 @@ const {
   Forwards,
   HealthProbe,
   Lifecycle,
+  Notifications,
+  notifyLifecycle,
   SUMP_STATE_EVENT,
   configuredSumps,
   openCatalog,
   openVault,
   registerProvisionIpc,
   registerSidebarIpc,
+  registerStatusIpc,
   registerSumpIpc,
   registerThemeIpc,
   runCommand,
@@ -54,6 +57,11 @@ const WEB_PREFERENCES = {
   nodeIntegration: false,
   sandbox: true,
 };
+
+/** Send to every window. */
+function broadcast(channel, value) {
+  for (const window of BrowserWindow.getAllWindows()) window.webContents.send(channel, value);
+}
 
 /** Create the main window. */
 function createWindow() {
@@ -112,9 +120,7 @@ app.whenReady().then(() => {
   sidebar = new SidebarHost(
     settings,
     {
-      broadcast: (channel, value) => {
-        for (const window of BrowserWindow.getAllWindows()) window.webContents.send(channel, value);
-      },
+      broadcast,
       sendToMain: (channel, value) => mainWindow?.webContents.send(channel, value),
       openDetached: createSidebarWindow,
     },
@@ -155,7 +161,18 @@ app.whenReady().then(() => {
   const afterConnect = () => auditor?.soon();
   const relogin = reloginWith(vault, sumps, tokens, process.env, catalog, lifecycle, afterConnect);
   registerSumpIpc(ipcMain, sumps, tokens, relogin, activeSumps, lifecycle);
-  const probe = new HealthProbe(lifecycle, sumps);
+  // Notifications and their History, one feed for every window; a Sump a
+  // window is on that is lost or comes back is notified (REQ-000022).
+  const notifications = new Notifications();
+  notifyLifecycle(
+    lifecycle,
+    notifications,
+    (id) => activeSumps.windowsOn(id).length > 0,
+    (id) => catalog?.get(id)?.name ?? id,
+  );
+  registerStatusIpc(ipcMain, notifications, settings, broadcast);
+  // A Sump a window is on is probed every 5 s, the others every 30 s.
+  const probe = new HealthProbe(lifecycle, sumps, { inUse: () => activeSumps.inUse() });
   probe.start();
   // Startup plan and provisioning, for the Add Sump screens (REQ-000014).
   registerProvisionIpc(ipcMain, {
