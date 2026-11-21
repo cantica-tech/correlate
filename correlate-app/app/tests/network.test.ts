@@ -136,7 +136,11 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
         request: (m: unknown) => Promise<unknown>;
       };
     };
-    expect(Object.keys(api)).toEqual(["theme", "sump", "sidebar", "status"]);
+    expect(Object.keys(api)).toEqual(["theme", "sump", "sidebar", "status", "menu"]);
+    const menu = (exposed.correlate as { menu: Record<string, (m?: unknown) => unknown> }).menu;
+    expect(Object.keys(menu)).toEqual(["action"]);
+    await menu.action?.("zoom-in");
+    expect(invoked.splice(0)).toEqual([["menu:action", "zoom-in"]]);
     const status = (exposed.correlate as { status: Record<string, (m?: unknown) => unknown> })
       .status;
     expect(Object.keys(status)).toEqual([

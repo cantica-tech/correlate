@@ -19,13 +19,15 @@ describe("main.cjs starts", () => {
     const channels: string[] = [];
     const appEvents = new Map<string, () => void>();
     const windows: unknown[] = [];
+    const menus: unknown[] = [];
     let ready: (() => void) | undefined;
     const readyPromise = new Promise<void>((resolve) => {
       ready = resolve;
     });
     class BrowserWindow {
       static getAllWindows = () => windows;
-      webContents = { id: windows.length + 1, send: () => {} };
+      static fromWebContents = () => null;
+      webContents = { id: windows.length + 1, send: () => {}, on: () => {} };
       constructor() {
         windows.push(this);
       }
@@ -38,9 +40,14 @@ describe("main.cjs starts", () => {
         on: (event: string, handler: () => void) => void appEvents.set(event, handler),
         getPath: () => dir,
         getVersion: () => "0.1.0",
+        name: "correlate-app",
         quit: () => {},
       },
       BrowserWindow,
+      Menu: {
+        setApplicationMenu: (menu: unknown) => void menus.push(menu),
+        buildFromTemplate: (template: unknown) => ({ template }),
+      },
       ipcMain: { handle: (channel: string) => void channels.push(channel) },
       nativeTheme: { themeSource: "system" },
       safeStorage: {
@@ -89,9 +96,13 @@ describe("main.cjs starts", () => {
       "status:clear",
       "status:visible",
       "status:setVisible",
+      "menu:action",
     ]) {
       expect(channels).toContain(channel);
     }
+    // A native menu on macOS only (REQ-000023).
+    expect(menus).toHaveLength(1);
+    expect(menus[0] === null).toBe(process.platform !== "darwin");
     appEvents.get("will-quit")?.();
   });
 });

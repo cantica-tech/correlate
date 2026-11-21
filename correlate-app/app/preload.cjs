@@ -19,7 +19,8 @@
  * sidebar's layout, shared by every window, and asks for its actions by name
  * (REQ-000021-sJpO9KMY). `window.correlate.status` reads and adds to the
  * notifications' History and shows or hides the status bar
- * (REQ-000022-sJpO9KMY).
+ * (REQ-000022-sJpO9KMY). `window.correlate.menu.action()` runs a menu bar
+ * entry by name on this window (REQ-000023-sJpO9KMY).
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -55,6 +56,8 @@ const STATUS_VISIBLE_CHANNEL = "status:visible";
 const STATUS_SET_VISIBLE_CHANNEL = "status:setVisible";
 const STATUS_NOTICE_EVENT = "status:notice";
 const STATUS_VISIBILITY_EVENT = "status:visibility";
+/** Must match the channel in `main/src/menu.ts`. */
+const MENU_ACTION_CHANNEL = "menu:action";
 
 /** Listen on `channel`; returns the function that stops listening. */
 function listen(channel, listener) {
@@ -129,5 +132,9 @@ contextBridge.exposeInMainWorld("correlate", {
     onNotice: (listener) => listen(STATUS_NOTICE_EVENT, listener),
     /** Hear the bar shown or hidden; returns the function that stops listening. */
     onVisibility: (listener) => listen(STATUS_VISIBILITY_EVENT, listener),
+  },
+  menu: {
+    /** Run a menu bar entry by name ("reload", "zoom-in", "copy", ...) on this window. */
+    action: (name) => ipcRenderer.invoke(MENU_ACTION_CHANNEL, name),
   },
 });

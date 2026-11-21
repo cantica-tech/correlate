@@ -14,22 +14,25 @@
  * `docs/roadmap/correlate-app-rewrite.md`. CommonJS, as in cttc and
  * correlator, because Electron's own module loads most reliably this way.
  */
-const { app, BrowserWindow, ipcMain, nativeTheme, safeStorage } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu, nativeTheme, safeStorage } = require("electron");
 const path = require("node:path");
 const {
   ActiveSumps,
   Auditor,
   connectSsh,
   defaultSettingsPath,
+  fieldMenuTemplate,
   Forwards,
   HealthProbe,
   Lifecycle,
+  nativeMenuTemplate,
   Notifications,
   notifyLifecycle,
   SUMP_STATE_EVENT,
   configuredSumps,
   openCatalog,
   openVault,
+  registerMenuIpc,
   registerProvisionIpc,
   registerSidebarIpc,
   registerStatusIpc,
@@ -63,6 +66,17 @@ function broadcast(channel, value) {
   for (const window of BrowserWindow.getAllWindows()) window.webContents.send(channel, value);
 }
 
+/**
+ * Cut, Copy, Paste and Select All on a right-click in an editable field;
+ * Electron gives none by default (REQ-000023, as cttc's attachEditContextMenu).
+ */
+function attachFieldMenu(window) {
+  window.webContents.on("context-menu", (_event, params) => {
+    const template = fieldMenuTemplate(params);
+    if (template) Menu.buildFromTemplate(template).popup({ window });
+  });
+}
+
 /** Create the main window. */
 function createWindow() {
   const window = new BrowserWindow({
@@ -83,6 +97,7 @@ function createWindow() {
       sidebar?.shutDown();
     }
   });
+  attachFieldMenu(window);
   window.loadFile(path.join(__dirname, "renderer", "index.html"));
   sidebar?.start();
 }
@@ -98,6 +113,7 @@ function createSidebarWindow() {
     title: "correlate-app Sidebar",
     webPreferences: WEB_PREFERENCES,
   });
+  attachFieldMenu(window);
   window.loadFile(path.join(__dirname, "renderer", "index.html"), { query: { view: "sidebar" } });
   return {
     close: () => {
@@ -112,6 +128,11 @@ app.whenReady().then(() => {
   // The theme first, so no window paints in the wrong one (REQ-000018).
   const settings = new Settings(defaultSettingsPath(process.env));
   nativeTheme.themeSource = settings.themeMode();
+  // cttc's menu bar is drawn in the window; on macOS a minimal native menu
+  // (app menu and Edit) keeps the system shortcuts working (REQ-000023).
+  const nativeMenu = nativeMenuTemplate(process.platform, app.name);
+  Menu.setApplicationMenu(nativeMenu ? Menu.buildFromTemplate(nativeMenu) : null);
+  registerMenuIpc(ipcMain, (event) => BrowserWindow.fromWebContents(event.sender), app);
   registerThemeIpc(ipcMain, settings, (mode) => {
     nativeTheme.themeSource = mode;
   });
