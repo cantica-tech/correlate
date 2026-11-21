@@ -44,7 +44,7 @@ Rule IDs omit their `-sJpO9KMY` suffix; Roadmap gives the item numbers in
 | 21 | A failed log page fetch is cached forever | High | `br-LOGV-000001` | 30 | placeholder |
 | 26 | Event recording download is saved without a status check | High | `br-EVENT-000005` | 48 | placeholder |
 | 28 | Relaunch replays every historical Set request | High | `br-STREAM-000003` | 27 | placeholder |
-| 29 | New Gateway and pill switch change the active gateway with no recording check | High | `br-REC-000001` | 16, 40 | placeholder |
+| 29 | New Gateway and pill switch change the active gateway with no recording check | High | `br-REC-000001` | 16, 40 | passing |
 | 30 | Removing an inactive but connected Docker host leaves it collecting | Medium | `br-STREAM-000004` | 28 | placeholder |
 | 31 | Container selection file ignores the ssh port | Medium | `br-STREAM-000005` | 27 | placeholder |
 | 33 | Ship Logs throws when the saved log folder is missing | Medium | `br-DIAG-000002` | 51 | placeholder |

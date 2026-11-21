@@ -77,9 +77,32 @@ export interface ProvisionContext {
   localDir?: string;
   /** The compose project of the local Sump; `LOCAL_PROJECT` (tests use their own). */
   localProject?: string;
+  /** Says whether a recording is live, so switching asks first (cttc BUG-000029). */
+  guard?: SwitchGuard;
   /** How long to wait for `/health`; 60 s. */
   healthTimeoutMs?: number;
   logger?: { info(message: string): void; warn(message: string): void };
+}
+
+/**
+ * Whether a recording is live: every path that switches a window asks for
+ * confirmation first while one is (br-REC-000001-sJpO9KMY, cttc
+ * BUG-000029-uKKrzikI). Phase 8 plugs the recordings in; until then none is.
+ */
+export interface SwitchGuard {
+  /** The live recording's name, if one is live. */
+  liveRecording(): string | undefined;
+}
+
+/** The answer while a recording is live and the call was not confirmed. */
+export function confirmNeeded(guard: SwitchGuard | undefined, confirmed: boolean | undefined) {
+  const recording = guard?.liveRecording();
+  if (!recording || confirmed) return undefined;
+  return {
+    ok: false as const,
+    step: "confirm",
+    message: `recording "${recording}" is live; switching Sumps abandons it. Confirm to go on.`,
+  };
 }
 
 /** What the screens get back: never an exception. */
@@ -125,9 +148,13 @@ export function unlockedIdentity(ctx: ProvisionContext) {
  */
 export async function provisionLocal(
   ctx: ProvisionContext,
-  options: { sumpPort?: number; windowId?: number; switchTo?: boolean } = {},
+  options: { sumpPort?: number; windowId?: number; switchTo?: boolean; confirmed?: boolean } = {},
 ): Promise<ProvisionResult> {
   const log = ctx.logger ?? console;
+  if (options.switchTo) {
+    const ask = confirmNeeded(ctx.guard, options.confirmed);
+    if (ask) return ask;
+  }
   const sumpPort = options.sumpPort ?? 8765;
   const known = ctx.lifecycle.get(LOCAL_ID);
   if (known && known.state !== "retired") {

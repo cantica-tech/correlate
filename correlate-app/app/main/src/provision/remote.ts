@@ -24,6 +24,7 @@ import { userInfo } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
 import { userName } from "../identity/identity.js";
 import { privateKeyFrom } from "../identity/sshkey.js";
+import type { SumpResolver } from "../sump/ipc.js";
 import {
   composeFile,
   type ProvisionContext,
@@ -52,6 +53,8 @@ export interface PendingSump {
 /** What remote provisioning needs beyond local provisioning's context. */
 export interface RemoteContext extends ProvisionContext {
   connect?: SshConnect;
+  /** Finds a Sump to call (the catalog's resolver); Switch checks the target with it. */
+  resolve?: SumpResolver;
   /** Pending Sumps, until Item 17 connects them. */
   pending: Map<string, PendingSump>;
   /** Streams the image to the host when it cannot pull it. */
