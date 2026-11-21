@@ -3,8 +3,9 @@
  * our ChartBlock on a bridge answering with two followed containers and
  * fixed buckets. The head and the legend are compared; the strips' drawing
  * is the ported `drawChartStrip`, tested on its own. With `?paused`, the view
- * is recentred once, as a row's click does, so the head shows "Now"
- * (REQ-000030-sJpO9KMY).
+ * is recentred once, an hour back, as a double-click does, so the navigator
+ * shows a paused view (REQ-000031-sJpO9KMY). With `?prefs`, the live settings'
+ * fieldsets alone.
  */
 import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -12,6 +13,7 @@ import "../../../renderer/src/theme/tokens.css";
 import "../../../renderer/src/theme/cttc.generated.css";
 import { ChartBlock, type ChartsShown } from "../../../renderer/src/charts/ChartBlock.js";
 import type { ShellBridge } from "../../../renderer/src/shell/bridge.js";
+import { LivePreferences } from "../../../renderer/src/shell/LivePreferences.js";
 
 const stream = {
   id: "self",
@@ -31,21 +33,31 @@ const bridge = {
   stream: { active: async () => "self", setActive: async () => ({ ok: true }) },
 } as unknown as ShellBridge;
 
-/** Recentres the view once, as a row's click does. */
+/** Recentres the view once, 55 min back (an hour back to 50 min back), as a double-click does. */
 function RecentreOnce({ shown }: { shown: ChartsShown }) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: once, on the first answer.
-  useEffect(() => shown.recenter(Date.UTC(2026, 10, 21, 18, 5)), []);
+  useEffect(() => shown.recenterAt(Date.now() - 55 * 60_000 + 5_000), []);
   return null;
 }
 
 const paused = location.search.includes("paused");
+const prefs = location.search.includes("prefs");
 const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
-    <div id="stage">
-      <ChartBlock
-        bridge={bridge}
-        panels={paused ? (shown) => <RecentreOnce shown={shown} /> : undefined}
-      />
-    </div>,
+    prefs ? (
+      <div id="stage" className="prefs-stage">
+        <LivePreferences
+          live={{ windowSecs: 5, liveTrack: true, liveTrackSecs: 0, resumeSecs: 10 }}
+          onChange={() => {}}
+        />
+      </div>
+    ) : (
+      <div id="stage">
+        <ChartBlock
+          bridge={bridge}
+          panels={paused ? (shown) => <RecentreOnce shown={shown} /> : undefined}
+        />
+      </div>
+    ),
   );

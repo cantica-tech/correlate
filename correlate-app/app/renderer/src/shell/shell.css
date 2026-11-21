@@ -480,3 +480,8 @@
   display: flex;
   flex-direction: column;
 }
+
+/* cttc style.css:949-949 */
+.live-track-enable-row {
+  justify-content: space-between;
+}

@@ -127,12 +127,19 @@ describe("REQ-000029-sJpO9KMY: rows", () => {
 describe("REQ-000029-sJpO9KMY: the lanes", () => {
   it("draw cttc's ticks: one per bucket with rows, stronger where busier", () => {
     expect(LANE_HEIGHT).toBe(8);
-    expect(laneTicks([0, 2, 4, 0], 400, 40)).toEqual([
+    const span = { t0: 0, t1: 400 };
+    expect(laneTicks([0, 2, 4, 0], span, span, 440)).toEqual([
       { x: 140, width: 99.5, alpha: 0.35 + 0.65 * 0.5 },
       { x: 240, width: 99.5, alpha: 1 },
     ]);
-    expect(laneTicks([], 400, 40)).toEqual([]);
-    expect(laneTicks([1, 1, 1, 1], 2, 0)[0]?.width).toBe(1);
+    expect(laneTicks([], span, span, 440)).toEqual([]);
+    expect(laneTicks([1, 1, 1, 1], { t0: 0, t1: 4 }, { t0: 0, t1: 4 }, 42)[0]?.width).toBe(1);
+  });
+
+  it("place the ticks of the last read on a live view that has moved since (REQ-000031-sJpO9KMY)", () => {
+    const asked = { t0: 0, t1: 400 };
+    const shown = { t0: 100, t1: 500 };
+    expect(laneTicks([0, 2, 0, 0], asked, shown, 440)[0]?.x).toBe(40);
   });
 });
 

@@ -14,7 +14,14 @@ import { StatusBar } from "../statusbar/StatusBar.js";
 import { pauseStream } from "../streams/api.js";
 import { RemoveDialog } from "../streams/RemoveDialog.js";
 import { StreamsDialog } from "../streams/StreamsDialog.js";
-import type { LayoutChange, ShellBridge, SidebarLayout, ThemeMode } from "./bridge.js";
+import type {
+  LayoutChange,
+  LiveSettings,
+  ShellBridge,
+  SidebarLayout,
+  ThemeMode,
+} from "./bridge.js";
+import { LivePreferences } from "./LivePreferences.js";
 import { Sidebar } from "./Sidebar.js";
 
 /** The splitter's bounds, as the main process checks them. */
@@ -45,11 +52,14 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   const [preferences, setPreferences] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("system");
   const [statusBar, setStatusBar] = useState(true);
+  const [live, setLive] = useState<LiveSettings | null>(null);
   const [streams, setStreams] = useState<"new" | "edit" | null>(null);
   const [removing, setRemoving] = useState(false);
   const [streamsVersion, setStreamsVersion] = useState(0);
   const streamsChanged = useCallback(() => setStreamsVersion((v) => v + 1), []);
   const logs = useLogPrefs(bridge);
+  // A live view's pause countdown, held in the status bar (REQ-000031-sJpO9KMY).
+  const [liveStatus, setLiveStatus] = useState("");
 
   useEffect(() => {
     let live = true;
@@ -83,10 +93,21 @@ export function Shell({ bridge, detached = false }: ShellProps) {
       if (name === "preferences") {
         void bridge.theme.get().then(setTheme);
         void bridge.status.visible().then(setStatusBar);
+        void bridge.live?.get().then(setLive);
         setPreferences(true);
       }
     });
   }, [bridge, detached, closeActive]);
+
+  /** Keep a live setting; the field shows what the main process kept. */
+  const changeLive = useCallback(
+    async (change: Partial<LiveSettings>) => {
+      const r = await bridge.live?.set(change);
+      if (r?.ok && r.settings) setLive(r.settings);
+      else if (r?.message) void bridge.status.add(r.message);
+    },
+    [bridge],
+  );
 
   const change = useCallback(
     (c: LayoutChange) => {
@@ -139,6 +160,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
           <ChartBlock
             bridge={bridge}
             version={streamsVersion}
+            onLiveStatus={setLiveStatus}
             lanes={(shown) => (
               <Lanes
                 request={bridge.sump.request}
@@ -148,8 +170,13 @@ export function Shell({ bridge, detached = false }: ShellProps) {
                 view={shown.view}
                 open={logs.lanesOpen}
                 onToggle={logs.setLanesOpen}
+                shownView={shown.shownView}
+                nowT={shown.nowT}
                 cursorT={shown.cursorT}
+                cursorLive={shown.cursorLive}
                 onCursor={shown.setCursor}
+                onRecenter={shown.recenterAt}
+                onZoom={shown.zoomTo}
               />
             )}
             panels={(shown) => (
@@ -198,6 +225,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
               Show status bar
             </Switch>
           </fieldset>
+          {live ? <LivePreferences live={live} onChange={(c) => void changeLive(c)} /> : null}
         </Dialog>
       </div>
       <StreamsDialog
@@ -214,7 +242,12 @@ export function Shell({ bridge, detached = false }: ShellProps) {
         onClose={() => setRemoving(false)}
         onRemoved={streamsChanged}
       />
-      <StatusBar bridge={bridge} onStreamAction={action} streamsVersion={streamsVersion} />
+      <StatusBar
+        bridge={bridge}
+        onStreamAction={action}
+        streamsVersion={streamsVersion}
+        persistent={liveStatus}
+      />
     </>
   );
 }

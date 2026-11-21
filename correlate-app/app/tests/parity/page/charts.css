@@ -8,3 +8,11 @@
   display: flex;
   flex-direction: column;
 }
+
+/* The live settings' fieldsets (REQ-000031-sJpO9KMY), as wide as in a dialog. */
+#stage.prefs-stage {
+  width: 520px;
+  height: auto;
+  display: block;
+  padding: 8px;
+}

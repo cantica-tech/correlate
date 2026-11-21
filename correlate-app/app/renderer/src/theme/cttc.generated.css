@@ -801,6 +801,11 @@
   user-select: none;
 }
 
+/* shell/shell.css: cttc style.css:949-949 */
+.live-track-enable-row {
+  justify-content: space-between;
+}
+
 /* components/components.css: cttc style.css:950-972 */
 .switch {
   position: relative;
@@ -1087,6 +1092,56 @@ button:disabled:hover {
   display: block;
   width: 100%;
   cursor: crosshair;
+}
+
+/* charts/charts.css: cttc style.css:1180-1219 */
+/* a scrollbar-style navigator: the track spans the entire width of the
+   graph panel, the thumb shows the current view as a fraction of the whole
+   available time range, and "now" sits fixed in the middle as a click
+   target to re-center on the present. Not a button row. */
+.timeline-nav {
+  padding: 3px 12px 5px;
+}
+.tl-track {
+  position: relative;
+  height: 14px;
+  width: 100%;
+  border-radius: 7px;
+  background: var(--grid);
+  cursor: pointer;
+}
+.tl-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  min-width: 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  border: 1px solid var(--accent);
+  cursor: grab;
+}
+.tl-thumb:active {
+  cursor: grabbing;
+}
+.tl-now-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  pointer-events: auto;
+}
+.tl-now-label[data-live="true"] {
+  color: var(--accent);
+}
+.tl-now-label[data-live="false"]::after {
+  content: " \25c0";
 }
 
 /* logs/logs.css: cttc style.css:1221-1233 */

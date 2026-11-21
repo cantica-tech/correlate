@@ -103,7 +103,9 @@ export interface ShellBridge {
   /** The live view's settings (REQ-000031-sJpO9KMY). */
   live?: {
     get(): Promise<LiveSettings>;
-    set(change: Partial<LiveSettings>): Promise<{ ok: boolean; message?: string }>;
+    set(
+      change: Partial<LiveSettings>,
+    ): Promise<{ ok: boolean; settings?: LiveSettings; message?: string }>;
     onChanged(listener: (settings: LiveSettings) => void): () => void;
   };
   /** Each stream's containers' order and hidden set (REQ-000030-sJpO9KMY). */

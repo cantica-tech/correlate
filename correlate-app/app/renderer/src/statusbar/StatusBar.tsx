@@ -43,10 +43,22 @@ export interface StatusBarProps {
   onStreamAction?: (name: string) => void;
   /** Changes when the data streams changed elsewhere. */
   streamsVersion?: number;
+  /**
+   * Text held in the bar while it is set, over the passing messages and kept
+   * out of History: a live view's pause countdown (REQ-000031-sJpO9KMY), as
+   * cttc wrote it to the bar directly.
+   */
+  persistent?: string;
 }
 
 /** The status bar. */
-export function StatusBar({ bridge, onSwitched, onStreamAction, streamsVersion }: StatusBarProps) {
+export function StatusBar({
+  bridge,
+  onSwitched,
+  onStreamAction,
+  streamsVersion,
+  persistent = "",
+}: StatusBarProps) {
   const [visible, setVisible] = useState(true);
   const [history, setHistory] = useState<Notice[]>([]);
   const [message, setMessage] = useState("");
@@ -176,7 +188,7 @@ export function StatusBar({ bridge, onSwitched, onStreamAction, streamsVersion }
 
   return (
     <div id="app-status-bar" className="app-status-bar" hidden={!visible}>
-      <span id="app-status-bar-text">{message}</span>
+      <span id="app-status-bar-text">{persistent || message}</span>
       <span className="status-bar-divider" />
       <div
         id="server-status"

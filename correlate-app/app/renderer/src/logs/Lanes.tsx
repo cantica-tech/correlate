@@ -4,14 +4,16 @@
  * entries" head and its toggle, folded by default and remembered; one 8 px
  * lane per container, in the legend's order and color, a tick per bucket
  * with log rows, stronger where there are more, on the charts' time axis.
- * The cursor is drawn across them, and a click sets it (REQ-000030-sJpO9KMY).
+ * The cursor is drawn across them, and a click sets it (REQ-000030-sJpO9KMY);
+ * the now line and live tracking's cursor too, a double-click recentres and a
+ * drag zooms, as on the strips (REQ-000031-sJpO9KMY).
  */
 import { useEffect, useRef, useState } from "react";
-import { timeAt } from "../charts/ChartBlock.js";
+import { timeAt, xAt } from "../charts/ChartBlock.js";
+import { drawCursorMark, drawNowMark } from "../charts/marks.js";
 import type { Viewport } from "../correlate/atoms.js";
 import { PLOT_MARGIN_LEFT } from "../correlate/axes.js";
 import { colorForSlot, resolveColor, type SlotMap } from "../correlate/colorSlots.js";
-import { tToX } from "../correlate/timeMapping.js";
 import { isClick } from "../correlate/zoom.js";
 import type { SumpRequester } from "../shell/bridge.js";
 import { density } from "./api.js";
@@ -27,24 +29,27 @@ export interface Tick {
 }
 
 /**
- * cttc's ticks for `counts` over a plot `plotWidth` wide starting at
- * `marginLeft`: one per bucket with rows, its alpha 0.35 + 0.65 of its share
- * of the busiest bucket.
+ * cttc's ticks for `counts`, buckets over `asked`, drawn on a canvas `width`
+ * px wide showing `shown` (a live view moves between reads): one per bucket
+ * with rows, its alpha 0.35 + 0.65 of its share of the busiest bucket.
  */
 export function laneTicks(
   counts: readonly number[],
-  plotWidth: number,
-  marginLeft: number,
+  asked: Viewport,
+  shown: Viewport,
+  width: number,
 ): Tick[] {
   const n = counts.length;
   if (n === 0) return [];
   const max = Math.max(1, ...counts);
+  const bucket = (asked.t1 - asked.t0) / n;
+  const plot = Math.max(1, width - PLOT_MARGIN_LEFT);
   const ticks: Tick[] = [];
   counts.forEach((count, b) => {
     if (!count) return;
     ticks.push({
-      x: marginLeft + (b / n) * plotWidth,
-      width: Math.max(1, plotWidth / n - 0.5),
+      x: xAt(asked.t0 + b * bucket, shown, width),
+      width: Math.max(1, (bucket / (shown.t1 - shown.t0)) * plot - 0.5),
       alpha: 0.35 + 0.65 * (count / max),
     });
   });
@@ -62,10 +67,20 @@ export interface LanesProps {
   view: Viewport;
   open: boolean;
   onToggle: (open: boolean) => void;
+  /** The time range drawn, which a live view moves every second. */
+  shownView?: Viewport;
+  /** Now, for the now line. */
+  nowT?: number | null;
   /** The window's cursor, or null. */
   cursorT?: number | null;
+  /** Live tracking put the cursor there. */
+  cursorLive?: boolean;
   /** A click on a lane sets the cursor. */
   onCursor?: (t: number) => void;
+  /** A double-click recentres there. */
+  onRecenter?: (t: number) => void;
+  /** A drag zooms to its range. */
+  onZoom?: (ta: number, tb: number) => void;
 }
 
 /** The lanes. */
@@ -77,9 +92,15 @@ export function Lanes({
   view,
   open,
   onToggle,
+  shownView,
+  nowT = null,
   cursorT = null,
+  cursorLive = false,
   onCursor,
+  onRecenter,
+  onZoom,
 }: LanesProps) {
+  const drawn = shownView ?? view;
   const downX = useRef<number | null>(null);
   const [counts, setCounts] = useState<Record<string, number[]>>({});
   const [width, setWidth] = useState(0);
@@ -129,28 +150,20 @@ export function Lanes({
       ctx.fillStyle = resolveColor(colorForSlot(slots[name] ?? 0, dark), (v) =>
         style.getPropertyValue(v).trim(),
       );
-      for (const tick of laneTicks(
-        counts[name] ?? [],
-        width - PLOT_MARGIN_LEFT,
-        PLOT_MARGIN_LEFT,
-      )) {
+      for (const tick of laneTicks(counts[name] ?? [], view, drawn, width)) {
         ctx.globalAlpha = tick.alpha;
         ctx.fillRect(tick.x, 1, tick.width, LANE_HEIGHT - 2);
       }
       ctx.globalAlpha = 1;
-      // The cursor, as cttc's drawVerticals.
-      const plot = width - PLOT_MARGIN_LEFT;
-      if (cursorT !== null && cursorT >= view.t0 && cursorT <= view.t1) {
-        const x = PLOT_MARGIN_LEFT + tToX(cursorT, view, plot);
-        ctx.strokeStyle = style.getPropertyValue("--accent").trim();
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, LANE_HEIGHT);
-        ctx.stroke();
+      // cttc's drawVerticals: the cursor, then the now line.
+      const inView = (t: number) => t >= drawn.t0 && t <= drawn.t1;
+      if (cursorT !== null && inView(cursorT)) {
+        const accent = style.getPropertyValue("--accent").trim();
+        drawCursorMark(ctx, xAt(cursorT, drawn, width), LANE_HEIGHT, cursorLive, accent);
       }
+      if (nowT !== null && inView(nowT)) drawNowMark(ctx, xAt(nowT, drawn, width), LANE_HEIGHT);
     }
-  }, [open, width, counts, containers, slots, cursorT, view]);
+  }, [open, width, counts, containers, slots, cursorT, cursorLive, nowT, view, drawn]);
 
   return (
     <>
@@ -185,9 +198,20 @@ export function Lanes({
               const x = e.nativeEvent.offsetX;
               const from = downX.current;
               downX.current = null;
-              if (from === null || !isClick(from, x)) return;
-              const t = timeAt(x, view, e.currentTarget.clientWidth);
+              if (from === null) return;
+              const w = e.currentTarget.clientWidth;
+              if (!isClick(from, x)) {
+                const ta = timeAt(Math.max(PLOT_MARGIN_LEFT, from), drawn, w);
+                const tb = timeAt(Math.max(PLOT_MARGIN_LEFT, x), drawn, w);
+                if (ta !== null && tb !== null) onZoom?.(ta, tb);
+                return;
+              }
+              const t = timeAt(x, drawn, w);
               if (t !== null) onCursor?.(t);
+            }}
+            onDoubleClick={(e) => {
+              const t = timeAt(e.nativeEvent.offsetX, drawn, e.currentTarget.clientWidth);
+              if (t !== null) onRecenter?.(t);
             }}
           />
         ))}

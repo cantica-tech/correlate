@@ -1,37 +1,72 @@
 /**
  * The telemetry charts (REQ-000028-sJpO9KMY Requirement 2), in cttc's markup
- * (`index.html:214-227`, `#chart-block`, `#legend`, `#charts` of
- * `canvas.strip`): CPU %, MEM % and NET on one timeline for the window's
- * active data stream (br-STREAM-000001-sJpO9KMY), one line per followed
- * container in a stable color, a legend that hides or shows a container in
- * every strip. The data comes from the Sump's buckets route, at most a plot's
- * width of maxima per series, read again every 5 s; drawing is the ported
- * `drawChartStrip`.
+ * (`index.html:214-245`, `#chart-block`, `#legend`, `#charts` of
+ * `canvas.strip`, `#chart-nav`): CPU %, MEM % and NET on one timeline for the
+ * window's active data stream (br-STREAM-000001-sJpO9KMY), one line per
+ * followed container in a stable color, a legend that hides or shows a
+ * container in every strip. The data comes from the Sump's buckets route, at
+ * most a plot's width of maxima per series, read every 5 s; drawing is the
+ * ported `drawChartStrip`.
  *
  * The window's cursor (REQ-000030-sJpO9KMY): a click on a strip sets it, and
- * the log panels follow; a click on a row sets it and recentres the view,
- * which then stops following now until "Now". The containers' order and
- * hidden set are shared with the panels and kept per Sump and stream.
+ * the log panels follow. The containers' order and hidden set are shared with
+ * the panels and kept per Sump and stream.
+ *
+ * The live view (REQ-000031-sJpO9KMY, br-VIEW-000001-sJpO9KMY): centred 5 s
+ * behind now and moved every second, the now line, live tracking's cursor; a
+ * double-click or a row's click recentres and pauses, resuming after the
+ * delay; a drag zooms; the navigator pans and its "now" goes live again.
  */
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Viewport } from "../correlate/atoms.js";
 import { PLOT_MARGIN_LEFT, TIME_AXIS_HEIGHT } from "../correlate/axes.js";
 import { type ChartSeries, drawChartStrip } from "../correlate/chartDraw.js";
 import { assignSlots, colorForSlot, resolveColor, type SlotMap } from "../correlate/colorSlots.js";
-import { xToT } from "../correlate/timeMapping.js";
-import { isClick, MIN_SPAN_MS } from "../correlate/zoom.js";
-import { Icon } from "../icons/Icon.js";
-import type { ShellBridge } from "../shell/bridge.js";
+import { tToX, xToT } from "../correlate/timeMapping.js";
+import { isClick, panBy, rangeView } from "../correlate/zoom.js";
+import type { LiveSettings, ShellBridge } from "../shell/bridge.js";
 import { listStreams, type Stream } from "../streams/api.js";
 import { type Arranged, arrange, DRAG_TYPE, moveBy, moveTo } from "./arrange.js";
-import { bucketsQuery, bucketsToPoints, STRIPS, viewEndingAt } from "./strips.js";
+import { drawCursorMark, drawNowMark } from "./marks.js";
+import { bucketsQuery, bucketsToPoints, STRIPS } from "./strips.js";
+import {
+  countdown,
+  countdownText,
+  goLive,
+  initialState,
+  liveCursor,
+  moved,
+  navBounds,
+  recentred,
+  TICK_MS,
+  thumbOf,
+  tick,
+  type ViewState,
+  viewAtTrack,
+  viewDragged,
+} from "./viewState.js";
 
 /** How often the charts are read again: cttc's poll, 5 s. */
 export const CHARTS_EVERY_MS = 5_000;
 /** A strip is never shorter than cttc's 44 px. */
 const STRIP_MIN_H = 44;
-/** Rows this close to the cursor are highlighted: cttc's default, 5 s. */
+/** Rows this close to the cursor are highlighted until the settings say: cttc's default, 5 s. */
 export const HIGHLIGHT_MS = 5_000;
+/** cttc's defaults, until the main process answers. */
+const LIVE_DEFAULTS: LiveSettings = {
+  windowSecs: 5,
+  liveTrack: true,
+  liveTrackSecs: 0,
+  resumeSecs: 10,
+};
 
 /**
  * A percentage strip runs from 0 to 100, or higher when the data does: Docker
@@ -42,20 +77,25 @@ export function percentCeiling(series: readonly ChartSeries[]): number {
   return top > 100 ? Math.ceil(top / 10) * 10 : 100;
 }
 
-/** The view centred on `t`, `view`'s span kept (cttc's `recenterOn`), never under 200 ms. */
-export function recentred(view: Viewport, t: number): Viewport {
-  const span = Math.max(MIN_SPAN_MS, view.t1 - view.t0);
-  return { t0: t - span / 2, t1: t + span / 2 };
-}
-
 /** The time at `x` px of a canvas `width` px wide, or null left of the plot. */
 export function timeAt(x: number, view: Viewport, width: number): number | null {
   if (x < PLOT_MARGIN_LEFT) return null;
   return xToT(x - PLOT_MARGIN_LEFT, view, Math.max(1, width - PLOT_MARGIN_LEFT));
 }
 
+/** Where `t` is drawn on a canvas `width` px wide. */
+export function xAt(t: number, view: Viewport, width: number): number {
+  return PLOT_MARGIN_LEFT + tToX(t, view, Math.max(1, width - PLOT_MARGIN_LEFT));
+}
+
 /** What the charts show: per strip, per container, its points. */
 type Data = Record<string, Record<string, ChartSeries["points"]>>;
+
+/** The cursor, and whether live tracking put it there. */
+interface Cursor {
+  t: number;
+  live: boolean;
+}
 
 /** What the charts show, for the lanes and log panels beside them (REQ-000029-sJpO9KMY). */
 export interface ChartsShown {
@@ -63,14 +103,26 @@ export interface ChartsShown {
   /** The followed containers shown (not hidden in the legend), in its order. */
   containers: string[];
   slots: SlotMap;
-  /** The time range of the last read; a new object on each read. */
+  /** The time range of the last read, what the rows are asked over; a new object on each read. */
   view: Viewport;
+  /** The time range drawn, which a live view moves every second (REQ-000031-sJpO9KMY). */
+  shownView: Viewport;
+  /** Now, as of the last tick, for the now line. */
+  nowT: number;
   /** The window's cursor, or null (REQ-000030-sJpO9KMY). */
   cursorT: number | null;
+  /** Live tracking put the cursor there. */
+  cursorLive: boolean;
+  /** Rows this close to the cursor are highlighted, in ms (the Time window setting). */
+  windowMs: number;
   /** Set the cursor; the panels follow. */
   setCursor: (t: number) => void;
-  /** Set the cursor and centre the view on it (a row's click). */
+  /** Set the cursor and centre the view on it, pausing a live view (a row's click). */
   recenter: (t: number) => void;
+  /** Centre the view on `t`, pausing a live view (a double-click). */
+  recenterAt: (t: number) => void;
+  /** Zoom to a dragged range; refused under 200 ms. */
+  zoomTo: (ta: number, tb: number) => void;
   /** Hide a container, as its legend entry does. */
   hide: (name: string) => void;
   /** Move a container to where `target` is, in the legend and the panels. */
@@ -86,26 +138,41 @@ export interface ChartBlockProps {
   lanes?: (shown: ChartsShown) => ReactNode;
   /** Drawn in `#layout` after `#chart-block`: cttc's `#panels`. */
   panels?: (shown: ChartsShown) => ReactNode;
+  /** The status bar's persistent text: a pause's countdown, or "" (REQ-000031-sJpO9KMY). */
+  onLiveStatus?: (text: string) => void;
 }
 
 /** The charts. */
-export function ChartBlock({ bridge, version = 0, lanes, panels }: ChartBlockProps) {
+export function ChartBlock({ bridge, version = 0, lanes, panels, onLiveStatus }: ChartBlockProps) {
   const [stream, setStream] = useState<Stream | null>(null);
   const [containers, setContainers] = useState<string[]>([]);
   const [slots, setSlots] = useState<SlotMap>({});
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [data, setData] = useState<Data>({});
-  const [view, setViewState] = useState<Viewport>(() => viewEndingAt(Date.now()));
-  const [following, setFollowing] = useState(true);
-  const [cursorT, setCursorT] = useState<number | null>(null);
+  const [vs, setVsState] = useState<ViewState>(() => initialState(Date.now()));
+  const [dataView, setDataView] = useState<Viewport>(() => vs.view);
+  const [dataRange, setDataRange] = useState<{ from: number; to: number } | null>(null);
+  const [nowT, setNowT] = useState(() => Date.now());
+  const [cursor, setCursorState] = useState<Cursor | null>(null);
+  const [live, setLive] = useState<LiveSettings>(LIVE_DEFAULTS);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const chartsRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   const canvases = useRef<(HTMLCanvasElement | null)[]>([]);
-  const viewRef = useRef(view);
-  const followingRef = useRef(true);
+  const vsRef = useRef(vs);
+  const liveRef = useRef(live);
+  liveRef.current = live;
   const arrangedRef = useRef<Arranged>({ order: [], hidden: [] });
   const saving = useRef<Promise<unknown>>(Promise.resolve());
   const downX = useRef<number | null>(null);
+  const statusRef = useRef("");
+  const onLiveStatusRef = useRef(onLiveStatus);
+  onLiveStatusRef.current = onLiveStatus;
+
+  const setVs = useCallback((next: ViewState) => {
+    vsRef.current = next;
+    setVsState(next);
+  }, []);
 
   const read = useCallback(async () => {
     const list = await listStreams(bridge.sump.request);
@@ -122,10 +189,18 @@ export function ChartBlock({ bridge, version = 0, lanes, panels }: ChartBlockPro
     setContainers(arranged.order);
     setHidden(new Set(arranged.hidden));
     setSlots((s) => assignSlots(s, names));
-    const next = followingRef.current ? viewEndingAt(Date.now()) : { ...viewRef.current };
-    viewRef.current = next;
-    setViewState(next);
+    const next = { ...vsRef.current.view };
+    setDataView(next);
     const plot = Math.max(1, (chartsRef.current?.clientWidth ?? 600) - PLOT_MARGIN_LEFT);
+    const sources = names.map((name) => `${active?.id}/${name}`);
+    if (sources.length > 0) {
+      void bridge.sump
+        .request({ method: "GET", path: "/records/range", query: { sources: sources.join(",") } })
+        .then((reply) => {
+          const r = reply.ok ? (reply.value as { from: string | null; to: string | null }) : null;
+          setDataRange(r?.from && r.to ? { from: Date.parse(r.from), to: Date.parse(r.to) } : null);
+        });
+    }
     const fetched: Data = {};
     await Promise.all(
       STRIPS.flatMap((strip) =>
@@ -154,6 +229,42 @@ export function ChartBlock({ bridge, version = 0, lanes, panels }: ChartBlockPro
     return () => clearInterval(timer);
   }, [read, version]);
 
+  // The live settings, kept by the main process (REQ-000031-sJpO9KMY Requirement 4).
+  useEffect(() => {
+    if (!bridge.live) return;
+    let on = true;
+    void bridge.live.get().then((s) => {
+      if (on) setLive(s);
+    });
+    const stop = bridge.live.onChanged(setLive);
+    return () => {
+      on = false;
+      stop();
+    };
+  }, [bridge]);
+
+  // cttc's 1 s ticker: a live view moves, a pause's time may come, live
+  // tracking moves the cursor, and the countdown is told.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const before = vsRef.current;
+      const after = tick(before, now);
+      if (after !== before) setVs(after);
+      if (!before.live && after.live) void read();
+      setNowT(now);
+      const t = liveCursor(after, now, liveRef.current);
+      if (t !== null) setCursorState({ t, live: true });
+      const left = countdown(after, now);
+      const text = left === null ? "" : countdownText(left);
+      if (text !== statusRef.current) {
+        statusRef.current = text;
+        onLiveStatusRef.current?.(text);
+      }
+    }, TICK_MS);
+    return () => clearInterval(timer);
+  }, [read, setVs]);
+
   // The strips share the block's height, as cttc's computeStripH.
   useEffect(() => {
     const el = chartsRef.current;
@@ -165,6 +276,7 @@ export function ChartBlock({ bridge, version = 0, lanes, panels }: ChartBlockPro
     return () => observer.disconnect();
   }, []);
 
+  const view = vs.view;
   useEffect(() => {
     if (!size.width) return;
     const style = getComputedStyle(document.documentElement);
@@ -175,6 +287,7 @@ export function ChartBlock({ bridge, version = 0, lanes, panels }: ChartBlockPro
       Math.floor((size.height - TIME_AXIS_HEIGHT) / STRIPS.length),
     );
     const ratio = window.devicePixelRatio || 1;
+    const inView = (t: number) => t >= view.t0 && t <= view.t1;
     STRIPS.forEach((strip, i) => {
       const canvas = canvases.current[i];
       const ctx = canvas?.getContext("2d");
@@ -195,8 +308,7 @@ export function ChartBlock({ bridge, version = 0, lanes, panels }: ChartBlockPro
       drawChartStrip(ctx, {
         view,
         series,
-        cursorT,
-        cursorColor: readVar("--accent"),
+        cursorT: null,
         plotWidth: size.width,
         height,
         marginLeft: PLOT_MARGIN_LEFT,
@@ -207,6 +319,18 @@ export function ChartBlock({ bridge, version = 0, lanes, panels }: ChartBlockPro
         minValue: 0,
         maxValue: strip.percent ? percentCeiling(series) : undefined,
       });
+      // cttc's drawVerticals: the cursor, then the now line, over the plot.
+      const plotH = height - (last ? TIME_AXIS_HEIGHT : 0);
+      if (cursor && inView(cursor.t)) {
+        drawCursorMark(
+          ctx,
+          xAt(cursor.t, view, size.width),
+          plotH,
+          cursor.live,
+          readVar("--accent"),
+        );
+      }
+      if (inView(nowT)) drawNowMark(ctx, xAt(nowT, view, size.width), plotH);
       // The strip's title at its top left, as cttc's strips.
       ctx.fillStyle = readVar("--text-secondary");
       ctx.font = "600 10px system-ui, sans-serif";
@@ -214,7 +338,7 @@ export function ChartBlock({ bridge, version = 0, lanes, panels }: ChartBlockPro
       ctx.textBaseline = "top";
       ctx.fillText(strip.title, PLOT_MARGIN_LEFT + 6, 4);
     });
-  }, [size, data, containers, hidden, slots, view, cursorT]);
+  }, [size, data, containers, hidden, slots, view, cursor, nowT]);
 
   /** Keep the arrangement for this stream, here at once and in the settings. */
   const keep = useCallback(
@@ -246,29 +370,79 @@ export function ChartBlock({ bridge, version = 0, lanes, panels }: ChartBlockPro
     },
     [keep],
   );
-  const setCursor = useCallback((t: number) => setCursorT(t), []);
-  const recenter = useCallback(
-    (t: number) => {
-      setCursorT(t);
-      followingRef.current = false;
-      setFollowing(false);
-      viewRef.current = recentred(viewRef.current, t);
+  const setCursor = useCallback((t: number) => setCursorState({ t, live: false }), []);
+  /** A pan or zoom: the view stops following now, and is read at once. */
+  const pan = useCallback(
+    (next: Viewport) => {
+      const state = moved(next);
+      if (!state) return;
+      setVs(state);
       void read();
     },
-    [read],
+    [read, setVs],
   );
-  const followNow = () => {
-    followingRef.current = true;
-    setFollowing(true);
+  const recenterAt = useCallback(
+    (t: number) => {
+      setVs(recentred(vsRef.current, t, Date.now(), liveRef.current.resumeSecs));
+      void read();
+    },
+    [read, setVs],
+  );
+  const recenter = useCallback(
+    (t: number) => {
+      setCursorState({ t, live: false });
+      recenterAt(t);
+    },
+    [recenterAt],
+  );
+  const zoomTo = useCallback(
+    (ta: number, tb: number) => {
+      const next = rangeView(ta, tb);
+      if (next) pan(next);
+    },
+    [pan],
+  );
+  const nowLive = () => {
+    setVs(goLive(vsRef.current, Date.now(), true));
     void read();
   };
 
+  // The navigator's thumb, placed by script (the page's CSP forbids style attributes).
+  const bounds = navBounds(view, dataRange, nowT);
+  const placeThumb = (el: HTMLDivElement | null) => {
+    const width = trackRef.current?.clientWidth ?? 0;
+    if (!el || !width) return;
+    const thumb = thumbOf(view, bounds, width);
+    el.style.left = `${thumb.left}px`;
+    el.style.width = `${thumb.width}px`;
+  };
+  const dragThumb = (e: ReactMouseEvent) => {
+    e.stopPropagation();
+    const startX = e.clientX;
+    const start = vsRef.current.view;
+    const width = trackRef.current?.clientWidth ?? 1;
+    const fixed = bounds;
+    const move = (ev: MouseEvent) => {
+      const next = moved(viewDragged(start, fixed, ev.clientX - startX, width));
+      if (next) setVs(next);
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      void read();
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+
+  const windowMs = live.windowSecs * 1000;
+  const cursorT = cursor?.t ?? null;
+  const cursorLive = cursor?.live ?? false;
   const empty = !stream
     ? "No data stream: New Data Stream… adds one."
     : containers.length === 0
       ? `Nothing followed on ${stream.label}: Edit Data Streams… picks containers.`
       : null;
-  // Kept the same between reads, so the lanes and panels read only on a new view.
   const shown = useMemo<ChartsShown | null>(
     () =>
       stream
@@ -276,15 +450,38 @@ export function ChartBlock({ bridge, version = 0, lanes, panels }: ChartBlockPro
             stream,
             containers: containers.filter((n) => !hidden.has(n)),
             slots,
-            view,
+            view: dataView,
+            shownView: view,
+            nowT,
             cursorT,
+            cursorLive,
+            windowMs,
             setCursor,
             recenter,
+            recenterAt,
+            zoomTo,
             hide,
             reorder,
           }
         : null,
-    [stream, containers, hidden, slots, view, cursorT, setCursor, recenter, hide, reorder],
+    [
+      stream,
+      containers,
+      hidden,
+      slots,
+      dataView,
+      view,
+      nowT,
+      cursorT,
+      cursorLive,
+      windowMs,
+      setCursor,
+      recenter,
+      recenterAt,
+      zoomTo,
+      hide,
+      reorder,
+    ],
   );
   return (
     <main id="layout">
@@ -292,19 +489,6 @@ export function ChartBlock({ bridge, version = 0, lanes, panels }: ChartBlockPro
         <div id="svc-graph" className="graph-block">
           <div id="chart-head">
             <span className="panel-head-title">Telemetry</span>
-            {following ? null : (
-              <div className="panel-head-right">
-                <button
-                  type="button"
-                  className="btn-flat"
-                  title="Follow now again: the view ends at the present and moves with it"
-                  onClick={followNow}
-                >
-                  <Icon name="track" svgClassName="btn-flat-icon" />
-                  Now
-                </button>
-              </div>
-            )}
           </div>
           <div className="panel-head-divider" />
           <div id="legend">
@@ -383,13 +567,90 @@ export function ChartBlock({ bridge, version = 0, lanes, panels }: ChartBlockPro
                   const x = e.nativeEvent.offsetX;
                   const from = downX.current;
                   downX.current = null;
-                  // A drag is Item 32's zoom; a click sets the cursor (cttc's timelineUp).
-                  if (from === null || !isClick(from, x)) return;
-                  const t = timeAt(x, viewRef.current, e.currentTarget.clientWidth);
-                  if (t !== null) setCursorT(t);
+                  if (from === null) return;
+                  const width = e.currentTarget.clientWidth;
+                  const current = vsRef.current.view;
+                  // cttc's timelineUp: a drag zooms to its range, a click sets the cursor.
+                  if (!isClick(from, x)) {
+                    const ta = timeAt(Math.max(PLOT_MARGIN_LEFT, from), current, width);
+                    const tb = timeAt(Math.max(PLOT_MARGIN_LEFT, x), current, width);
+                    if (ta !== null && tb !== null) zoomTo(ta, tb);
+                    return;
+                  }
+                  const t = timeAt(x, current, width);
+                  if (t !== null) setCursor(t);
+                }}
+                onDoubleClick={(e) => {
+                  const t = timeAt(
+                    e.nativeEvent.offsetX,
+                    vsRef.current.view,
+                    e.currentTarget.clientWidth,
+                  );
+                  if (t !== null) recenterAt(t);
                 }}
               />
             ))}
+          </div>
+          <div
+            id="chart-nav"
+            className="timeline-nav"
+            title="Drag the thumb or click the track to pan · click “now” to jump to the present and resume following it"
+          >
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: the thumb's arrow keys pan from the keyboard. */}
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: cttc's track; the thumb is the slider. */}
+            <div
+              className="tl-track"
+              ref={trackRef}
+              onClick={(e) => {
+                if (e.target !== e.currentTarget) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                pan(viewAtTrack(view, bounds, (e.clientX - rect.left) / rect.width));
+              }}
+            >
+              <div
+                className="tl-thumb"
+                ref={placeThumb}
+                role="slider"
+                tabIndex={0}
+                aria-label="The view in time"
+                aria-valuemin={bounds.lo}
+                aria-valuemax={bounds.hi}
+                aria-valuenow={view.t0}
+                aria-valuetext={`${new Date(view.t0).toLocaleTimeString()} to ${new Date(view.t1).toLocaleTimeString()}`}
+                onMouseDown={dragThumb}
+                onKeyDown={(e) => {
+                  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+                  e.preventDefault();
+                  pan(panBy(view, e.key === "ArrowLeft" ? -0.1 : 0.1));
+                }}
+              />
+              {/* biome-ignore lint/a11y/useSemanticElements: cttc's now label is a span; a button to assistive technology. */}
+              <span
+                className="tl-now-label"
+                data-live={String(vs.live)}
+                role="button"
+                tabIndex={0}
+                title={
+                  !vs.live && vs.resumeAt
+                    ? "Live tracking paused -- see the status bar for the resume countdown, or click to jump now"
+                    : vs.live
+                      ? "Following the present -- click to jump anyway"
+                      : "Jump back to the present and resume following it"
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  nowLive();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    nowLive();
+                  }
+                }}
+              >
+                now
+              </span>
+            </div>
           </div>
         </div>
         {shown && lanes ? lanes(shown) : null}

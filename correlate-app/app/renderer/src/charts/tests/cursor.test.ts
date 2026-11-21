@@ -5,7 +5,8 @@
 import { describe, expect, it } from "vitest";
 import { PLOT_MARGIN_LEFT } from "../../correlate/axes.js";
 import { arrange, moveBy, moveTo } from "../arrange.js";
-import { HIGHLIGHT_MS, recentred, timeAt } from "../ChartBlock.js";
+import { HIGHLIGHT_MS, timeAt } from "../ChartBlock.js";
+import { recentred } from "../viewState.js";
 
 describe("REQ-000030-sJpO9KMY: the cursor from a click", () => {
   it("is the time under the click, none left of the plot", () => {
@@ -22,8 +23,12 @@ describe("REQ-000030-sJpO9KMY: the cursor from a click", () => {
 
 describe("br-VIEW-000002-sJpO9KMY: a recentre", () => {
   it("keeps the span, centred on the row's time, never under 200 ms", () => {
-    expect(recentred({ t0: 0, t1: 600_000 }, 1_000_000)).toEqual({ t0: 700_000, t1: 1_300_000 });
-    expect(recentred({ t0: 0, t1: 50 }, 1000)).toEqual({ t0: 900, t1: 1100 });
+    const paused = (view: { t0: number; t1: number }) => ({ view, live: false, resumeAt: null });
+    expect(recentred(paused({ t0: 0, t1: 600_000 }), 1_000_000, 0, 10).view).toEqual({
+      t0: 700_000,
+      t1: 1_300_000,
+    });
+    expect(recentred(paused({ t0: 0, t1: 50 }), 1000, 0, 10).view).toEqual({ t0: 900, t1: 1100 });
   });
 });
 

@@ -41,6 +41,8 @@ export interface LogPanelProps {
   cursorT?: number | null;
   /** How far from the cursor a row is highlighted, in ms: cttc's 5 s. */
   windowMs?: number;
+  /** Live tracking put the cursor there: its rows are marked as cttc's `hl-live`. */
+  cursorLive?: boolean;
   /** A search match sets the cursor. */
   onCursor?: (t: number) => void;
   /** A row's click sets the cursor and recentres the charts. */
@@ -63,6 +65,7 @@ export function LogPanel({
   onOrder,
   cursorT = null,
   windowMs = 5_000,
+  cursorLive = false,
   onExport,
   onHide,
   onCursor,
@@ -203,7 +206,7 @@ export function LogPanel({
     const level = levelOf(row.text);
     const classes = [
       "log-row",
-      hl ? "hl" : "",
+      hl ? (cursorLive ? "hl-live" : "hl") : "",
       hl && !previousHl ? "hl-top" : "",
       hl && !nextHl ? "hl-bottom" : "",
       i === cursorIdx ? "cursor-row" : "",

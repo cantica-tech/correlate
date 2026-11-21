@@ -30,13 +30,18 @@ export function cttcChartBlock(): string {
   </div></section></main>`;
 }
 
+/** cttc's navigator (`index.html:240-245`), "now" live or not. */
+export function cttcNav(live: boolean): string {
+  return `<div id="chart-nav" class="timeline-nav" title="Drag the thumb or click the track to pan · click “now” to jump to the present and resume following it"><div class="tl-track"><div class="tl-thumb"></div><span class="tl-now-label" data-live="${live}">now</span></div></div>`;
+}
+
 /**
- * cttc's flat head button (`.btn-flat`, as its Bring Back,
- * `index.html:234`), in the charts' head, labelled "Now" with the track icon:
- * the app's way back to following now (REQ-000030-sJpO9KMY).
+ * The script that places the thumb as cttc's `updateTimelineNav`: across the
+ * whole track while live (the view holds now), a sixth of it from the left
+ * when the view is an hour back and 10 min wide.
  */
-export function cttcNowButton(trackSvg: string): string {
-  return `<div class="panel-head-right"><button class="btn-flat" title="Follow now again">${trackSvg.replace("<svg ", '<svg class="btn-flat-icon" ')}Now</button></div>`;
+export function cttcNavScript(live: boolean): string {
+  return `(() => { const track = document.querySelector(".tl-track"); const thumb = document.querySelector(".tl-thumb"); thumb.style.left = "0px"; thumb.style.width = (track.clientWidth ${live ? "" : "/ 6"}) + "px"; })();`;
 }
 
 /** The script that colors the swatches, as cttc's `colorFor` did. */

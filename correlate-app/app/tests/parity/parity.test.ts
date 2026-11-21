@@ -17,9 +17,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { _electron, type ElectronApplication, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ICONS } from "../../renderer/src/icons/icons.generated.js";
 import { COMPONENT_LIMIT, compare, type Mask, readPng, writePng } from "./compare.js";
-import { cttcChartBlock, cttcNowButton, cttcSwatchScript } from "./cttcCharts.js";
+import { cttcChartBlock, cttcNav, cttcNavScript, cttcSwatchScript } from "./cttcCharts.js";
+import { cttcLivePrefs } from "./cttcLive.js";
 import { cttcLanesHead, cttcPanels, cttcRowsScript } from "./cttcLogs.js";
 import { cttcMenuBar } from "./cttcMenuBar.js";
 import { cttcSidebar, cttcWidthScript } from "./cttcSidebar.js";
@@ -46,9 +46,23 @@ const FIXTURES = [
 
 /**
  * Intended differences from cttc, each with its reason: a fixture listed
- * here is masked or allowed more. None so far.
+ * here is masked or allowed more.
  */
-const INTENDED: Partial<Record<string, { masks?: Mask[]; limit?: number; reason: string }>> = {};
+const INTENDED: Partial<Record<string, { masks?: Mask[]; limit?: number; reason: string }>> = {
+  "live-prefs": {
+    reason:
+      "cttc's Time window help points to its toolbar's Frequency field, which the app does not have; ours says the charts are read every 5 s (REQ-000031-sJpO9KMY)",
+    masks: [
+      {
+        x: 30,
+        y: 76,
+        width: 980,
+        height: 72,
+        reason: "the Time window's help text, two lines on both sides",
+      },
+    ],
+  },
+};
 
 const THEMES = ["light", "dark"] as const;
 
@@ -312,17 +326,33 @@ async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer
     await page.evaluate("document.fonts.ready.then(() => true)");
     pictures.set(`charts-head-${theme}`, await shoot("#chart-head"));
     pictures.set(`charts-legend-${theme}`, await shoot("#legend"));
-    // Recentred: the head's "Now" (REQ-000030-sJpO9KMY).
-    await page.goto(`${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?paused`);
+    // The navigator, live and paused (REQ-000031-sJpO9KMY).
+    for (const paused of [false, true]) {
+      const url = pathToFileURL(path.join(here, `page/${side}-charts.html`)).href;
+      await page.goto(paused ? `${url}?paused` : url);
+      if (side === "cttc") {
+        await page.evaluate(
+          `(() => { document.getElementById("stage").innerHTML = ${JSON.stringify(cttcChartBlock())}; document.getElementById("charts").insertAdjacentHTML("afterend", ${JSON.stringify(cttcNav(!paused))}); ${cttcSwatchScript()} ${cttcNavScript(!paused)} })()`,
+        );
+      }
+      await page.waitForSelector(`.tl-now-label[data-live="${!paused}"]`);
+      await page.waitForTimeout(100);
+      await page.mouse.move(1, 1);
+      await page.evaluate("document.fonts.ready.then(() => true)");
+      pictures.set(`charts-nav${paused ? "-paused" : ""}-${theme}`, await shoot("#chart-nav"));
+    }
+    // The live settings' fieldsets (REQ-000031-sJpO9KMY).
+    const prefsUrl = pathToFileURL(path.join(here, `page/${side}-charts.html`)).href;
+    await page.goto(`${prefsUrl}?prefs`);
     if (side === "cttc") {
       await page.evaluate(
-        `(() => { document.getElementById("stage").innerHTML = ${JSON.stringify(cttcChartBlock())}; document.getElementById("chart-head").insertAdjacentHTML("beforeend", ${JSON.stringify(cttcNowButton(ICONS.track))}); ${cttcSwatchScript()} })()`,
+        `(() => { const stage = document.getElementById("stage"); stage.className = "prefs-stage"; stage.innerHTML = ${JSON.stringify(cttcLivePrefs())}; })()`,
       );
     }
-    await page.waitForSelector("#chart-head .btn-flat");
+    await page.waitForSelector(".prefs-stage fieldset:nth-of-type(2)");
     await page.mouse.move(1, 1);
     await page.evaluate("document.fonts.ready.then(() => true)");
-    pictures.set(`charts-head-now-${theme}`, await shoot("#chart-head"));
+    pictures.set(`live-prefs-${theme}`, await shoot(".prefs-stage"));
   }
 }
 
@@ -406,7 +436,9 @@ describe.skipIf(process.platform !== "darwin")(
       "remove-dialog",
       "charts-head",
       "charts-legend",
-      "charts-head-now",
+      "charts-nav",
+      "charts-nav-paused",
+      "live-prefs",
       "logs-panel",
       "logs-lanes-head",
     ].flatMap((n) => THEMES.map((t) => `${n}-${t}`));
