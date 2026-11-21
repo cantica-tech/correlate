@@ -70,3 +70,22 @@ describe("REQ-000018-sJpO9KMY: the theme choice", () => {
     expect(defaultSettingsPath({ CORRELATE_SETTINGS: "/x/s.json" })).toBe("/x/s.json");
   });
 });
+
+describe("REQ-000021-sJpO9KMY: other parts beside the theme", () => {
+  it("keeps each part when another is written, and refuses the theme as a part", () => {
+    const settings = new Settings(file, quiet);
+    settings.setPart("sidebar", { dock: "right" });
+    settings.setThemeMode("dark");
+    const again = new Settings(file, quiet);
+    expect(again.part("sidebar")).toEqual({ dock: "right" });
+    expect(again.themeMode()).toBe("dark");
+    expect(() => again.setPart("themeMode", "light")).toThrow(/setThemeMode/);
+  });
+
+  it("reads a file that is not an object as unreadable", () => {
+    writeFileSync(path.join(dir, "x.json"), "[]");
+    const warnings: string[] = [];
+    new Settings(path.join(dir, "x.json"), { warn: (m) => warnings.push(m) });
+    expect(warnings[0]).toContain("not an object");
+  });
+});

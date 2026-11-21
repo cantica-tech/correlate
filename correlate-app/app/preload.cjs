@@ -15,7 +15,9 @@
  * never a URL, and resolves to
  * `{ ok: true, value }` or `{ ok: false, error }` (see
  * `main/src/sump/ipc.ts`). Every call is time-bounded in the main process
- * (br-CONN-000005-sJpO9KMY).
+ * (br-CONN-000005-sJpO9KMY). `window.correlate.sidebar` reads and changes the
+ * sidebar's layout, shared by every window, and asks for its actions by name
+ * (REQ-000021-sJpO9KMY).
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -37,6 +39,19 @@ const AUDIT_CHANNEL = "sump:audit";
 /** Must match the channels in `main/src/theme.ts`. */
 const THEME_GET_CHANNEL = "theme:get";
 const THEME_SET_CHANNEL = "theme:set";
+/** Must match the channels in `main/src/sidebar.ts`. */
+const SIDEBAR_GET_CHANNEL = "sidebar:get";
+const SIDEBAR_SET_CHANNEL = "sidebar:set";
+const SIDEBAR_ACTION_CHANNEL = "sidebar:action";
+const SIDEBAR_LAYOUT_EVENT = "sidebar:layout";
+const SIDEBAR_RUN_EVENT = "sidebar:run";
+
+/** Listen on `channel`; returns the function that stops listening. */
+function listen(channel, listener) {
+  const handler = (_event, value) => listener(value);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+}
 
 contextBridge.exposeInMainWorld("correlate", {
   theme: {
@@ -76,5 +91,17 @@ contextBridge.exposeInMainWorld("correlate", {
     audit: () => ipcRenderer.invoke(AUDIT_CHANNEL),
     /** Send one request to a Sump; resolves to its reply, never rejects. */
     request: (message) => ipcRenderer.invoke(SUMP_REQUEST_CHANNEL, message),
+  },
+  sidebar: {
+    /** The sidebar's layout: `{ dock, lastDock, width, collapsed, expanded }`. */
+    get: () => ipcRenderer.invoke(SIDEBAR_GET_CHANNEL),
+    /** Change part of it, for every window: `{ ok, layout }` or `{ ok: false, message }`. */
+    set: (change) => ipcRenderer.invoke(SIDEBAR_SET_CHANNEL, change),
+    /** Ask for an entry's action by name; it runs in the main window. */
+    action: (name) => ipcRenderer.invoke(SIDEBAR_ACTION_CHANNEL, name),
+    /** Hear each change of the layout; returns the function that stops listening. */
+    onLayout: (listener) => listen(SIDEBAR_LAYOUT_EVENT, listener),
+    /** Hear the actions this window should run; returns the function that stops listening. */
+    onRun: (listener) => listen(SIDEBAR_RUN_EVENT, listener),
   },
 });

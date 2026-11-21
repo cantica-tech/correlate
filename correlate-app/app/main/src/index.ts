@@ -30,6 +30,12 @@ export { identityPublicKey, importIdentity, userName } from "./identity/identity
 export { registerProvisionIpc } from "./provision/ipc.js";
 export { runCommand } from "./provision/runner.js";
 export { connectSsh } from "./provision/ssh.js";
+export {
+  registerSidebarIpc,
+  SIDEBAR_LAYOUT_EVENT,
+  SIDEBAR_RUN_EVENT,
+  SidebarHost,
+} from "./sidebar.js";
 export { logout } from "./sump/client.js";
 export { registerSumpIpc, SUMP_STATE_EVENT } from "./sump/ipc.js";
 export { login } from "./sump/login.js";

@@ -31,9 +31,14 @@ export function defaultSettingsPath(env: Record<string, string | undefined> = pr
   return env.CORRELATE_SETTINGS || path.join(homedir(), ".correlate", "settings.json");
 }
 
-/** The app's own settings file, the theme for now. */
+/**
+ * The app's own settings file: the theme and, kept beside it, other parts of
+ * the app's state (the sidebar's layout, REQ-000021-sJpO9KMY), each under its
+ * own key. Writing one part keeps the others.
+ */
 export class Settings {
   private mode: ThemeMode = "system";
+  private readonly parts: Record<string, unknown> = {};
 
   constructor(
     readonly file: string,
@@ -41,13 +46,15 @@ export class Settings {
   ) {
     if (!existsSync(file)) return;
     try {
-      const saved = JSON.parse(readFileSync(file, "utf8")) as { themeMode?: unknown };
-      if (THEME_MODES.includes(saved.themeMode as ThemeMode))
-        this.mode = saved.themeMode as ThemeMode;
-      else if (saved.themeMode !== undefined) {
-        this.logger.warn(
-          `settings: unknown theme ${JSON.stringify(saved.themeMode)}; using system`,
-        );
+      const saved = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+      if (typeof saved !== "object" || saved === null || Array.isArray(saved)) {
+        throw new Error("not an object");
+      }
+      const { themeMode, ...parts } = saved;
+      Object.assign(this.parts, parts);
+      if (THEME_MODES.includes(themeMode as ThemeMode)) this.mode = themeMode as ThemeMode;
+      else if (themeMode !== undefined) {
+        this.logger.warn(`settings: unknown theme ${JSON.stringify(themeMode)}; using system`);
       }
     } catch (error) {
       this.logger.warn(
@@ -67,9 +74,28 @@ export class Settings {
       throw new Error(`the theme is one of ${THEME_MODES.join(", ")}`);
     }
     this.mode = mode as ThemeMode;
-    ensurePrivateDir(path.dirname(this.file));
-    writeSecretFile(this.file, `${JSON.stringify({ themeMode: this.mode }, null, 2)}\n`);
+    this.save();
     return this.mode;
+  }
+
+  /** The part saved under `key`, as read from the file: callers check it. */
+  part(key: string): unknown {
+    return this.parts[key];
+  }
+
+  /** Remember `value` under `key`, keeping the theme and the other parts. */
+  setPart(key: string, value: unknown): void {
+    if (key === "themeMode") throw new Error("the theme is set with setThemeMode");
+    this.parts[key] = value;
+    this.save();
+  }
+
+  private save(): void {
+    ensurePrivateDir(path.dirname(this.file));
+    writeSecretFile(
+      this.file,
+      `${JSON.stringify({ themeMode: this.mode, ...this.parts }, null, 2)}\n`,
+    );
   }
 }
 

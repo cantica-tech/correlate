@@ -29,36 +29,75 @@ const {
   openCatalog,
   openVault,
   registerProvisionIpc,
+  registerSidebarIpc,
   registerSumpIpc,
   registerThemeIpc,
   runCommand,
   reloginWith,
   SessionTokens,
   Settings,
+  SidebarHost,
   startForwards,
 } = require("./main/dist/main.cjs");
 
 /** Each window's active Sump (br-SUMP-000010); set once the app is ready. */
 let activeSumps;
+/** The main window, the one the sidebar's actions act on (REQ-000021). */
+let mainWindow = null;
+/** The sidebar's layout and detached window (REQ-000021); set once the app is ready. */
+let sidebar;
 
-/** Create the main window, sandboxed, with the preload bridge as its only link to Node. */
+/** Sandboxed windows, with the preload bridge as their only link to Node. */
+const WEB_PREFERENCES = {
+  preload: path.join(__dirname, "preload.cjs"),
+  contextIsolation: true,
+  nodeIntegration: false,
+  sandbox: true,
+};
+
+/** Create the main window. */
 function createWindow() {
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
     title: "correlate-app",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
+    webPreferences: WEB_PREFERENCES,
   });
+  mainWindow = window;
   // Each window has its own active Sump, starting on the last one used.
   const id = window.webContents.id;
   activeSumps?.open(id);
-  window.on("closed", () => activeSumps?.close(id));
+  window.on("closed", () => {
+    activeSumps?.close(id);
+    if (mainWindow === window) {
+      mainWindow = null;
+      // The detached sidebar goes with the main window, and stays detached.
+      sidebar?.shutDown();
+    }
+  });
   window.loadFile(path.join(__dirname, "renderer", "index.html"));
+  sidebar?.start();
+}
+
+/**
+ * The detached sidebar's window (REQ-000021 Requirement 3): the same page,
+ * showing only the sidebar; it has no active Sump of its own.
+ */
+function createSidebarWindow() {
+  const window = new BrowserWindow({
+    width: 260,
+    height: 680,
+    title: "correlate-app Sidebar",
+    webPreferences: WEB_PREFERENCES,
+  });
+  window.loadFile(path.join(__dirname, "renderer", "index.html"), { query: { view: "sidebar" } });
+  return {
+    close: () => {
+      if (!window.isDestroyed()) window.close();
+    },
+    focus: () => window.focus(),
+    onClosed: (listener) => window.on("closed", listener),
+  };
 }
 
 app.whenReady().then(() => {
@@ -68,6 +107,24 @@ app.whenReady().then(() => {
   registerThemeIpc(ipcMain, settings, (mode) => {
     nativeTheme.themeSource = mode;
   });
+  // The sidebar's layout, shared by the main window and the detached one;
+  // About and Quit run here, every other action in the main window.
+  sidebar = new SidebarHost(
+    settings,
+    {
+      broadcast: (channel, value) => {
+        for (const window of BrowserWindow.getAllWindows()) window.webContents.send(channel, value);
+      },
+      sendToMain: (channel, value) => mainWindow?.webContents.send(channel, value),
+      openDetached: createSidebarWindow,
+    },
+    {
+      quit: () => app.quit(),
+      about: () => app.showAboutPanel(),
+    },
+  );
+  registerSidebarIpc(ipcMain, sidebar);
+  app.on("before-quit", () => sidebar.shutDown());
   // Session tokens live in memory only: quitting forgets them (br-CONN-000004).
   // A refused token is renewed by logging in with the vault's SSH key
   // (br-CONN-000007).

@@ -81,6 +81,9 @@ describe("main.cjs starts", () => {
       "sump:audit",
       "theme:get",
       "theme:set",
+      "sidebar:get",
+      "sidebar:set",
+      "sidebar:action",
     ]) {
       expect(channels).toContain(channel);
     }

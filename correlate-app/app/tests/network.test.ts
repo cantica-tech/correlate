@@ -136,7 +136,30 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
         request: (m: unknown) => Promise<unknown>;
       };
     };
-    expect(Object.keys(api)).toEqual(["theme", "sump"]);
+    expect(Object.keys(api)).toEqual(["theme", "sump", "sidebar"]);
+    const sidebar = (
+      exposed.correlate as {
+        sidebar: Record<string, (m?: unknown) => unknown>;
+      }
+    ).sidebar;
+    expect(Object.keys(sidebar)).toEqual(["get", "set", "action", "onLayout", "onRun"]);
+    await sidebar.get?.();
+    await sidebar.set?.({ width: 300 });
+    await sidebar.action?.("about");
+    expect(invoked.splice(0)).toEqual([
+      ["sidebar:get"],
+      ["sidebar:set", { width: 300 }],
+      ["sidebar:action", "about"],
+    ]);
+    const runs: unknown[] = [];
+    const stopRun = sidebar.onRun?.((name: unknown) => runs.push(name)) as () => void;
+    listeners.get("sidebar:run")?.({}, "preferences");
+    expect(runs).toEqual(["preferences"]);
+    stopRun();
+    expect(listeners.has("sidebar:run")).toBe(false);
+    const stopLayout = sidebar.onLayout?.(() => {}) as () => void;
+    expect(listeners.has("sidebar:layout")).toBe(true);
+    stopLayout();
     const theme = (
       exposed.correlate as { theme: Record<string, (m?: unknown) => Promise<unknown>> }
     ).theme;
