@@ -1,19 +1,27 @@
 """pytest/pluggy-style plugin manager for the Sump server.
 
-Implements cor-CORE.PLUGIN-001: entry-point discovery (never a directory
-scan), default-on/explicit-opt-out loading, and a fixed hookspec set a
-plugin implements any subset of. See REQ-000003 Requirement 3.
+Plugins are installed packages declaring themselves in the `sump.plugins`
+entry-point group, never found by scanning a directory
+(br-PLUGIN-000001-sJpO9KMY). Every installed plugin loads unless turned off
+(br-PLUGIN-000002-sJpO9KMY); one that fails to load is skipped and reported
+(br-PLUGIN-000005-sJpO9KMY); `report()` says what became of each
+(br-PLUGIN-000003-sJpO9KMY). Registrations and routes are made one plugin at a
+time, so every name and route has a known owner and a clash stops startup
+naming both (br-PLUGIN-000004-sJpO9KMY).
 
 Ported from correlator (`server/src/correlator_sump/plugins.py`) under decision D6 of
-`docs/roadmap/correlate-app-rewrite.md`. The rule and requirement IDs
-cited here are correlator's, kept as the record of where this was proven.
+`docs/roadmap/correlate-app-rewrite.md`, then extended by REQ-000005-sJpO9KMY.
+The `cor-CORE` and `REQ-` IDs in the hook descriptions below are correlator's,
+kept as the record of where each hook was proven.
 """
 
 from __future__ import annotations
 
 import inspect
+import logging
 from abc import abstractmethod
 from collections.abc import Callable, Coroutine, Iterable
+from dataclasses import dataclass
 from importlib.metadata import EntryPoint, entry_points
 from typing import Any, Protocol
 
@@ -21,6 +29,8 @@ import pluggy
 
 from correlate_sump.datasource import DataSource
 from correlate_sump.transport import Transport
+
+logger = logging.getLogger(__name__)
 
 PROJECT_NAME = "sump"
 ENTRY_POINT_GROUP = "sump.plugins"
@@ -96,23 +106,60 @@ class SumpHookSpecs:
 
 
 def _discover_entry_points(group: str = ENTRY_POINT_GROUP) -> Iterable[EntryPoint]:
+    """The installed packages declaring themselves in `group`."""
     return entry_points(group=group)
 
 
+#: The owner name of the Sump's own routes, in conflict messages.
+CORE_OWNER = "sump"
+
+#: Plugin states reported by `PluginManager.report`.
+LOADED, DISABLED, FAILED = "loaded", "disabled", "failed"
+
+#: Registration hooks, in the order `discover` runs them.
+REGISTRATION_HOOKS = ("register_transport", "register_data_source", "register_background_task")
+
+
+class PluginConflictError(ValueError):
+    """Two plugins (or a plugin and the Sump) claimed the same name or route."""
+
+
+@dataclass
+class PluginRecord:
+    """What became of one plugin: its name, state, and error if it failed."""
+
+    name: str
+    state: str
+    error: str | None = None
+
+
 class PluginManager:
-    """Wraps `pluggy.PluginManager` with Sump's entry-point discovery and
-    default-on/explicit-opt-out loading (cor-CORE.PLUGIN-001)."""
+    """Wraps `pluggy.PluginManager` with Sump's entry-point discovery,
+    opt-out loading, load-failure handling and per-plugin ownership."""
 
     def __init__(
-        self, disabled: Iterable[str] = (), ingest_adapter: IngestAdapterLike | None = None
+        self,
+        disabled: Iterable[str] = (),
+        ingest_adapter: IngestAdapterLike | None = None,
+        disable_autoload: bool = False,
     ) -> None:
         self._disabled = frozenset(disabled)
+        self._disable_autoload = disable_autoload
         self._pm = pluggy.PluginManager(PROJECT_NAME)
         self._pm.add_hookspecs(SumpHookSpecs)
+        self.records: dict[str, PluginRecord] = {}
         self.loaded_plugin_names: list[str] = []
         self.transport_types: dict[str, TransportFactory] = {}
         self.data_sources: dict[str, DataSource] = {}
         self.background_task_factories: dict[str, BackgroundTaskFactory] = {}
+        #: Which plugin registered each name, per kind (br-PLUGIN-000004).
+        self.owners: dict[str, dict[str, str]] = {
+            "transport type": {},
+            "data source": {},
+            "background task": {},
+        }
+        #: The plugin whose hook is running, so `add_*` knows the owner.
+        self._registering: str = CORE_OWNER
         #: Set by `create_app` before `discover()` runs -- the Sump's own
         #: `IngestAdapter`, so a `register_background_task` hookimpl (e.g.
         #: the logstream plugin) can build a task that ingests directly,
@@ -120,68 +167,134 @@ class PluginManager:
         self.ingest_adapter = ingest_adapter
 
     async def discover(self) -> list[str]:
-        """Discover every package under the `sump.plugins` entry-point
-        group and load it unless its name is explicitly disabled (safe
-        with zero plugins installed -- `entry_points(group=...)` returns
-        an empty iterable rather than raising, so there is no "missing
-        directory" failure mode), then fire `register_transport`/
-        `register_data_source` exactly once, after every plugin has
-        loaded (cor-CORE.DATASTREAM-001) -- never per-plugin during
-        loading, so a later-loaded plugin can't be missed by an
-        earlier-loaded one's registration pass. Returns the names
-        actually loaded.
+        """Load every installed `sump.plugins` package not turned off, then
+        run the registration hooks once, plugin by plugin. Returns the names
+        loaded.
 
-        `register_transport`/`register_data_source` hookimpls may be
-        `async def` (e.g. self-host detection needs a real transport
-        call) even though pluggy's own hook caller is synchronous: pluggy
-        just calls each hookimpl and collects whatever it returns, so an
-        `async def` hookimpl's "return value" is simply its unawaited
-        coroutine object -- awaited here instead, one at a time, rather
-        than each hookimpl needing to bridge sync/async itself (which
-        would risk an `asyncio.run()` call nested inside this method's
-        own already-running event loop)."""
+        A disabled plugin is never imported. A plugin whose package fails to
+        load is logged, recorded as failed and skipped; the others carry on.
+        Registration hooks run only after every plugin has loaded, so none
+        misses another's registration; an `async def` hookimpl is awaited.
+        """
         for ep in _discover_entry_points():
-            if ep.name in self._disabled:
+            if self._disable_autoload or ep.name in self._disabled:
+                self.records[ep.name] = PluginRecord(ep.name, DISABLED)
                 continue
-            plugin = ep.load()
+            try:
+                plugin = ep.load()
+            except Exception as exc:  # any error importing a plugin: skip it, never crash
+                logger.error("plugin %r failed to load; skipped", ep.name, exc_info=True)
+                self.records[ep.name] = PluginRecord(
+                    ep.name, FAILED, f"{type(exc).__name__}: {exc}"
+                )
+                continue
             self._pm.register(plugin, name=ep.name)
+            self.records[ep.name] = PluginRecord(ep.name, LOADED)
             self.loaded_plugin_names.append(ep.name)
-        for result in self._pm.hook.register_transport(manager=self):
-            if inspect.isawaitable(result):
-                await result
-        for result in self._pm.hook.register_data_source(manager=self):
-            if inspect.isawaitable(result):
-                await result
-        for result in self._pm.hook.register_background_task(manager=self):
-            if inspect.isawaitable(result):
-                await result
+        for hook_name in REGISTRATION_HOOKS:
+            await self._call_per_plugin(hook_name, manager=self)
         return self.loaded_plugin_names
+
+    async def _call_per_plugin(self, hook_name: str, **kwargs: Any) -> None:
+        """Run `hook_name` one plugin at a time, recording whose turn it is."""
+        for impl in getattr(self._pm.hook, hook_name).get_hookimpls():
+            self._registering = impl.plugin_name
+            try:
+                result = impl.function(**{arg: kwargs[arg] for arg in impl.argnames})
+                if inspect.isawaitable(result):
+                    await result
+            finally:
+                self._registering = CORE_OWNER
+
+    def _claim(self, kind: str, name: str) -> None:
+        """Record the running plugin as `name`'s owner; refuse a name already taken."""
+        owners = self.owners[kind]
+        if name in owners:
+            raise PluginConflictError(
+                f"{kind} {name!r} registered by both {owners[name]!r} and {self._registering!r}"
+            )
+        owners[name] = self._registering
 
     def add_transport_type(self, name: str, factory: TransportFactory) -> None:
         """Called by a plugin's `register_transport` hookimpl to register a
         `Transport` factory under `name` (e.g. `"ssh"`, `"local"`)."""
+        self._claim("transport type", name)
         self.transport_types[name] = factory
 
     def add_data_source(self, name: str, source: DataSource) -> None:
         """Called by a plugin's `register_data_source` hookimpl to register
         a concrete `DataSource` under `name` (e.g. `"self"`)."""
+        self._claim("data source", name)
         self.data_sources[name] = source
 
     def add_background_task(self, name: str, factory: BackgroundTaskFactory) -> None:
         """Called by a plugin's `register_background_task` hookimpl to
         register a long-lived task under `name` (cor-CORE.DATASTREAM-003)."""
+        self._claim("background task", name)
         self.background_task_factories[name] = factory
+
+    def contribute_routes(self, app: Any) -> None:
+        """Let each plugin add routes to `app`, one plugin at a time.
+
+        The app's existing routes belong to the Sump. A plugin route whose
+        path and method are already taken stops startup with a
+        `PluginConflictError` naming both owners (br-PLUGIN-000004).
+        """
+        owners: dict[tuple[str, str], str] = {}
+        for key in _route_keys(getattr(app, "routes", [])):
+            owners.setdefault(key, CORE_OWNER)
+        for impl in self._pm.hook.contribute_routes.get_hookimpls():
+            before = len(app.routes)
+            impl.function(**{arg: app for arg in impl.argnames})
+            for key in _route_keys(app.routes[before:]):
+                if key in owners:
+                    path, method = key
+                    raise PluginConflictError(
+                        f"route {method} {path} registered by both {owners[key]!r} "
+                        f"and {impl.plugin_name!r}"
+                    )
+                owners[key] = impl.plugin_name
+
+    def report(self) -> list[dict[str, Any]]:
+        """Every discovered or directly registered plugin, sorted by name, with
+        its state, manifest (`sump_plugin_info`, when loaded) and error."""
+        infos: dict[str, Any] = {}
+        for impl in self._pm.hook.sump_plugin_info.get_hookimpls():
+            try:
+                infos[impl.plugin_name] = impl.function()
+            except Exception:  # a broken manifest must not hide the plugin
+                logger.error("plugin %r: sump_plugin_info failed", impl.plugin_name, exc_info=True)
+        return [
+            {
+                "name": record.name,
+                "state": record.state,
+                "info": infos.get(record.name) if record.state == LOADED else None,
+                "error": record.error,
+            }
+            for record in sorted(self.records.values(), key=lambda r: r.name)
+        ]
 
     @property
     def hook(self) -> Any:
+        """pluggy's hook relay, to call a hook on every plugin at once."""
         return self._pm.hook
 
     def register(self, plugin: Any, name: str | None = None) -> None:
         """Register a plugin object directly (used by tests and by code
         that already holds a plugin instance rather than an entry point)."""
-        self._pm.register(plugin, name=name)
-        if name is not None:
-            self.loaded_plugin_names.append(name)
+        registered = self._pm.register(plugin, name=name) or name or repr(plugin)
+        self.records[registered] = PluginRecord(registered, LOADED)
+        self.loaded_plugin_names.append(registered)
+
+
+def _route_keys(routes: Iterable[Any]) -> list[tuple[str, str]]:
+    """`(path, method)` for every method of every route in `routes`."""
+    return [
+        (route.path, method.upper())
+        for route in routes
+        if getattr(route, "path", None) and getattr(route, "methods", None)
+        for method in route.methods
+    ]
 
 
 def validate_plugin_routes(app: Any) -> None:
