@@ -274,6 +274,14 @@ class PluginManager:
             for record in sorted(self.records.values(), key=lambda r: r.name)
         ]
 
+    def health_checks(self) -> list[tuple[str, Callable[[], Any]]]:
+        """Each loaded plugin's own `on_health_check`, by plugin name
+        (br-PLUGIN-000008); plugins without one are not listed."""
+        return [
+            (impl.plugin_name, impl.function)
+            for impl in self._pm.hook.on_health_check.get_hookimpls()
+        ]
+
     @property
     def hook(self) -> Any:
         """pluggy's hook relay, to call a hook on every plugin at once."""
