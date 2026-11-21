@@ -28,7 +28,7 @@ Rule IDs omit their `-sJpO9KMY` suffix; Roadmap gives the item numbers in
 | 3 | Corrupt gateways.json is silently overwritten | Critical | `br-SUMP-000001` | 13 | passing |
 | 4 | Uninstalled gateway's host can never be re-added | High | `br-SUMP-000002` | 16 | placeholder |
 | 5 | Failed switch to a remote gateway tears down the current tunnel | High | `br-SUMP-000003` | 16, 17 | placeholder |
-| 6 | Choosing 'Later' after adding a gateway leaves the window on a dead connection | Medium | `br-SUMP-000003` | 15 | placeholder |
+| 6 | Choosing 'Later' after adding a gateway leaves the window on a dead connection | Medium | `br-SUMP-000003` | 15 | passing |
 | 7 | Edit Gateway overwrites the working key before the new one is proven | High | `br-SUMP-000003` | 10 | passing |
 | 8 | Orphan cleanup can kill an unrelated process | High | `br-SUMP-000008` | 17 | placeholder |
 | 9 | vault-setup can re-key an already initialized vault | Critical | `br-VAULT-000004` | 10 | passing |

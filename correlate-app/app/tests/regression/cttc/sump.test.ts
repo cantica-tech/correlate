@@ -12,6 +12,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { Catalog } from "../../../main/src/catalog/catalog.js";
+import { Lifecycle } from "../../../main/src/catalog/lifecycle.js";
+import { ActiveSumps } from "../../../main/src/catalog/windows.js";
+import { provisionLocal } from "../../../main/src/provision/local.js";
+import { serve } from "../../../main/src/sump/tests/servers.js";
+import { SessionTokens } from "../../../main/src/sump/tokens.js";
 import { Vault } from "../../../main/src/vault/vault.js";
 
 describe("br-SUMP-000006-sJpO9KMY", () => {
@@ -59,11 +64,67 @@ describe("br-SUMP-000003-sJpO9KMY", () => {
   // BUG-000005-uKKrzikI, High: becomes a real test with roadmap Item 16, Item 17
   // (RM-000017-sJpO9KMY, RM-000018-sJpO9KMY).
   it.todo("cttc BUG-000005: Failed switch to a remote gateway tears down the current tunnel");
-  // BUG-000006-uKKrzikI, Medium: becomes a real test with roadmap Item 15
-  // (RM-000016-sJpO9KMY).
-  it.todo(
-    "cttc BUG-000006: Choosing 'Later' after adding a gateway leaves the window on a dead connection",
-  );
+  // BUG-000006-uKKrzikI, Medium (roadmap Item 15, RM-000016-sJpO9KMY): cttc
+  // switched the connection before asking, so "Later" left the window on a
+  // dead one. Now a window moves to a new Sump only once it is connected and
+  // only when asked: "Later" and a failed provisioning both leave it on its
+  // Sump, with the Sump it was on still answering.
+  it("cttc BUG-000006: Choosing 'Later' after adding a gateway leaves the window on a dead connection", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cttc-later-"));
+    const sump = await serve((req, res) => {
+      const json = (value: unknown) => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(value));
+      };
+      if (req.url === "/health") return json({ status: "ok", redis: true });
+      if (req.url === "/session/challenge") {
+        return json({ challenge: "c", namespace: "correlate-sump-login", expires_in: 60 });
+      }
+      return json({ token: "t", user: "olivier", owner: true });
+    });
+    try {
+      const catalog = Catalog.open(path.join(dir, "catalog.db"));
+      const current = catalog.recordConnect({
+        kind: "remote",
+        sumpPort: 8765,
+        sshTarget: "current",
+      });
+      const vault = new Vault(path.join(dir, "vault"), undefined, {
+        scrypt: { N: 2 ** 10, r: 8, p: 1 },
+        logger: { info: () => {}, warn: () => {} },
+      });
+      vault.create("a passphrase", "a passphrase");
+      const active = new ActiveSumps(catalog);
+      active.open(1);
+      active.set(1, current.id);
+      const ctx = {
+        run: async () => ({ code: 0, stdout: "29\n", stderr: "", timedOut: false }),
+        lifecycle: new Lifecycle(catalog, undefined, { info: () => {} }),
+        tokens: new SessionTokens(),
+        vault,
+        env: { CORRELATE_USER: "olivier" },
+        appVersion: "0.1.0",
+        catalog,
+        active,
+        localDir: path.join(dir, "local"),
+        logger: { info: () => {}, warn: () => {} },
+      };
+      const port = Number(new URL(sump.sump.baseUrl).port);
+      const later = await provisionLocal(ctx, { sumpPort: port, windowId: 1, switchTo: false });
+      expect(later).toEqual({ ok: true, id: "local", switched: false });
+      expect(active.get(1)).toBe(current.id);
+      const failed = await provisionLocal(
+        { ...ctx, run: async () => ({ code: 1, stdout: "", stderr: "", timedOut: false }) },
+        { windowId: 1, switchTo: true },
+      );
+      expect(failed.ok).toBe(false);
+      expect(active.get(1)).toBe(current.id);
+      catalog.close();
+    } finally {
+      await sump.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   // BUG-000007-uKKrzikI, High (roadmap Item 10, RM-000011-sJpO9KMY): Edit
   // Gateway wrote the new key over the working one before connecting with it.
   // The vault now keeps the working key until the new one is proven
