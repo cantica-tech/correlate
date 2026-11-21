@@ -7,10 +7,11 @@
  * test. See README.md in this folder for the whole corpus.
  */
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { Catalog } from "../../../main/src/catalog/catalog.js";
 import { Vault } from "../../../main/src/vault/vault.js";
 
 describe("br-SUMP-000006-sJpO9KMY", () => {
@@ -26,9 +27,26 @@ describe("br-SUMP-000005-sJpO9KMY", () => {
 });
 
 describe("br-SUMP-000001-sJpO9KMY", () => {
-  // BUG-000003-uKKrzikI, Critical: becomes a real test with roadmap Item 13
-  // (RM-000014-sJpO9KMY).
-  it.todo("cttc BUG-000003: Corrupt gateways.json is silently overwritten");
+  // BUG-000003-uKKrzikI, Critical (roadmap Item 13, RM-000014-sJpO9KMY): cttc
+  // read a corrupt gateways.json as empty and the next save wrote over every
+  // gateway. The catalog now refuses a corrupt file and leaves its bytes as
+  // they were; recording a connect needs a catalog that opened.
+  it("cttc BUG-000003: Corrupt gateways.json is silently overwritten", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cttc-catalog-"));
+    const file = path.join(dir, "catalog.db");
+    try {
+      const catalog = Catalog.open(file);
+      catalog.recordConnect({ kind: "remote", sumpPort: 8765, sshTarget: "ops@box" });
+      catalog.close();
+      const corrupt = Buffer.concat([readFileSync(file).subarray(0, 100), Buffer.from("{")]);
+      writeFileSync(file, corrupt);
+      expect(() => Catalog.open(file)).toThrow(expect.objectContaining({ code: "corrupt" }));
+      expect(() => Catalog.open(file)).toThrow(expect.objectContaining({ code: "corrupt" }));
+      expect(readFileSync(file).equals(corrupt)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("br-SUMP-000002-sJpO9KMY", () => {
