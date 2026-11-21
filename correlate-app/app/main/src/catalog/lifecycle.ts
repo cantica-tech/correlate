@@ -158,7 +158,8 @@ export class Lifecycle {
     const current = this.records.get(id);
     if (!current) this.set(id, "unreachable", "first seen");
     else if (current.state === "retired") return undefined;
-    else if (current.state === "provisioning" && to === "unreachable") return undefined;
+    // Only an explicit move takes a Sump out of provisioning (its first connect).
+    else if (current.state === "provisioning") return undefined;
     return this.move(id, to, reason);
   }
 

@@ -18,6 +18,7 @@ const { app, BrowserWindow, ipcMain, safeStorage } = require("electron");
 const path = require("node:path");
 const {
   ActiveSumps,
+  Forwards,
   HealthProbe,
   Lifecycle,
   SUMP_STATE_EVENT,
@@ -29,6 +30,7 @@ const {
   runCommand,
   reloginWith,
   SessionTokens,
+  startForwards,
 } = require("./main/dist/main.cjs");
 
 /** Each window's active Sump (br-SUMP-000010); set once the app is ready. */
@@ -64,10 +66,14 @@ app.whenReady().then(() => {
   // untouched and the app runs without it (br-SUMP-000001).
   const catalog = openCatalog(process.env);
   activeSumps = new ActiveSumps(catalog);
-  const sumps = configuredSumps(process.env, tokens, catalog);
   // Every Sump's lifecycle state, held here only; windows are told of each
   // change and can only read it (br-SUMP-000011).
   const lifecycle = new Lifecycle(catalog);
+  // Remote Sumps are reached only through their SSH forward, each kept up in
+  // the background (br-SUMP-000008, -000009, -000010).
+  const forwards = new Forwards({ lifecycle });
+  const sumps = configuredSumps(process.env, tokens, catalog, forwards);
+  startForwards(forwards, catalog, vault);
   lifecycle.subscribe((record) => {
     for (const window of BrowserWindow.getAllWindows()) {
       window.webContents.send(SUMP_STATE_EVENT, record);
@@ -89,12 +95,14 @@ app.whenReady().then(() => {
     active: activeSumps,
     pending: new Map(),
     resolve: sumps,
+    forwards,
     // Recordings plug in with Phase 8; until then none is ever live.
     guard: { liveRecording: () => undefined },
   });
   // The passphrase's derived key lives only for the session.
   app.on("will-quit", () => {
     probe.stop();
+    forwards.stopAll();
     vault?.lock();
     catalog?.close();
   });

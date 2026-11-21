@@ -19,14 +19,18 @@
  */
 
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { type KeyObject, randomUUID } from "node:crypto";
 import { userInfo } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
 import { userName } from "../identity/identity.js";
 import { privateKeyFrom } from "../identity/sshkey.js";
+import type { Forwards } from "../sump/forward.js";
 import type { SumpResolver } from "../sump/ipc.js";
+import { login } from "../sump/login.js";
 import {
+  checkComposeLoopback,
   composeFile,
+  confirmNeeded,
   type ProvisionContext,
   type ProvisionResult,
   sumpImage,
@@ -55,6 +59,10 @@ export interface RemoteContext extends ProvisionContext {
   connect?: SshConnect;
   /** Finds a Sump to call (the catalog's resolver); Switch checks the target with it. */
   resolve?: SumpResolver;
+  /** Every remote Sump's SSH forward (Item 17); a new Sump's first connect opens its own. */
+  forwards?: Forwards;
+  /** How long a first connect waits for the forward; 30 s. */
+  firstConnectTimeoutMs?: number;
   /** Pending Sumps, until Item 17 connects them. */
   pending: Map<string, PendingSump>;
   /** Streams the image to the host when it cannot pull it. */
@@ -125,9 +133,13 @@ async function must(shell: RemoteShell, step: string, command: string, options =
 export async function provisionRemote(
   ctx: RemoteContext,
   details: RemoteDetails,
-  options: { keyPem?: string } = {},
+  options: { keyPem?: string; windowId?: number; switchTo?: boolean; confirmed?: boolean } = {},
 ): Promise<ProvisionResult> {
   const log = ctx.logger ?? console;
+  if (options.switchTo) {
+    const ask = confirmNeeded(ctx.guard, options.confirmed);
+    if (ask) return ask;
+  }
   const taken = hostWithLiveSump(ctx, details);
   if (taken) {
     return {
@@ -145,11 +157,12 @@ export async function provisionRemote(
   );
   const username = at === -1 ? userInfo().username : details.sshTarget.slice(0, at);
   const image = sumpImage(ctx.env, ctx.appVersion);
-  const compose = `docker compose -f ${REMOTE_DIR}/docker-compose.yml -p ${REMOTE_PROJECT}`;
+  const composeCommand = `docker compose -f ${REMOTE_DIR}/docker-compose.yml -p ${REMOTE_PROJECT}`;
   ctx.lifecycle.provision(id, `provisioning on ${details.sshTarget}`);
   let imported = false;
   let started = false;
   let shell: RemoteShell | undefined;
+  let sshKey: KeyObject | undefined;
   try {
     const identity = unlockedIdentity(ctx);
     let key = identity.key;
@@ -158,6 +171,7 @@ export async function provisionRemote(
       ctx.vault?.put(sshKeyId, options.keyPem);
       imported = true;
     }
+    sshKey = key;
     try {
       shell = await (ctx.connect ?? connectSsh)({ host, port: details.sshPort, username, key });
     } catch (error) {
@@ -168,19 +182,21 @@ export async function provisionRemote(
       timeoutMs: 20_000,
     });
     await must(shell, "prepare the host", `mkdir -p ${REMOTE_DIR} && chmod 700 ${REMOTE_DIR}`);
+    const compose = composeFile(image, details.sumpPort);
+    checkComposeLoopback(compose);
     await must(shell, "write the compose file", `cat > ${REMOTE_DIR}/docker-compose.yml`, {
-      input: composeFile(image, details.sumpPort),
+      input: compose,
     });
     started = true;
-    const up = await shell.exec(`${compose} up -d`, { timeoutMs: 10 * 60_000 });
+    const up = await shell.exec(`${composeCommand} up -d`, { timeoutMs: 10 * 60_000 });
     if (up.code !== 0) {
       log.warn(
         `the host could not start the Sump (${up.stderr.trim()}); copying the image over SSH`,
       );
       await (ctx.streamImage ?? streamImageOverSsh)(shell, image);
-      await must(shell, "start the Sump", `${compose} up -d`, { timeoutMs: 5 * 60_000 });
+      await must(shell, "start the Sump", `${composeCommand} up -d`, { timeoutMs: 5 * 60_000 });
     }
-    const healthy = `${compose} exec -T sump python -c ${shellQuote(
+    const healthy = `${composeCommand} exec -T sump python -c ${shellQuote(
       "import json,urllib.request;print(json.load(urllib.request.urlopen('http://127.0.0.1:8765/health'))['redis'])",
     )}`;
     const deadline = Date.now() + (ctx.healthTimeoutMs ?? 60_000);
@@ -195,18 +211,74 @@ export async function provisionRemote(
     await must(
       shell,
       "make you its owner",
-      `${compose} exec -T sump python -m correlate_sump.users set-owner --user ${shellQuote(user)}`,
+      `${composeCommand} exec -T sump python -m correlate_sump.users set-owner --user ${shellQuote(user)}`,
       { input: `${identity.publicKey}\n`, timeoutMs: 30_000 },
     );
-    ctx.pending.set(id, { id, details, hostKey: shell.hostKey, sshKeyId });
-    log.info(`Sump ${id} provisioned on ${details.sshTarget}; waiting for its first connect`);
-    return { ok: true, id, switched: false };
+    const pending: PendingSump = { id, details, hostKey: shell.hostKey, sshKeyId };
+    ctx.pending.set(id, pending);
+    log.info(`Sump ${id} provisioned on ${details.sshTarget}`);
+    shell.close();
+    shell = undefined;
+    if (!ctx.forwards) return { ok: true, id, switched: false };
+    // The first connect: through its own SSH forward, then the login
+    // (br-SUMP-000007-sJpO9KMY, br-SUMP-000008-sJpO9KMY).
+    const forward = ctx.forwards.ensure({
+      id,
+      sumpPort: details.sumpPort,
+      ssh: { host, port: details.sshPort, username, key, knownHostKey: pending.hostKey },
+    });
+    if (!(await forward.waitUp(ctx.firstConnectTimeoutMs ?? 30_000))) {
+      throw new ProvisionError(
+        "connect for the first time",
+        forward.lastError ?? "the SSH forward did not come up",
+      );
+    }
+    try {
+      await login({ name: id, baseUrl: forward.url as string }, user, identity.key, ctx.tokens);
+    } catch (error) {
+      throw new ProvisionError("log in", (error as Error).message);
+    }
+    ctx.catalog?.recordConnect({
+      id,
+      kind: "remote",
+      name: details.name ?? details.sshTarget,
+      sshTarget: details.sshTarget,
+      sshPort: details.sshPort,
+      sumpPort: details.sumpPort,
+      user,
+      hostKey: pending.hostKey,
+      sshKeyId,
+    });
+    ctx.lifecycle.move(id, "active", `connected through SSH and logged in as ${user}`);
+    ctx.pending.delete(id);
+    let switched = false;
+    if (options.switchTo && options.windowId !== undefined && ctx.active) {
+      ctx.active.set(options.windowId, id);
+      switched = true;
+    }
+    return { ok: true, id, switched };
   } catch (error) {
     const step = error instanceof ProvisionError ? error.step : "provision";
     const message =
       error instanceof ProvisionError ? error.reason : String((error as Error).message ?? error);
     log.warn(`remote provisioning of ${details.sshTarget} failed at "${step}": ${message}`);
-    if (shell && started) await shell.exec(`${compose} down`, { timeoutMs: 120_000 });
+    ctx.forwards?.stop(id);
+    ctx.pending.delete(id);
+    ctx.tokens.forget(id);
+    if (started) {
+      const cleanup =
+        shell ??
+        (sshKey
+          ? await (ctx.connect ?? connectSsh)({
+              host,
+              port: details.sshPort,
+              username,
+              key: sshKey,
+            }).catch(() => undefined)
+          : undefined);
+      await cleanup?.exec(`${composeCommand} down`, { timeoutMs: 120_000 });
+      if (cleanup !== shell) cleanup?.close();
+    }
     if (imported) ctx.vault?.remove(sshKeyId);
     ctx.lifecycle.move(id, "retired", `provisioning failed at "${step}"`);
     return { ok: false, step, message };

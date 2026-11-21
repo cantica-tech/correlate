@@ -16,7 +16,9 @@ import { Lifecycle } from "./catalog/lifecycle.js";
 import { HealthProbe } from "./catalog/probe.js";
 import { ActiveSumps } from "./catalog/windows.js";
 import { ensureIdentity, userName } from "./identity/identity.js";
+import { sshTargetOf } from "./provision/manage.js";
 import type { Sump } from "./sump/errors.js";
+import { Forwards } from "./sump/forward.js";
 import type { Relogin, SumpResolver } from "./sump/ipc.js";
 import { login } from "./sump/login.js";
 import { SessionTokens } from "./sump/tokens.js";
@@ -29,7 +31,7 @@ export { runCommand } from "./provision/runner.js";
 export { logout } from "./sump/client.js";
 export { registerSumpIpc, SUMP_STATE_EVENT } from "./sump/ipc.js";
 export { login } from "./sump/login.js";
-export { ActiveSumps, HealthProbe, Lifecycle, SessionTokens };
+export { ActiveSumps, Forwards, HealthProbe, Lifecycle, SessionTokens };
 
 /** The Sump's default address (server/src/correlate_sump/__main__.py). */
 export const DEFAULT_SUMP_URL = "http://127.0.0.1:8765";
@@ -44,6 +46,7 @@ export function configuredSumps(
   env: Record<string, string | undefined>,
   tokens: SessionTokens = new SessionTokens(),
   catalog?: Catalog,
+  forwards?: Forwards,
 ): SumpResolver {
   const fallback = env.CORRELATE_SUMP_URL || DEFAULT_SUMP_URL;
   new URL(fallback); // An invalid URL stops the app at startup, not at the first call.
@@ -57,7 +60,11 @@ export function configuredSumps(
     } else if (entry === undefined && id === LOCAL_ID) {
       sump = { name: LOCAL_ID, baseUrl: fallback };
     }
-    // A remote Sump is reached through its SSH forward, which comes with Item 17.
+    if (entry?.kind === "remote") {
+      // Only through its SSH forward, once up (br-SUMP-000009-sJpO9KMY).
+      const url = forwards?.urlOf(id);
+      if (url) sump = { name: id, baseUrl: url };
+    }
     if (!sump) return undefined;
     const token = tokens.get(id);
     return token ? { ...sump, token } : sump;
@@ -132,4 +139,32 @@ export function reloginWith(
     }
     lifecycle?.reachable(name, `logged in as ${result.user}`);
   };
+}
+
+/**
+ * Start the SSH forward of every live remote Sump (br-SUMP-000010-sJpO9KMY:
+ * kept connected in the background). A Sump whose key cannot be read now (a
+ * locked vault) is skipped and logged; it starts once the vault opens.
+ */
+export function startForwards(
+  forwards: Forwards,
+  catalog: Catalog | undefined,
+  vault: Vault | undefined,
+  logger: { warn(message: string): void } = console,
+): string[] {
+  const started: string[] = [];
+  for (const entry of catalog?.list() ?? []) {
+    if (entry.kind !== "remote") continue;
+    try {
+      forwards.ensure({
+        id: entry.id,
+        sumpPort: entry.sumpPort,
+        ssh: sshTargetOf({ vault }, entry),
+      });
+      started.push(entry.id);
+    } catch (error) {
+      logger.warn(`Sump ${entry.id}: SSH forward not started (${(error as Error).message})`);
+    }
+  }
+  return started;
 }

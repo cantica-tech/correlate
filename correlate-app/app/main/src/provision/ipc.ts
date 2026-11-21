@@ -67,12 +67,17 @@ export function registerProvisionIpc(ipcMain: IpcMainLike, ctx: RemoteContext): 
     const m = (message ?? {}) as { id?: unknown; confirmed?: unknown };
     return uninstallSump(ctx, String(m.id ?? ""), { confirmed: m.confirmed === true });
   });
-  ipcMain.handle(PROVISION_REMOTE_CHANNEL, async (_event, message) => {
-    const m = (message ?? {}) as { keyPem?: unknown };
+  ipcMain.handle(PROVISION_REMOTE_CHANNEL, async (event, message) => {
+    const m = (message ?? {}) as { keyPem?: unknown; switchTo?: unknown; confirmed?: unknown };
     try {
       const details = checkRemoteDetails(message);
       const keyPem = typeof m.keyPem === "string" && m.keyPem.trim() ? m.keyPem : undefined;
-      return await provisionRemote(ctx, details, { keyPem });
+      return await provisionRemote(ctx, details, {
+        keyPem,
+        windowId: windowOf(event),
+        switchTo: m.switchTo === true,
+        confirmed: m.confirmed === true,
+      });
     } catch (error) {
       if (error instanceof DetailsError)
         return { ok: false, step: "check", message: error.message };

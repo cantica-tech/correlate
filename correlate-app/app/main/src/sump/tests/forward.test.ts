@@ -1,15 +1,13 @@
 import { generateKeyPairSync, type KeyObject } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { type AddressInfo, connect as tcpConnect } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Connection, Server, utils } from "ssh2";
 import { afterEach, describe, expect, it } from "vitest";
 import { Lifecycle } from "../../catalog/lifecycle.js";
-import { publicKeyLine } from "../../identity/sshkey.js";
 import { request } from "../client.js";
 import { Forwards, type ForwardTarget, SumpForward } from "../forward.js";
 import { serve, type TestServer } from "./servers.js";
+import { sshHost as startHost } from "./sshhost.js";
 
 // br-SUMP-000008-sJpO9KMY (REQ-000016-sJpO9KMY Requirement 1): the SSH forward,
 // against an SSH server in this process that forwards to a fake Sump.
@@ -21,55 +19,11 @@ afterEach(async () => {
 });
 
 const userKey = generateKeyPairSync("ed25519").privateKey;
-const hostPem = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({
-  type: "pkcs1",
-  format: "pem",
-}) as string;
 
-/** An SSH host accepting `allowed`, forwarding direct-tcpip to 127.0.0.1:<port>. */
 async function sshHost(allowed: KeyObject = userKey) {
-  const parsed = utils.parseKey(publicKeyLine(allowed));
-  const key = (Array.isArray(parsed) ? parsed[0] : parsed) as Exclude<typeof parsed, Error>;
-  const clients = new Set<Connection>();
-  const forwarded: number[] = [];
-  const server = new Server({ hostKeys: [hostPem] }, (client) => {
-    clients.add(client);
-    client.on("close", () => clients.delete(client));
-    client
-      .on("authentication", (ctx) => {
-        const ok =
-          ctx.method === "publickey" &&
-          !(key instanceof Error) &&
-          ctx.key.algo === key.type &&
-          Buffer.compare(ctx.key.data, key.getPublicSSH()) === 0 &&
-          (!ctx.signature || key.verify(ctx.blob as Buffer, ctx.signature, ctx.hashAlgo));
-        if (ok) ctx.accept();
-        else ctx.reject(["publickey"]);
-      })
-      .on("ready", () => {
-        client.on("tcpip", (accept, _reject, info) => {
-          forwarded.push(info.destPort);
-          const stream = accept();
-          const socket = tcpConnect(info.destPort, info.destIP);
-          socket.on("error", () => stream.close());
-          stream.on("error", () => socket.destroy());
-          stream.pipe(socket).pipe(stream);
-        });
-      })
-      .on("error", () => {});
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  cleanups.push(() => {
-    for (const c of clients) c.end();
-    server.close();
-  });
-  return {
-    port: (server.address() as AddressInfo).port,
-    forwarded,
-    dropAll: () => {
-      for (const c of clients) c.end();
-    },
-  };
+  const host = await startHost(allowed);
+  cleanups.push(() => host.close());
+  return host;
 }
 
 async function fakeSump(): Promise<TestServer> {

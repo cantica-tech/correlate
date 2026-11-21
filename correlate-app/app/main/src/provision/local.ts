@@ -63,6 +63,32 @@ export function composeFile(image: string, sumpPort: number, fluentPort = 5140):
   ].join("\n");
 }
 
+/** A compose file that would publish a port beyond loopback, or use host networking. */
+export class ComposeLoopbackError extends Error {
+  override readonly name = "ComposeLoopbackError";
+}
+
+/**
+ * Refuse a compose file that publishes a port on anything but 127.0.0.1, or
+ * uses host networking, before it is written anywhere
+ * (br-SUMP-000009-sJpO9KMY).
+ */
+export function checkComposeLoopback(text: string): void {
+  if (/^\s*network_mode:\s*["']?host/m.test(text)) {
+    throw new ProvisionError("check the compose file", "it uses host networking");
+  }
+  for (const line of text.split("\n")) {
+    const port = /^\s*-\s*["']?([^"'\s]+)["']?\s*$/.exec(line)?.[1];
+    if (!port || !/^[\d.:[\]a-fA-F]+:\d+(?:\/\w+)?$/.test(port)) continue;
+    if (!/^127\.0\.0\.1:\d+:\d+(?:\/\w+)?$/.test(port)) {
+      throw new ProvisionError(
+        "check the compose file",
+        `port ${port} is not bound to 127.0.0.1 only`,
+      );
+    }
+  }
+}
+
 /** Everything local provisioning works with. */
 export interface ProvisionContext {
   run: Runner;
@@ -180,7 +206,9 @@ export async function provisionLocal(
     const user = userName(ctx.env);
     ensurePrivateDir(path.dirname(dir));
     mkdirSync(dir, { recursive: true });
-    writeFileSync(file, composeFile(sumpImage(ctx.env, ctx.appVersion), sumpPort));
+    const composeText = composeFile(sumpImage(ctx.env, ctx.appVersion), sumpPort);
+    checkComposeLoopback(composeText);
+    writeFileSync(file, composeText);
     log.info(`provisioning the local Sump with ${sumpImage(ctx.env, ctx.appVersion)}`);
     started = true;
     await mustRun(ctx.run, "start the Sump", "docker", [...compose, "up", "-d"], {

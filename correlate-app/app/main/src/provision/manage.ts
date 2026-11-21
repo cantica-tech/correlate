@@ -24,7 +24,11 @@ export type ManageResult =
   | { ok: false; step: string; message: string; [key: string]: unknown };
 
 /** Where a remote Sump's SSH goes, as whom, with which key, checked against its pinned host key. */
-export function sshTargetOf(ctx: RemoteContext, entry: SumpEntry, keyPem?: string): SshTarget {
+export function sshTargetOf(
+  ctx: Pick<RemoteContext, "vault">,
+  entry: Pick<SumpEntry, "sshTarget" | "sshPort" | "sshKeyId" | "hostKey">,
+  keyPem?: string,
+): SshTarget {
   const target = entry.sshTarget ?? "";
   const at = target.lastIndexOf("@");
   const keyId = entry.sshKeyId ?? "identity";
@@ -221,6 +225,7 @@ export async function uninstallSump(
       containerRemains: true,
     };
   }
+  ctx.forwards?.stop(id);
   if (ctx.lifecycle.get(id)) ctx.lifecycle.move(id, "retired", "uninstalled");
   else ctx.catalog?.retire(id);
   if (entry.sshKeyId?.startsWith("ssh:")) ctx.vault?.remove(entry.sshKeyId);

@@ -10,16 +10,32 @@ import { generateKeyPairSync } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { Catalog } from "../../../main/src/catalog/catalog.js";
 import { Lifecycle } from "../../../main/src/catalog/lifecycle.js";
 import { ActiveSumps } from "../../../main/src/catalog/windows.js";
+import { configuredSumps } from "../../../main/src/index.js";
 import { provisionLocal } from "../../../main/src/provision/local.js";
+import { switchSump } from "../../../main/src/provision/manage.js";
 import { checkRemoteDetails } from "../../../main/src/provision/plan.js";
 import { provisionRemote } from "../../../main/src/provision/remote.js";
+import { Forwards } from "../../../main/src/sump/forward.js";
+import { handleSumpRequest } from "../../../main/src/sump/ipc.js";
 import { serve } from "../../../main/src/sump/tests/servers.js";
+import { sshHost } from "../../../main/src/sump/tests/sshhost.js";
 import { SessionTokens } from "../../../main/src/sump/tokens.js";
 import { Vault } from "../../../main/src/vault/vault.js";
+
+/** A fake Sump answering every path with 200. */
+async function answeringSump() {
+  return serve((req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ path: req.url, redis: true }));
+  });
+}
+
+const quietLog = { info: () => {}, warn: () => {} };
 
 describe("br-SUMP-000006-sJpO9KMY", () => {
   // BUG-000001-uKKrzikI, Critical: becomes a real test with roadmap Item 18
@@ -107,9 +123,71 @@ describe("br-SUMP-000002-sJpO9KMY", () => {
 });
 
 describe("br-SUMP-000003-sJpO9KMY", () => {
-  // BUG-000005-uKKrzikI, High: becomes a real test with roadmap Item 16, Item 17
-  // (RM-000017-sJpO9KMY, RM-000018-sJpO9KMY).
-  it.todo("cttc BUG-000005: Failed switch to a remote gateway tears down the current tunnel");
+  // BUG-000005-uKKrzikI, High (roadmap Items 16 and 17, RM-000017-sJpO9KMY,
+  // RM-000018-sJpO9KMY): cttc closed the current tunnel before the new
+  // connection succeeded. Forwards are now per Sump: a failed switch to
+  // another remote Sump leaves the window on its Sump, whose forward still
+  // carries calls.
+  it("cttc BUG-000005: Failed switch to a remote gateway tears down the current tunnel", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cttc-switch-"));
+    const key = generateKeyPairSync("ed25519").privateKey;
+    const host = await sshHost(key);
+    const sumpA = await answeringSump();
+    const catalog = Catalog.open(path.join(dir, "catalog.db"));
+    const lifecycle = new Lifecycle(catalog, undefined, { info: () => {} });
+    const forwards = new Forwards({
+      lifecycle,
+      baseDelayMs: 50,
+      maxDelayMs: 100,
+      logger: quietLog,
+    });
+    try {
+      const a = catalog.recordConnect({
+        kind: "remote",
+        sumpPort: Number(new URL(sumpA.sump.baseUrl).port),
+        sshTarget: "a",
+      });
+      const b = catalog.recordConnect({ kind: "remote", sumpPort: 1, sshTarget: "b" });
+      const ssh = { host: "127.0.0.1", port: host.port, username: "ops", key };
+      expect(await forwards.ensure({ id: a.id, sumpPort: a.sumpPort, ssh }).waitUp(5_000)).toBe(
+        true,
+      );
+      forwards.ensure({ id: b.id, sumpPort: 1, ssh: { ...ssh, port: 1 } });
+      const tokens = new SessionTokens();
+      const resolve = configuredSumps({}, tokens, catalog, forwards);
+      const active = new ActiveSumps(catalog);
+      active.open(1);
+      active.set(1, a.id);
+      const ctx = {
+        run: async () => ({ code: 0, stdout: "", stderr: "", timedOut: false }),
+        lifecycle,
+        tokens,
+        vault: undefined,
+        env: {},
+        appVersion: "0.1.0",
+        catalog,
+        active,
+        pending: new Map(),
+        resolve,
+        forwards,
+        logger: quietLog,
+      };
+      expect(await switchSump(ctx, 1, b.id)).toMatchObject({ ok: false, step: "reach the Sump" });
+      expect(active.get(1)).toBe(a.id);
+      expect(forwards.urlOf(a.id)).toBeDefined();
+      const call = await handleSumpRequest(
+        { sump: a.id, method: "GET", path: "/records" },
+        resolve,
+      );
+      expect(call).toEqual({ ok: true, value: { path: "/records", redis: true } });
+    } finally {
+      forwards.stopAll();
+      host.close();
+      await sumpA.close();
+      catalog.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   // BUG-000006-uKKrzikI, Medium (roadmap Item 15, RM-000016-sJpO9KMY): cttc
   // switched the connection before asking, so "Later" left the window on a
   // dead one. Now a window moves to a new Sump only once it is connected and
@@ -201,12 +279,56 @@ describe("br-SUMP-000003-sJpO9KMY", () => {
 });
 
 describe("br-SUMP-000008-sJpO9KMY", () => {
-  // BUG-000008-uKKrzikI, High: becomes a real test with roadmap Item 17
-  // (RM-000018-sJpO9KMY).
-  it.todo("cttc BUG-000008: Orphan cleanup can kill an unrelated process");
-  // BUG-000012-uKKrzikI, Medium: becomes a real test with roadmap Item 16, Item 17
-  // (RM-000017-sJpO9KMY, RM-000018-sJpO9KMY).
-  it.todo(
-    "cttc BUG-000012: Switching to a known remote gateway collides with the local gateway's port",
-  );
+  // BUG-000008-uKKrzikI, High (roadmap Item 17, RM-000018-sJpO9KMY): cttc
+  // killed every PID a previous run had recorded for its ssh tunnels, possibly
+  // an unrelated process by then. The forward runs inside the app's own SSH
+  // connection: no subprocess is started, so no PID is recorded or killed.
+  it("cttc BUG-000008: Orphan cleanup can kill an unrelated process", () => {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    for (const file of ["main/src/sump/forward.ts", "main/src/provision/ssh.ts"]) {
+      const source = readFileSync(path.join(here, "../../..", file), "utf8");
+      expect(source).not.toMatch(
+        /child_process|\bspawn\(|\bexec(File)?Sync\(|process\.kill|\.pid\b/,
+      );
+    }
+  });
+  // BUG-000012-uKKrzikI, Medium (roadmap Items 16 and 17, RM-000017-sJpO9KMY,
+  // RM-000018-sJpO9KMY): cttc's tunnel bound the remote port, 8765, which the
+  // local gateway already used. A forward listens on a port the OS picks, so
+  // it never collides with the local Sump's: both answer side by side.
+  it("cttc BUG-000012: Switching to a known remote gateway collides with the local gateway's port", async () => {
+    const key = generateKeyPairSync("ed25519").privateKey;
+    const host = await sshHost(key);
+    const local = await answeringSump();
+    const remote = await answeringSump();
+    const localPort = Number(new URL(local.sump.baseUrl).port);
+    const forwards = new Forwards({ baseDelayMs: 50, logger: quietLog });
+    try {
+      const forward = forwards.ensure({
+        id: "remote",
+        sumpPort: Number(new URL(remote.sump.baseUrl).port),
+        ssh: { host: "127.0.0.1", port: host.port, username: "ops", key },
+      });
+      expect(await forward.waitUp(5_000)).toBe(true);
+      const forwardPort = Number(new URL(forward.url as string).port);
+      expect(forwardPort).not.toBe(localPort);
+      expect(forwardPort).not.toBe(8765);
+      const both = await Promise.all([
+        handleSumpRequest({ sump: "local", method: "GET", path: "/l" }, () => local.sump),
+        handleSumpRequest({ sump: "remote", method: "GET", path: "/r" }, () => ({
+          name: "remote",
+          baseUrl: forward.url as string,
+        })),
+      ]);
+      expect(both).toEqual([
+        { ok: true, value: { path: "/l", redis: true } },
+        { ok: true, value: { path: "/r", redis: true } },
+      ]);
+    } finally {
+      forwards.stopAll();
+      host.close();
+      await local.close();
+      await remote.close();
+    }
+  });
 });
