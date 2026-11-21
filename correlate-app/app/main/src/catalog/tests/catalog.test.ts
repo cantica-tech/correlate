@@ -149,8 +149,9 @@ describe("br-SUMP-000001-sJpO9KMY: a corrupt catalog is refused and left alone",
   });
 
   it("refuses a database of something else", () => {
-    const db = new DatabaseSync((catalog(), file));
+    catalog();
     open.pop()?.close();
+    const db = new DatabaseSync(file);
     db.exec("DROP TABLE sumps; CREATE TABLE other (x)");
     db.close();
     refusedUntouched();

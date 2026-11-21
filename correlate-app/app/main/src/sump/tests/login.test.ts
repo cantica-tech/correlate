@@ -129,3 +129,38 @@ describe("br-CONN-000004-sJpO9KMY: a refused token is renewed once", () => {
     expect(tokens.get("test")).toBeUndefined();
   });
 });
+
+describe("br-SUMP-000001-sJpO9KMY: a successful login records the Sump", () => {
+  it("records the local Sump with the user it logged in as", async () => {
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const path = await import("node:path");
+    const { Catalog } = await import("../../catalog/catalog.js");
+    const { Vault } = await import("../../vault/vault.js");
+    const { configuredSumps, reloginWith } = await import("../../index.js");
+    await fakeSump();
+    const dir = mkdtempSync(path.join(tmpdir(), "record-test-"));
+    try {
+      const catalog = Catalog.open(path.join(dir, "catalog.db"));
+      const vault = new Vault(path.join(dir, "vault"), undefined, {
+        scrypt: { N: 2 ** 10, r: 8, p: 1 },
+        logger: { info: () => {}, warn: () => {} },
+      });
+      vault.create("a passphrase", "a passphrase");
+      const env = {
+        CORRELATE_SUMP_URL: (server as TestServer).sump.baseUrl,
+        CORRELATE_USER: "alice",
+      };
+      const tokens = new SessionTokens();
+      const resolve = configuredSumps(env, tokens, catalog);
+      expect(catalog.list()).toEqual([]);
+      await reloginWith(vault, resolve, tokens, env, catalog)("local");
+      const [entry] = catalog.list();
+      expect(entry).toMatchObject({ id: "local", kind: "local", user: "alice" });
+      expect(entry?.sumpPort).toBe(Number(new URL((server as TestServer).sump.baseUrl).port));
+      catalog.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

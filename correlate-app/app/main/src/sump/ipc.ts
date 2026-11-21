@@ -6,6 +6,8 @@
  * cannot reach a host that is not a configured Sump. Answers and errors come
  * back as plain objects, since class instances do not survive IPC.
  */
+
+import type { ActiveSumps } from "../catalog/windows.js";
 import { type Method, request } from "./client.js";
 import { type Sump, SumpCallError, SumpHttpError, SumpTimeoutError } from "./errors.js";
 import type { SessionTokens } from "./tokens.js";
@@ -13,9 +15,12 @@ import type { SessionTokens } from "./tokens.js";
 /** The IPC channel the main process answers. */
 export const SUMP_REQUEST_CHANNEL = "sump:request";
 
+/** The IPC channel that says which Sump the calling window is on (br-SUMP-000010). */
+export const SUMP_ACTIVE_CHANNEL = "sump:active";
+
 const METHODS: readonly Method[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
-/** What the renderer sends. */
+/** What the renderer sends; without `sump`, the call goes to the window's active Sump. */
 export interface SumpRequestMessage {
   sump: string;
   method: Method;
@@ -37,7 +42,15 @@ export type SumpReply<T = unknown> = { ok: true; value: T } | { ok: false; error
 
 /** The part of Electron's `ipcMain` this module uses. */
 export interface IpcMainLike {
-  handle(channel: string, listener: (event: unknown, message: unknown) => Promise<unknown>): void;
+  handle(
+    channel: string,
+    listener: (event: IpcEventLike, message: unknown) => Promise<unknown> | unknown,
+  ): void;
+}
+
+/** The part of an IPC event this module uses: which window sent it. */
+export interface IpcEventLike {
+  sender?: { id: number };
 }
 
 /** Finds a configured Sump by name. */
@@ -63,9 +76,13 @@ export function describeError(error: unknown): SumpErrorInfo {
   return { kind: "network", message: error instanceof Error ? error.message : String(error) };
 }
 
-/** Check a message's shape; the renderer is not trusted to send a valid one. */
-function parse(message: unknown): SumpRequestMessage {
-  const m = (message ?? {}) as Partial<SumpRequestMessage>;
+/**
+ * Check a message's shape; the renderer is not trusted to send a valid one.
+ * A message without `sump` goes to `defaultSump`, the window's active Sump.
+ */
+function parse(message: unknown, defaultSump?: string): SumpRequestMessage {
+  const m = { ...((message ?? {}) as Partial<SumpRequestMessage>) };
+  if (m.sump === undefined && defaultSump !== undefined) m.sump = defaultSump;
   if (typeof m.sump !== "string") throw new SumpCallError("sump must be a Sump name");
   if (!METHODS.includes(m.method as Method)) {
     throw new SumpCallError(`method must be one of ${METHODS.join(", ")}`);
@@ -94,10 +111,11 @@ export async function handleSumpRequest(
   resolve: SumpResolver,
   tokens?: SessionTokens,
   relogin?: Relogin,
+  defaultSump?: string,
 ): Promise<SumpReply> {
   let m: SumpRequestMessage;
   try {
-    m = parse(message);
+    m = parse(message, defaultSump);
   } catch (error) {
     return { ok: false, error: describeError(error) };
   }
@@ -136,14 +154,23 @@ export async function handleSumpRequest(
   }
 }
 
-/** Answer `sump:request` in the main process. */
+/**
+ * Answer `sump:request` in the main process, and `sump:active` when windows'
+ * active Sumps are tracked (`active`): a request without `sump` goes to the
+ * calling window's Sump.
+ */
 export function registerSumpIpc(
   ipcMain: IpcMainLike,
   resolve: SumpResolver,
   tokens?: SessionTokens,
   relogin?: Relogin,
+  active?: ActiveSumps,
 ): void {
-  ipcMain.handle(SUMP_REQUEST_CHANNEL, (_event, message) =>
-    handleSumpRequest(message, resolve, tokens, relogin),
+  const windowOf = (event: IpcEventLike) => event?.sender?.id ?? -1;
+  ipcMain.handle(SUMP_REQUEST_CHANNEL, (event, message) =>
+    handleSumpRequest(message, resolve, tokens, relogin, active?.get(windowOf(event))),
   );
+  if (active) {
+    ipcMain.handle(SUMP_ACTIVE_CHANNEL, (event) => active.describe(windowOf(event)));
+  }
 }

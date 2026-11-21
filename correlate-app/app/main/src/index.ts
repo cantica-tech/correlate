@@ -11,6 +11,8 @@
  * (REQ-000011-sJpO9KMY).
  */
 import path from "node:path";
+import { Catalog, defaultCatalogPath, LOCAL_ID } from "./catalog/catalog.js";
+import { ActiveSumps } from "./catalog/windows.js";
 import { ensureIdentity, userName } from "./identity/identity.js";
 import type { Sump } from "./sump/errors.js";
 import type { Relogin, SumpResolver } from "./sump/ipc.js";
@@ -23,7 +25,7 @@ export { identityPublicKey, importIdentity, userName } from "./identity/identity
 export { logout } from "./sump/client.js";
 export { registerSumpIpc } from "./sump/ipc.js";
 export { login } from "./sump/login.js";
-export { SessionTokens };
+export { ActiveSumps, SessionTokens };
 
 /** The Sump's default address (server/src/correlate_sump/__main__.py). */
 export const DEFAULT_SUMP_URL = "http://127.0.0.1:8765";
@@ -37,15 +39,42 @@ export const DEFAULT_SUMP_URL = "http://127.0.0.1:8765";
 export function configuredSumps(
   env: Record<string, string | undefined>,
   tokens: SessionTokens = new SessionTokens(),
+  catalog?: Catalog,
 ): SumpResolver {
-  const local: Sump = { name: "local", baseUrl: env.CORRELATE_SUMP_URL || DEFAULT_SUMP_URL };
-  new URL(local.baseUrl); // An invalid URL stops the app at startup, not at the first call.
-  if (env.CORRELATE_SUMP_TOKEN) tokens.set(local.name, env.CORRELATE_SUMP_TOKEN);
-  return (name) => {
-    if (name !== local.name) return undefined;
-    const token = tokens.get(name);
-    return token ? { ...local, token } : { ...local };
+  const fallback = env.CORRELATE_SUMP_URL || DEFAULT_SUMP_URL;
+  new URL(fallback); // An invalid URL stops the app at startup, not at the first call.
+  if (env.CORRELATE_SUMP_TOKEN) tokens.set(LOCAL_ID, env.CORRELATE_SUMP_TOKEN);
+  return (id) => {
+    let sump: Sump | undefined;
+    const entry = catalog?.get(id);
+    if (entry?.retiredAt !== undefined) return undefined;
+    if (entry?.kind === "local") {
+      sump = { name: id, baseUrl: env.CORRELATE_SUMP_URL || `http://127.0.0.1:${entry.sumpPort}` };
+    } else if (entry === undefined && id === LOCAL_ID) {
+      sump = { name: LOCAL_ID, baseUrl: fallback };
+    }
+    // A remote Sump is reached through its SSH forward, which comes with Item 17.
+    if (!sump) return undefined;
+    const token = tokens.get(id);
+    return token ? { ...sump, token } : sump;
   };
+}
+
+/**
+ * Open the catalog at `~/.correlate/catalog.db` (or `CORRELATE_CATALOG`). A
+ * corrupt catalog is reported and left untouched; the app then runs without
+ * one (br-SUMP-000001-sJpO9KMY).
+ */
+export function openCatalog(
+  env: Record<string, string | undefined>,
+  logger: VaultLogger = console,
+): Catalog | undefined {
+  try {
+    return Catalog.open(env.CORRELATE_CATALOG || defaultCatalogPath());
+  } catch (error) {
+    logger.warn(`catalog not opened: ${(error as Error).message}`);
+    return undefined;
+  }
 }
 
 /**
@@ -77,6 +106,7 @@ export function reloginWith(
   resolve: SumpResolver,
   tokens: SessionTokens,
   env: Record<string, string | undefined>,
+  catalog?: Catalog,
 ): Relogin {
   return async (name) => {
     const sump = resolve(name);
@@ -84,6 +114,16 @@ export function reloginWith(
     if (!vault) throw new Error("the key vault is not available");
     if (vault.state === "none" && !vault.needsPassphrase()) vault.create();
     if (vault.state !== "unlocked") throw new Error("the key vault is locked");
-    await login(sump, userName(env), ensureIdentity(vault), tokens);
+    const result = await login(sump, userName(env), ensureIdentity(vault), tokens);
+    // A Sump is recorded only after a successful connect (br-SUMP-000001).
+    const entry = catalog?.get(name);
+    if (catalog && (entry || name === LOCAL_ID)) {
+      const port = Number(new URL(sump.baseUrl).port) || 8765;
+      catalog.recordConnect(
+        entry
+          ? { ...entry, id: entry.id, user: result.user }
+          : { kind: "local", sumpPort: port, user: result.user },
+      );
+    }
   };
 }

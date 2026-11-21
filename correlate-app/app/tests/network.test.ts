@@ -101,7 +101,7 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
     expect(csp.split(";").map((d) => d.trim())).toContain("connect-src 'none'");
   });
 
-  it("gets only sump.request from the preload bridge, sent over sump:request", async () => {
+  it("gets only sump.active and sump.request from the preload bridge", async () => {
     const exposed: Record<string, unknown> = {};
     const invoked: unknown[][] = [];
     const electron = {
@@ -121,9 +121,13 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
     vm.runInNewContext(code, { require: (name: string) => (name === "electron" ? electron : {}) });
 
     expect(Object.keys(exposed)).toEqual(["correlate"]);
-    const api = exposed.correlate as { sump: { request: (m: unknown) => Promise<unknown> } };
+    const api = exposed.correlate as {
+      sump: { active: () => Promise<unknown>; request: (m: unknown) => Promise<unknown> };
+    };
     expect(Object.keys(api)).toEqual(["sump"]);
-    expect(Object.keys(api.sump)).toEqual(["request"]);
+    expect(Object.keys(api.sump)).toEqual(["active", "request"]);
+    await api.sump.active();
+    expect(invoked.shift()).toEqual(["sump:active"]);
     const message = { sump: "local", method: "GET", path: "/health" };
     await expect(api.sump.request(message)).resolves.toEqual({ ok: true, value: null });
     expect(invoked).toEqual([["sump:request", message]]);

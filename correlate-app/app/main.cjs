@@ -7,7 +7,9 @@
  * built by `build/build-renderer.js`) and answers the renderer's Sump
  * requests through the Sump client (`main/dist/main.cjs`, built from
  * `main/src/` by `build/build-main.js`; br-CONN-000008-sJpO9KMY). It opens the
- * key vault and locks it when the app quits (br-VAULT-000004-sJpO9KMY). The window
+ * key vault and locks it when the app quits (br-VAULT-000004-sJpO9KMY), and the
+ * instance catalog, giving each window its own active Sump
+ * (br-SUMP-000001-sJpO9KMY, br-SUMP-000010-sJpO9KMY). The window
  * shell and menus come with Phase 4 of
  * `docs/roadmap/correlate-app-rewrite.md`. CommonJS, as in cttc and
  * correlator, because Electron's own module loads most reliably this way.
@@ -15,12 +17,17 @@
 const { app, BrowserWindow, ipcMain, safeStorage } = require("electron");
 const path = require("node:path");
 const {
+  ActiveSumps,
   configuredSumps,
+  openCatalog,
   openVault,
   registerSumpIpc,
   reloginWith,
   SessionTokens,
 } = require("./main/dist/main.cjs");
+
+/** Each window's active Sump (br-SUMP-000010); set once the app is ready. */
+let activeSumps;
 
 /** Create the main window, sandboxed, with the preload bridge as its only link to Node. */
 function createWindow() {
@@ -35,6 +42,10 @@ function createWindow() {
       sandbox: true,
     },
   });
+  // Each window has its own active Sump, starting on the last one used.
+  const id = window.webContents.id;
+  activeSumps?.open(id);
+  window.on("closed", () => activeSumps?.close(id));
   window.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
 
@@ -44,10 +55,18 @@ app.whenReady().then(() => {
   // (br-CONN-000007).
   const tokens = new SessionTokens();
   const vault = openVault(app.getPath("userData"), safeStorage);
-  const sumps = configuredSumps(process.env, tokens);
-  registerSumpIpc(ipcMain, sumps, tokens, reloginWith(vault, sumps, tokens, process.env));
+  // The instance catalog, ~/.correlate/catalog.db; a corrupt one is left
+  // untouched and the app runs without it (br-SUMP-000001).
+  const catalog = openCatalog(process.env);
+  activeSumps = new ActiveSumps(catalog);
+  const sumps = configuredSumps(process.env, tokens, catalog);
+  const relogin = reloginWith(vault, sumps, tokens, process.env, catalog);
+  registerSumpIpc(ipcMain, sumps, tokens, relogin, activeSumps);
   // The passphrase's derived key lives only for the session.
-  app.on("will-quit", () => vault?.lock());
+  app.on("will-quit", () => {
+    vault?.lock();
+    catalog?.close();
+  });
   createWindow();
   // macOS: re-open a window when the dock icon is clicked and none is open.
   app.on("activate", () => {
