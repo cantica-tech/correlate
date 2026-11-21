@@ -195,8 +195,11 @@ async def test_plugins_endpoint_lists_plugins(redis_client) -> None:
                 "state": "loaded",
                 "info": {"name": "info", "version": "2.0"},
                 "error": None,
+                "runtime": "idle",
+                "tasks": [],
             }
-        ]
+        ],
+        "unavailable_data_sources": [],
     }
 
 
@@ -231,3 +234,86 @@ async def test_plugin_settings_reach_discovery(monkeypatch, redis_client, env, s
     assert {ep.name: ep.loaded for ep in eps} == {
         name: state == "loaded" for name, state in states.items()
     }
+
+
+# --- br-PLUGIN-000006, 000008 and 000009 through the app ---------------------------------
+
+
+class Worker:
+    """One crashing and one steady background task, and a switchable health check."""
+
+    def __init__(self) -> None:
+        self.healthy = True
+        self.steady_runs = 0
+
+    @hookimpl
+    def register_data_source(self, manager) -> None:
+        manager.add_data_source("worker-source", object())
+
+    @hookimpl
+    def register_background_task(self, manager) -> None:
+        async def crash() -> None:
+            raise RuntimeError("worker crashed")
+
+        async def steady() -> None:
+            self.steady_runs += 1
+            await asyncio.Event().wait()
+
+        manager.add_background_task("crashy", crash)
+        manager.add_background_task("steady", steady)
+
+    @hookimpl
+    def on_health_check(self) -> bool:
+        return self.healthy
+
+
+async def test_crashing_plugin_task_is_contained_and_shown(redis_client) -> None:
+    worker = Worker()
+    manager = PluginManager()
+    manager.register(worker, name="worker")
+    async with running(make_app(redis_client, plugin_manager=manager)) as client:
+        tasks: dict = {}
+        body: dict = {}
+        for _ in range(100):
+            body = (await client.get("/plugins")).json()
+            tasks = {t["name"]: t for t in body["plugins"][0]["tasks"]}
+            if tasks.get("crashy", {}).get("state") == "restarting":
+                break
+            await asyncio.sleep(0.01)
+        assert tasks["crashy"]["last_error"] == "RuntimeError: worker crashed"
+        assert tasks["steady"]["state"] == "running"
+        assert body["plugins"][0]["runtime"] == "running"
+        assert (await client.get("/records", params={"source": "h1"})).status_code == 200
+        assert (await client.get("/health")).json()["status"] == "ok"
+
+
+async def test_sleeping_plugin_shows_unavailable_data_sources(redis_client) -> None:
+    worker = Worker()
+    manager = PluginManager()
+    manager.register(worker, name="worker")
+    async with running(make_app(redis_client, plugin_manager=manager)) as client:
+        worker.healthy = False
+        await manager.runtime.check_once()
+        body = (await client.get("/plugins")).json()
+        assert body["plugins"][0]["runtime"] == "sleeping"
+        assert body["unavailable_data_sources"] == ["worker-source"]
+        worker.healthy = True
+        await manager.runtime.check_once()
+        body = (await client.get("/plugins")).json()
+        assert body["plugins"][0]["runtime"] == "running"
+        assert body["unavailable_data_sources"] == []
+
+
+def test_invalid_health_interval_stops_startup(redis_client) -> None:
+    with pytest.raises(ValueError, match="SUMP_PLUGIN_HEALTH_INTERVAL"):
+        create_app(redis_client=redis_client, env={"SUMP_PLUGIN_HEALTH_INTERVAL": "never"})
+
+
+async def test_runtime_stops_with_the_app(redis_client) -> None:
+    worker = Worker()
+    manager = PluginManager()
+    manager.register(worker, name="worker")
+    async with running(make_app(redis_client, plugin_manager=manager)):
+        runtime = manager.runtime
+        await asyncio.sleep(0.01)
+    assert all(s._task is None for s in runtime.supervisors.values())

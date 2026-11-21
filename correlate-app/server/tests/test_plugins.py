@@ -288,19 +288,3 @@ def test_validate_plugin_routes_detects_conflict() -> None:
 
     with pytest.raises(ValueError, match="Plugin route conflict detected"):
         validate_plugin_routes(app)
-
-
-@__import__("pytest").mark.skip(
-    reason="needs the Sump app's background-task runner, which comes with "
-    "per-plugin fault isolation (roadmap Item 7, RM-000008-sJpO9KMY)"
-)
-async def test_isolated_background_task_catches_unhandled_exception() -> None:
-    from correlate_sump.app import (
-        _run_isolated_background_task,  # ty: ignore[missing-module-member]  (Item 7)
-    )
-
-    async def failing_factory():
-        raise RuntimeError("Task crashed")
-
-    # Proves unhandled exception is caught and logged without raising up
-    await _run_isolated_background_task("failing-task", failing_factory)

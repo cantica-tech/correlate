@@ -158,6 +158,9 @@ class PluginManager:
             "data source": {},
             "background task": {},
         }
+        #: The running plugins' runtime (`correlate_sump.runtime.PluginRuntime`),
+        #: set by the app once started; `report()` reads runtime state from it.
+        self.runtime: Any = None
         #: The plugin whose hook is running, so `add_*` knows the owner.
         self._registering: str = CORE_OWNER
         #: Set by `create_app` before `discover()` runs -- the Sump's own
@@ -257,22 +260,30 @@ class PluginManager:
 
     def report(self) -> list[dict[str, Any]]:
         """Every discovered or directly registered plugin, sorted by name, with
-        its state, manifest (`sump_plugin_info`, when loaded) and error."""
+        its state, manifest (`sump_plugin_info`, when loaded) and error, and,
+        for a loaded plugin once the runtime runs, its `runtime` state and
+        `tasks` (br-PLUGIN-000009); `null` otherwise."""
         infos: dict[str, Any] = {}
         for impl in self._pm.hook.sump_plugin_info.get_hookimpls():
             try:
                 infos[impl.plugin_name] = impl.function()
             except Exception:  # a broken manifest must not hide the plugin
                 logger.error("plugin %r: sump_plugin_info failed", impl.plugin_name, exc_info=True)
-        return [
-            {
-                "name": record.name,
-                "state": record.state,
-                "info": infos.get(record.name) if record.state == LOADED else None,
-                "error": record.error,
-            }
-            for record in sorted(self.records.values(), key=lambda r: r.name)
-        ]
+        entries = []
+        for record in sorted(self.records.values(), key=lambda r: r.name):
+            loaded = record.state == LOADED
+            live = self.runtime.plugin_state(record.name) if loaded and self.runtime else {}
+            entries.append(
+                {
+                    "name": record.name,
+                    "state": record.state,
+                    "info": infos.get(record.name) if loaded else None,
+                    "error": record.error,
+                    "runtime": live.get("runtime"),
+                    "tasks": live.get("tasks"),
+                }
+            )
+        return entries
 
     def health_checks(self) -> list[tuple[str, Callable[[], Any]]]:
         """Each loaded plugin's own `on_health_check`, by plugin name

@@ -38,6 +38,7 @@ from correlate_sump.ingest import (
 from correlate_sump.otel import SumpMetrics
 from correlate_sump.plugins import PluginManager
 from correlate_sump.records import DEFAULT_LIMIT, QueryError, query_records
+from correlate_sump.runtime import PluginRuntime, health_interval_from_env
 
 logger = logging.getLogger(__name__)
 
@@ -66,13 +67,16 @@ def create_app(
 
     Settings come from `env` (default: the process environment): `REDIS_URL`,
     `SUMP_RECORD_MAXLEN`, `SUMP_INGEST_HOST`/`SUMP_INGEST_PORT` for the ingest
-    adapter, and `SUMP_DISABLED_PLUGINS`/`SUMP_DISABLE_PLUGIN_AUTOLOAD` when no
-    `plugin_manager` is given. An invalid `SUMP_RECORD_MAXLEN` raises `ValueError` here,
+    adapter, `SUMP_PLUGIN_HEALTH_INTERVAL` for plugin health checks, and
+    `SUMP_DISABLED_PLUGINS`/`SUMP_DISABLE_PLUGIN_AUTOLOAD` when no
+    `plugin_manager` is given. An invalid interval also raises `ValueError` here
+    (br-PLUGIN-000008-sJpO9KMY). An invalid `SUMP_RECORD_MAXLEN` raises `ValueError` here,
     so the Sump refuses to start (br-RECORD-000004-sJpO9KMY). Tests pass their
     own Redis client and `start_ingest=False`.
     """
     env = os.environ if env is None else env
     maxlen = maxlen_from_env(env)
+    health_interval = health_interval_from_env(env)
     redis_client = redis_client or redis.Redis.from_url(env.get("REDIS_URL", DEFAULT_REDIS_URL))
     if plugin_manager is None:
         disabled, autoload_off = plugin_settings(env)
@@ -89,20 +93,25 @@ def create_app(
         loaded = await plugin_manager.discover()
         plugin_manager.contribute_routes(app)
         logger.info("plugins loaded: %s", ", ".join(loaded) or "none")
-        if plugin_manager.background_task_factories:
-            # Running them safely needs per-plugin fault isolation (roadmap Item 7).
-            logger.warning(
-                "plugin background tasks not started yet: %s",
-                ", ".join(plugin_manager.background_task_factories),
-            )
-        if not start_ingest:
-            yield
-            return
-        server = await run_ingest_server(adapter, host=ingest_host, port=ingest_port)
-        async with server:
-            yield
-        server.close()
-        await server.wait_closed()
+        # Each background task in its own supervisor, plus the health loop
+        # (br-PLUGIN-000006 to 000008); stopped before ingestion stops.
+        runtime = PluginRuntime(plugin_manager, interval=health_interval)
+        plugin_manager.runtime = runtime
+        runtime.start()
+        try:
+            if not start_ingest:
+                yield
+                return
+            server = await run_ingest_server(adapter, host=ingest_host, port=ingest_port)
+            async with server:
+                try:
+                    yield
+                finally:
+                    await runtime.stop()
+            server.close()
+            await server.wait_closed()
+        finally:
+            await runtime.stop()
 
     app = FastAPI(title="correlate-sump", version=__version__, lifespan=lifespan)
     app.state.plugin_manager = plugin_manager
@@ -119,8 +128,13 @@ def create_app(
 
     @app.get("/plugins")
     async def plugins() -> dict[str, Any]:
-        """Every discovered plugin and what became of it (br-PLUGIN-000003)."""
-        return {"plugins": plugin_manager.report()}
+        """Every discovered plugin, what became of it (br-PLUGIN-000003) and its
+        runtime state, and the data sources of sleeping plugins (br-PLUGIN-000009)."""
+        runtime = plugin_manager.runtime
+        return {
+            "plugins": plugin_manager.report(),
+            "unavailable_data_sources": runtime.unavailable_data_sources() if runtime else [],
+        }
 
     @app.get("/records")
     async def records(

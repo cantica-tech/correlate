@@ -105,8 +105,17 @@ async def test_report_gives_manifests_for_loaded_plugins_only(monkeypatch) -> No
             "state": "loaded",
             "info": {"name": "alpha", "version": "1.0"},
             "error": None,
+            "runtime": None,
+            "tasks": None,
         },
-        {"name": "beta", "state": "disabled", "info": None, "error": None},
+        {
+            "name": "beta",
+            "state": "disabled",
+            "info": None,
+            "error": None,
+            "runtime": None,
+            "tasks": None,
+        },
     ]
 
 
@@ -120,14 +129,32 @@ async def test_broken_manifest_keeps_the_plugin_loaded(caplog) -> None:
     manager = PluginManager()
     manager.register(BrokenInfoPlugin(), name="shy")
     with caplog.at_level(logging.ERROR):
-        assert manager.report() == [{"name": "shy", "state": "loaded", "info": None, "error": None}]
+        assert manager.report() == [
+            {
+                "name": "shy",
+                "state": "loaded",
+                "info": None,
+                "error": None,
+                "runtime": None,
+                "tasks": None,
+            }
+        ]
     assert "sump_plugin_info failed" in caplog.text
 
 
 async def test_plugin_without_manifest_reports_null_info() -> None:
     manager = PluginManager()
     manager.register(object(), name="plain")
-    assert manager.report() == [{"name": "plain", "state": "loaded", "info": None, "error": None}]
+    assert manager.report() == [
+        {
+            "name": "plain",
+            "state": "loaded",
+            "info": None,
+            "error": None,
+            "runtime": None,
+            "tasks": None,
+        }
+    ]
 
 
 # --- br-PLUGIN-000004: no overwrites -----------------------------------------------
