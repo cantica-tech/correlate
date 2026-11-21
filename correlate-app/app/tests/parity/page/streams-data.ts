@@ -14,3 +14,9 @@ export const TARGETS: Targets = {
   services: null,
   followed: { containers: ["web", "ticker"], services: [] },
 };
+
+/** The streams the Remove dialog is given ("self" is not offered). */
+export const REMOVE_STREAMS: Stream[] = [
+  { id: "self", kind: "self", label: "This Sump's host" },
+  { id: "ssh:ops@lab:22", kind: "ssh", label: "ops@lab" },
+];

@@ -60,6 +60,10 @@ export function cttcStatusBar(open: StatusBarCase, times: Record<string, string>
     switcher +
     status +
     "</div>" +
+    // The data-stream pill, cttc's Docker host pill (REQ-000027-sJpO9KMY).
+    '<div id="docker-host-status" class="server-status" data-state="up">' +
+    `<button id="docker-host-status-btn" type="button" class="server-status-btn"><span class="server-status-dot"></span>${svg("data-stream", "server-status-icon")}</button>` +
+    "</div>" +
     '<span class="status-bar-divider status-bar-divider-double"></span>' +
     `<button type="button" id="status-bar-history-btn" class="status-bar-history-btn" title="History">${svg("history")}History</button>` +
     history +

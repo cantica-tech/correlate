@@ -82,6 +82,11 @@ export interface ShellBridge {
   menu: {
     action(name: string): Promise<{ ok: boolean; message?: string }>;
   };
+  /** This window's active data stream (REQ-000027-sJpO9KMY). */
+  stream?: {
+    active(): Promise<string | null>;
+    setActive(stream: string): Promise<{ ok: boolean; message?: string }>;
+  };
   /** The data-stream picker's last stream per Sump (REQ-000026-sJpO9KMY). */
   picker?: {
     lastStream(sump: string): Promise<string | null>;

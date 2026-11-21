@@ -18,7 +18,18 @@ const bridge = {
     onState: none,
     list: async () => SUMPS,
     switchTo: async () => ({ ok: false, step: "check", message: "not here" }),
+    // The data streams, for the data-stream pill (REQ-000027-sJpO9KMY).
+    request: async ({ path }: { path: string }) =>
+      path === "/streams"
+        ? {
+            ok: true,
+            value: {
+              streams: [{ id: "self", kind: "self", label: "This Sump's host", following: 2 }],
+            },
+          }
+        : { ok: false, error: { kind: "network", message: "not here" } },
   },
+  stream: { active: async () => "self", setActive: async () => ({ ok: true }) },
   status: {
     history: async () => HISTORY,
     add: async () => ({ ok: true }),
@@ -38,7 +49,7 @@ if (root) {
   createRoot(root).render(
     <div id="stage">
       <div className="filler" />
-      <StatusBar bridge={bridge} />
+      <StatusBar bridge={bridge} onStreamAction={() => {}} />
     </div>,
   );
 }

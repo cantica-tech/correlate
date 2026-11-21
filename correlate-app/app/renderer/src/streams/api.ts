@@ -10,6 +10,10 @@ export interface Stream {
   id: string;
   kind: "self" | "ssh";
   label: string;
+  /** Paused by Close Data Streams (REQ-000027-sJpO9KMY). */
+  paused?: boolean;
+  /** How many containers and services it follows. */
+  following?: number;
 }
 
 /** A running container. */
@@ -53,7 +57,7 @@ export function sayError(error: SumpErrorInfo): string {
 
 async function call<T>(
   request: SumpRequester,
-  method: "GET" | "POST" | "PUT",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
   body?: unknown,
   timeoutMs = 30_000,
@@ -91,4 +95,14 @@ export function streamTargets(request: SumpRequester, id: string) {
 /** Make a stream's followed set exactly `followed` (br-STREAM-000002-sJpO9KMY). */
 export function setFollowed(request: SumpRequester, id: string, followed: FollowedSet) {
   return call<FollowedSet>(request, "PUT", `${streamPath(id)}/followed`, followed);
+}
+
+/** Stop a stream's collection and forget it (br-STREAM-000004-sJpO9KMY); its records stay. */
+export function removeStream(request: SumpRequester, id: string) {
+  return call<null>(request, "DELETE", streamPath(id));
+}
+
+/** Close Data Streams (`true`): collection stops, the followed set kept. */
+export function pauseStream(request: SumpRequester, id: string, paused: boolean) {
+  return call<{ paused: boolean }>(request, "PUT", `${streamPath(id)}/paused`, { paused });
 }

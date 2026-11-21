@@ -21,7 +21,7 @@ import { COMPONENT_LIMIT, compare, type Mask, readPng, writePng } from "./compar
 import { cttcMenuBar } from "./cttcMenuBar.js";
 import { cttcSidebar, cttcWidthScript } from "./cttcSidebar.js";
 import { cttcPillMenu, cttcStatusBar } from "./cttcStatusBar.js";
-import { cttcStreamsDialog } from "./cttcStreams.js";
+import { cttcRemoveDialog, cttcStreamsDialog } from "./cttcStreams.js";
 import { SIDEBAR_CASES } from "./page/sidebar-cases.js";
 import { ARRIVING, HISTORY, STATUSBAR_CASES } from "./page/statusbar-data.js";
 
@@ -60,6 +60,7 @@ async function buildOurs(): Promise<void> {
       path.join(here, "page/ours-statusbar.tsx"),
       path.join(here, "page/ours-menubar.tsx"),
       path.join(here, "page/ours-streams.tsx"),
+      path.join(here, "page/ours-remove.tsx"),
     ],
     outdir: path.join(here, "dist"),
     bundle: true,
@@ -265,6 +266,26 @@ async function captureStreams(side: "cttc" | "ours", pictures: Map<string, Buffe
   }
 }
 
+/** The Remove dialog, open, nothing picked (REQ-000027-sJpO9KMY Requirement 5). */
+async function captureRemove(side: "cttc" | "ours", pictures: Map<string, Buffer>): Promise<void> {
+  for (const theme of THEMES) {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.goto(pathToFileURL(path.join(here, `page/${side}-remove.html`)).href);
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.body.insertAdjacentHTML("beforeend", ${JSON.stringify(cttcRemoveDialog())}); document.getElementById("dlg-remove-daemon").showModal(); })()`,
+      );
+    }
+    await page.waitForSelector('#dlg-remove-daemon[open] option[value="ssh:ops@lab:22"]', {
+      state: "attached",
+    });
+    await page.evaluate("document.activeElement?.blur()");
+    await page.mouse.move(1, 1);
+    await page.evaluate("document.fonts.ready.then(() => true)");
+    pictures.set(`remove-dialog-${theme}`, await shoot("#dlg-remove-daemon"));
+  }
+}
+
 let cttc: Map<string, Buffer>;
 let ours: Map<string, Buffer>;
 
@@ -292,6 +313,8 @@ describe.skipIf(process.platform !== "darwin")(
       await captureMenuBar("ours", ours);
       await captureStreams("cttc", cttc);
       await captureStreams("ours", ours);
+      await captureRemove("cttc", cttc);
+      await captureRemove("ours", ours);
     }, 120_000);
 
     afterAll(async () => {
@@ -306,6 +329,7 @@ describe.skipIf(process.platform !== "darwin")(
       ...STATUSBAR_CASES.map((c) => `statusbar-${c}`),
       ...MENUBAR_CASES.map((c) => `menubar-${c}`),
       "streams-dialog",
+      "remove-dialog",
     ].flatMap((n) => THEMES.map((t) => `${n}-${t}`));
 
     it.each(names)("%s looks as in cttc", (name) => {

@@ -131,6 +131,8 @@ export const SECTIONS: readonly SidebarSection[] = [
 export const AVAILABLE: ReadonlySet<string> = new Set([
   "new-data-stream",
   "edit-data-streams",
+  "close-data-streams",
+  "remove-data-stream",
   "preferences",
   "about",
   "quit",

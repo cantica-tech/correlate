@@ -7,7 +7,7 @@
  * connection fields, and no transforms box (correlate-app has none yet).
  */
 import { ICONS } from "../../renderer/src/icons/icons.generated.js";
-import { STREAMS, TARGETS } from "./page/streams-data.js";
+import { REMOVE_STREAMS, STREAMS, TARGETS } from "./page/streams-data.js";
 
 const svg = (name: keyof typeof ICONS, cls: string) =>
   ICONS[name].replace("<svg ", `<svg class="${cls}" `);
@@ -50,6 +50,28 @@ export function cttcStreamsDialog(): string {
     <div class="dlg-actions">
       <button id="dlg-cancel" title="Close without changing what is followed">Cancel</button>
       <button id="dlg-ok" class="primary" title="Follow exactly the ticked containers and services">Follow Selected</button>
+    </div>
+  </dialog>`;
+}
+
+/**
+ * cttc's `#dlg-remove-daemon` (`index.html:380-391` at d8a444b) with
+ * correlate-app's labels and its SSH streams, none picked yet.
+ */
+export function cttcRemoveDialog(): string {
+  const options = REMOVE_STREAMS.filter((s) => s.kind === "ssh")
+    .map((s) => `<option value="${s.id}">${s.label}</option>`)
+    .join("");
+  return `<dialog id="dlg-remove-daemon">
+    <h2>Remove Data Stream</h2>
+    <p class="dlg-intro muted">Stops collecting a data stream and forgets it: its connection, its selection and its host key. Its records stay. Close Data Streams keeps it; this doesn't.</p>
+    <label class="ctl block">Saved data streams
+      <select id="remove-daemon-select"><option value="">— pick a data stream to remove —</option>${options}</select>
+    </label>
+    <div id="remove-daemon-status" class="muted"></div>
+    <div class="dlg-actions">
+      <button id="dlg-remove-daemon-close" title="Close without removing anything">Close</button>
+      <button id="dlg-remove-daemon-delete" class="btn-danger" disabled title="Stop collecting this data stream and forget it">Delete</button>
     </div>
   </dialog>`;
 }

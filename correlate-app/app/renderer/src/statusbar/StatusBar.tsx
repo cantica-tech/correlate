@@ -17,6 +17,7 @@ import { Button, ContextMenu, Dialog, type MenuEntry } from "../components/index
 import { Icon } from "../icons/Icon.js";
 import type { ListedSump, Notice, ShellBridge, StateRecord } from "../shell/bridge.js";
 import { NOT_YET } from "../shell/sections.js";
+import { StreamPill } from "../streams/StreamPill.js";
 import { PILL_WORDS, pillState, statusRows, whereIs } from "./pill.js";
 
 /** How long a message stays in the bar: cttc's default (5 s). */
@@ -38,10 +39,14 @@ export interface StatusBarProps {
   bridge: ShellBridge;
   /** Tells the shell this window's Sump changed. */
   onSwitched?: (id: string) => void;
+  /** Runs a data-stream action from the data-stream pill's menu (REQ-000027-sJpO9KMY). */
+  onStreamAction?: (name: string) => void;
+  /** Changes when the data streams changed elsewhere. */
+  streamsVersion?: number;
 }
 
 /** The status bar. */
-export function StatusBar({ bridge, onSwitched }: StatusBarProps) {
+export function StatusBar({ bridge, onSwitched, onStreamAction, streamsVersion }: StatusBarProps) {
   const [visible, setVisible] = useState(true);
   const [history, setHistory] = useState<Notice[]>([]);
   const [message, setMessage] = useState("");
@@ -238,6 +243,9 @@ export function StatusBar({ bridge, onSwitched }: StatusBarProps) {
           </div>
         ) : null}
       </div>
+      {onStreamAction ? (
+        <StreamPill bridge={bridge} onAction={onStreamAction} version={streamsVersion} />
+      ) : null}
       <span className="status-bar-divider status-bar-divider-double" />
       <div ref={historyRef} style={{ display: "contents" }}>
         <button

@@ -8,6 +8,8 @@ import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useState } 
 import { Button, Dialog, SegControl, Switch } from "../components/index.js";
 import { MenuBar } from "../menubar/MenuBar.js";
 import { StatusBar } from "../statusbar/StatusBar.js";
+import { pauseStream } from "../streams/api.js";
+import { RemoveDialog } from "../streams/RemoveDialog.js";
 import { StreamsDialog } from "../streams/StreamsDialog.js";
 import type { LayoutChange, ShellBridge, SidebarLayout, ThemeMode } from "./bridge.js";
 import { Sidebar } from "./Sidebar.js";
@@ -41,6 +43,9 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   const [theme, setTheme] = useState<ThemeMode>("system");
   const [statusBar, setStatusBar] = useState(true);
   const [streams, setStreams] = useState<"new" | "edit" | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [streamsVersion, setStreamsVersion] = useState(0);
+  const streamsChanged = useCallback(() => setStreamsVersion((v) => v + 1), []);
 
   useEffect(() => {
     let live = true;
@@ -54,19 +59,30 @@ export function Shell({ bridge, detached = false }: ShellProps) {
     };
   }, [bridge]);
 
+  // Close Data Streams: pause the window's active stream, its selection kept.
+  const closeActive = useCallback(async () => {
+    const id = await bridge.stream?.active();
+    if (!id) return void bridge.status.add("No data stream to close");
+    const r = await pauseStream(bridge.sump.request, id, true);
+    void bridge.status.add(r.ok ? `Closed data stream ${id}; its selection is kept` : r.message);
+    streamsChanged();
+  }, [bridge, streamsChanged]);
+
   // The main window runs the actions; the detached one only asks for them.
   useEffect(() => {
     if (detached) return;
     return bridge.sidebar.onRun((name) => {
       if (name === "new-data-stream") setStreams("new");
       if (name === "edit-data-streams") setStreams("edit");
+      if (name === "remove-data-stream") setRemoving(true);
+      if (name === "close-data-streams") void closeActive();
       if (name === "preferences") {
         void bridge.theme.get().then(setTheme);
         void bridge.status.visible().then(setStatusBar);
         setPreferences(true);
       }
     });
-  }, [bridge, detached]);
+  }, [bridge, detached, closeActive]);
 
   const change = useCallback(
     (c: LayoutChange) => {
@@ -159,8 +175,21 @@ export function Shell({ bridge, detached = false }: ShellProps) {
           </fieldset>
         </Dialog>
       </div>
-      <StreamsDialog bridge={bridge} mode={streams} onClose={() => setStreams(null)} />
-      <StatusBar bridge={bridge} />
+      <StreamsDialog
+        bridge={bridge}
+        mode={streams}
+        onClose={() => {
+          setStreams(null);
+          streamsChanged();
+        }}
+      />
+      <RemoveDialog
+        bridge={bridge}
+        open={removing}
+        onClose={() => setRemoving(false)}
+        onRemoved={streamsChanged}
+      />
+      <StatusBar bridge={bridge} onStreamAction={action} streamsVersion={streamsVersion} />
     </>
   );
 }

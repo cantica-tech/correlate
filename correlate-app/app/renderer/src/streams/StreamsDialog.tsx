@@ -67,10 +67,11 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
   // On opening: the streams and the Sump's key; Edit lists the first stream.
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per opening.
   useEffect(() => {
-    if (!mode) return;
+    // Cleared on closing too, so a reopened dialog never shows the last one's list.
     setTargets(null);
     setStatus("");
     setError("");
+    if (!mode) return;
     void (async () => {
       const [list, key] = await Promise.all([listStreams(request), sumpPublicKey(request)]);
       if (!list.ok) return setError(list.message);
@@ -114,6 +115,8 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
     setBusy(false);
     if (!r.ok) return setError(r.message);
     if (sumpId) void bridge.picker?.setLastStream({ sump: sumpId, stream: chosen });
+    // The picker's stream becomes this window's active one (REQ-000027-sJpO9KMY).
+    await bridge.stream?.setActive(chosen);
     const label = streams.find((s) => s.id === chosen)?.label ?? chosen;
     const n = r.value.containers.length + r.value.services.length;
     void bridge.status.add(`Following ${n} on ${label}`);
