@@ -41,6 +41,12 @@ function RecentreOnce({ shown }: { shown: ChartsShown }) {
 }
 
 const paused = location.search.includes("paused");
+// A paused view's thumb depends on now: the page's clock is frozen so both
+// sides draw it at the same place, a sixth of the track.
+if (paused) {
+  const frozen = Date.now();
+  Date.now = () => frozen;
+}
 const prefs = location.search.includes("prefs");
 const root = document.getElementById("root");
 if (root)

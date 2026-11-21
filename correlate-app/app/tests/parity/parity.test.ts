@@ -49,18 +49,10 @@ const FIXTURES = [
  * here is masked or allowed more.
  */
 const INTENDED: Partial<Record<string, { masks?: Mask[]; limit?: number; reason: string }>> = {
-  "live-prefs": {
+  "live-prefs-window": {
     reason:
-      "cttc's Time window help points to its toolbar's Frequency field, which the app does not have; ours says the charts are read every 5 s (REQ-000031-sJpO9KMY)",
-    masks: [
-      {
-        x: 30,
-        y: 76,
-        width: 980,
-        height: 72,
-        reason: "the Time window's help text, two lines on both sides",
-      },
-    ],
+      "cttc's Time window help points to its toolbar's Frequency field, which the app does not have; ours says the charts are read every 5 s (REQ-000031-sJpO9KMY); the rest of the fieldset is held to cttc by live-prefs-tracking's strict check of the same markup",
+    limit: 0.02,
   },
 };
 
@@ -352,7 +344,11 @@ async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer
     await page.waitForSelector(".prefs-stage fieldset:nth-of-type(2)");
     await page.mouse.move(1, 1);
     await page.evaluate("document.fonts.ready.then(() => true)");
-    pictures.set(`live-prefs-${theme}`, await shoot(".prefs-stage"));
+    pictures.set(`live-prefs-window-${theme}`, await shoot(".prefs-stage fieldset:nth-of-type(1)"));
+    pictures.set(
+      `live-prefs-tracking-${theme}`,
+      await shoot(".prefs-stage fieldset:nth-of-type(2)"),
+    );
   }
 }
 
@@ -438,7 +434,8 @@ describe.skipIf(process.platform !== "darwin")(
       "charts-legend",
       "charts-nav",
       "charts-nav-paused",
-      "live-prefs",
+      "live-prefs-window",
+      "live-prefs-tracking",
       "logs-panel",
       "logs-lanes-head",
     ].flatMap((n) => THEMES.map((t) => `${n}-${t}`));
