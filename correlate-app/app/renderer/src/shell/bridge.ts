@@ -64,6 +64,9 @@ export type NoticeEvent = { type: "entry"; entry: Notice } | { type: "cleared" }
 
 /** The bridge, as far as the shell goes. */
 export interface ShellBridge {
+  menu: {
+    action(name: string): Promise<{ ok: boolean; message?: string }>;
+  };
   sump: {
     active(): Promise<{ id: string; name: string; kind: string } | null>;
     states(): Promise<StateRecord[]>;

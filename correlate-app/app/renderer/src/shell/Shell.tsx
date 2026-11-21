@@ -6,6 +6,7 @@
  */
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useState } from "react";
 import { Button, Dialog, SegControl, Switch } from "../components/index.js";
+import { MenuBar } from "../menubar/MenuBar.js";
 import { StatusBar } from "../statusbar/StatusBar.js";
 import type { LayoutChange, ShellBridge, SidebarLayout, ThemeMode } from "./bridge.js";
 import { Sidebar } from "./Sidebar.js";
@@ -72,6 +73,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
     [bridge],
   );
   const action = useCallback((name: string) => void bridge.sidebar.action(name), [bridge]);
+  const menuAction = useCallback((name: string) => void bridge.menu.action(name), [bridge]);
 
   // Drag the splitter to resize, as cttc's (app.js:4512-4536).
   const drag = (event: ReactMouseEvent) => {
@@ -105,6 +107,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   if (detached) return sidebar;
   return (
     <>
+      <MenuBar onAction={menuAction} />
       <div id="app-body" data-dock={layout.dock}>
         {sidebar}
         {/* biome-ignore lint/a11y/noStaticElementInteractions: cttc's splitter; the sidebar keeps its size without it. */}

@@ -1,0 +1,122 @@
+/*
+ * cttc's menu bar (br-STYLE-000001-sJpO9KMY, REQ-000023-sJpO9KMY), rule for
+ * rule from cttc `app/renderer/style.css` at d8a444b. A test holds the block
+ * to `tests/parity/cttc/style.reference.css`.
+ */
+/* cttc style.css:93-177 */
+/* custom menu bar — replaces the native OS menu so the vertical spacing
+   between items can actually be tuned (impossible for the native menu on
+   either macOS or Windows) */
+#menubar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+  font-size: 12px;
+  user-select: none;
+}
+#menubar .menu {
+  position: relative;
+}
+#menubar .menu-label {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  padding: 4px 9px;
+  line-height: 1.2;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+#menubar .menu-label:hover,
+#menubar .menu.open .menu-label {
+  background: var(--surface-2);
+}
+#menubar .menu-list {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 220px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  z-index: 50;
+  flex-direction: column;
+}
+#menubar .menu.open .menu-list {
+  display: flex;
+}
+#menubar .menu-list button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  text-align: left;
+  padding: 5px 9px;
+  line-height: 1.3;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+}
+#menubar .menu-list button:hover {
+  background: var(--accent);
+  color: #fff;
+}
+#menubar .menu-list button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+#menubar .menu-list button:disabled:hover {
+  background: none;
+  color: var(--muted);
+}
+#menubar .menu-list button.menu-indent {
+  padding-left: 20px;
+}
+/* Wraps an icon (cloned from the action-bar/toolbar button it duplicates,
+   see menu-load-metrics/menu-export-metrics in index.html) together with its
+   label as a single flex child, so it stays grouped on the left even for
+   entries whose button also carries a trailing .acc pinned right via this
+   list's own justify-content: space-between. */
+.menu-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+/* .ctxmenu-icon's own "color: var(--muted)" would otherwise outlive the
+   hover/disabled color flips above -- same treatment as .acc just below. */
+#menubar .menu-list button:hover .ctxmenu-icon {
+  color: #fff;
+}
+#menubar .menu-list button:disabled .ctxmenu-icon {
+  color: var(--muted);
+}
+#menubar .menu-sub-label {
+  padding: 3px 8px 1px;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+#menubar .menu-sep {
+  height: 1px;
+  margin: 3px 4px;
+  background: var(--border);
+}
+#menubar .acc {
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: 12px;
+}
+#menubar .menu-list button:hover .acc {
+  color: #fff;
+}
