@@ -13,7 +13,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type SafeStorageLike, safeStorageUsable } from "../cipher.js";
 import { VaultError } from "../errors.js";
-import { META_FILE, Vault } from "../vault.js";
+import { META_FILE, ORPHAN_KEEP_MS, ORPHANS_DIR, Vault } from "../vault.js";
 
 // br-VAULT-000001-sJpO9KMY, br-VAULT-000004-sJpO9KMY (REQ-000008-sJpO9KMY
 // Requirements 2 to 4): keys encrypted at rest, passphrase rules, keys handed
@@ -296,5 +296,106 @@ describe("br-VAULT-000004-sJpO9KMY: never re-keyed", () => {
     expect(() => open().create(PASS, PASS)).toThrow(expect.objectContaining({ code: "exists" }));
     expect(existsSync(path.join(dir, META_FILE))).toBe(false);
     expect(readdirSync(dir).filter((f) => f.endsWith(".key"))).toHaveLength(1);
+  });
+});
+
+describe("br-VAULT-000005-sJpO9KMY: orphaned key files", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const T0 = Date.UTC(2026, 10, 21);
+
+  function threeKeys() {
+    const vault = open();
+    vault.create(PASS, PASS);
+    for (const id of ["a", "b", "c"]) vault.put(id, newKey());
+    return vault;
+  }
+
+  it("finds key files whose id is no longer in use", () => {
+    const vault = threeKeys();
+    expect(vault.findOrphans(["a", "b", "c"])).toEqual([]);
+    expect(vault.findOrphans(["a"])).toHaveLength(2);
+  });
+
+  it("sets them aside, keeps them 30 days, then deletes them", () => {
+    const vault = threeKeys();
+    const kept = vault.get("a");
+    const first = vault.cleanUpOrphans(["a"], T0);
+    expect(first.moved).toHaveLength(2);
+    expect(vault.has("b")).toBe(false);
+    expect(vault.get("a")).toBe(kept);
+    const aside = readdirSync(path.join(dir, ORPHANS_DIR));
+    expect(aside).toHaveLength(2);
+    expect(aside.every((f) => f.endsWith(`.key.${T0}`))).toBe(true);
+    if (POSIX) expect(statSync(path.join(dir, ORPHANS_DIR)).mode & 0o777).toBe(0o700);
+
+    expect(vault.cleanUpOrphans(["a"], T0 + ORPHAN_KEEP_MS)).toEqual({
+      moved: [],
+      restored: [],
+      deleted: [],
+    });
+    const late = vault.cleanUpOrphans(["a"], T0 + ORPHAN_KEEP_MS + DAY);
+    expect(late.deleted).toHaveLength(2);
+    expect(readdirSync(path.join(dir, ORPHANS_DIR))).toEqual([]);
+    expect(vault.get("a")).toBe(kept);
+  });
+
+  it("restores a key whose id is in use again", () => {
+    const vault = threeKeys();
+    const b = vault.get("b");
+    vault.cleanUpOrphans(["a"], T0);
+    const back = vault.cleanUpOrphans(["a", "b"], T0 + DAY);
+    expect(back).toEqual({ moved: [], restored: ["b"], deleted: [] });
+    expect(vault.get("b")).toBe(b);
+  });
+
+  it("never brings an old key back over a newer one", () => {
+    const vault = threeKeys();
+    vault.cleanUpOrphans(["a"], T0);
+    const fresh = newKey();
+    vault.put("b", fresh);
+    expect(vault.cleanUpOrphans(["a", "b"], T0 + DAY).restored).toEqual([]);
+    expect(vault.get("b")).toBe(fresh);
+  });
+});
+
+describe("br-VAULT-000007-sJpO9KMY: a new key replaces the working one only once proven", () => {
+  it("keeps the working key, byte for byte, when the proof fails", async () => {
+    const vault = open();
+    vault.create(PASS, PASS);
+    const working = newKey();
+    vault.put("sump", working);
+    const before = everything();
+    await expect(
+      vault.replace("sump", newKey(), () => {
+        throw new Error("Permission denied (publickey)");
+      }),
+    ).rejects.toThrow("Permission denied");
+    expect(vault.get("sump")).toBe(working);
+    expect(everything()).toBe(before);
+  });
+
+  it("stores the new key once the proof succeeds", async () => {
+    const vault = open();
+    vault.create(PASS, PASS);
+    vault.put("sump", newKey());
+    const next = newKey();
+    const proved: string[] = [];
+    await vault.replace("sump", next, async (pem) => {
+      proved.push(pem);
+    });
+    expect(proved).toEqual([next]);
+    expect(vault.get("sump")).toBe(next);
+  });
+
+  it("refuses a key that is not PEM before proving anything", async () => {
+    const vault = open();
+    vault.create(PASS, PASS);
+    let proved = false;
+    await expect(
+      vault.replace("sump", "not a key", () => {
+        proved = true;
+      }),
+    ).rejects.toThrow(expect.objectContaining({ code: "not-pem" }));
+    expect(proved).toBe(false);
   });
 });

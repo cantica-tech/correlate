@@ -15,7 +15,7 @@
  * that tells a wrong passphrase at unlock) and one `<hmac>.key` per secret.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import path from "node:path";
 import {
   deriveKey,
@@ -44,6 +44,22 @@ export const MIN_PASSPHRASE_LENGTH = 8;
 
 /** The metadata file's name inside the vault folder. */
 export const META_FILE = "vault.json";
+
+/** Where orphaned key files wait before they are deleted (br-VAULT-000005). */
+export const ORPHANS_DIR = "orphans";
+
+/** How long an orphaned key file is kept: 30 days. */
+export const ORPHAN_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** What one orphan clean-up did. */
+export interface OrphanCleanUp {
+  /** Key files moved to `orphans/`. */
+  moved: string[];
+  /** Ids whose key came back from `orphans/`, being in use again. */
+  restored: string[];
+  /** Files deleted from `orphans/` after 30 days. */
+  deleted: string[];
+}
 
 /** What `vault.json` holds; none of it is secret on its own. */
 interface VaultMeta {
@@ -196,6 +212,69 @@ export class Vault {
     writeSecretFile(this.fileFor(id), `${JSON.stringify(envelope)}\n`);
   }
 
+  /**
+   * Replace the key stored under `id` only once `prove(key)` succeeds, such
+   * as an SSH login with the new key (br-VAULT-000007-sJpO9KMY). Until then
+   * the working key stays stored, untouched; a failed proof passes its error
+   * on and changes nothing (cttc BUG-000007-uKKrzikI).
+   */
+  async replace(
+    id: string,
+    key: Uint8Array | string,
+    prove: (pem: string) => unknown | Promise<unknown>,
+  ): Promise<void> {
+    const pem = pemPrivateKey(key);
+    if (this.requireMeta().mode === "passphrase") this.requireKey();
+    await prove(pem);
+    this.put(id, pem);
+  }
+
+  /** The key files whose id is not in `liveIds` (br-VAULT-000005-sJpO9KMY). */
+  findOrphans(liveIds: Iterable<string>): string[] {
+    const live = new Set([...liveIds].map((id) => this.nameFor(id)));
+    return this.keyFiles().filter((name) => !live.has(name));
+  }
+
+  /**
+   * Move orphaned key files to `orphans/`, each stamped with the time it was
+   * moved; bring back any whose id is in use again (when no key is stored
+   * for it); delete those kept more than 30 days (br-VAULT-000005-sJpO9KMY).
+   * A catalog that forgets a Sump by mistake costs nothing permanent.
+   */
+  cleanUpOrphans(liveIds: Iterable<string>, now: number = Date.now()): OrphanCleanUp {
+    const ids = [...liveIds];
+    const idByName = new Map(ids.map((id) => [this.nameFor(id), id]));
+    const orphans = path.join(this.dir, ORPHANS_DIR);
+    const result: OrphanCleanUp = { moved: [], restored: [], deleted: [] };
+    for (const name of this.findOrphans(ids)) {
+      ensurePrivateDir(orphans);
+      renameSync(path.join(this.dir, name), path.join(orphans, `${name}.${now}`));
+      result.moved.push(name);
+    }
+    if (!existsSync(orphans)) return result;
+    const kept = readdirSync(orphans)
+      .map((entry) => ({ entry, match: /^(.+\.key)\.(\d+)$/.exec(entry) }))
+      .filter(({ match }) => match !== null)
+      .map(({ entry, match }) => ({ entry, name: match?.[1] as string, at: Number(match?.[2]) }))
+      .sort((a, b) => b.at - a.at);
+    for (const { entry, name, at } of kept) {
+      const id = idByName.get(name);
+      const from = path.join(orphans, entry);
+      if (id !== undefined && !existsSync(path.join(this.dir, name))) {
+        renameSync(from, path.join(this.dir, name));
+        result.restored.push(id);
+      } else if (now - at > ORPHAN_KEEP_MS) {
+        rmSync(from, { force: true });
+        result.deleted.push(entry);
+      }
+    }
+    for (const name of result.moved) this.logger.info(`vault: orphaned key file ${name} set aside`);
+    for (const id of result.restored) this.logger.info(`vault: key for "${id}" restored`);
+    for (const entry of result.deleted)
+      this.logger.info(`vault: orphaned key file ${entry} deleted`);
+    return result;
+  }
+
   /** Whether a key is stored under `id`. */
   has(id: string): boolean {
     return existsSync(this.fileFor(id));
@@ -259,9 +338,12 @@ export class Vault {
     return path.join(this.dir, META_FILE);
   }
 
+  private nameFor(id: string): string {
+    return fileNameFor(Buffer.from(this.requireMeta().nameKey, "base64"), id);
+  }
+
   private fileFor(id: string): string {
-    const meta = this.requireMeta();
-    return path.join(this.dir, fileNameFor(Buffer.from(meta.nameKey, "base64"), id));
+    return path.join(this.dir, this.nameFor(id));
   }
 
   /** Read `vault.json`; a corrupt one is refused, never replaced. */

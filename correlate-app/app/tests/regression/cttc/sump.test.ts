@@ -6,7 +6,12 @@
  * strict expected failure (`it.fails`) until the code exists; then a passing
  * test. See README.md in this folder for the whole corpus.
  */
-import { describe, it } from "vitest";
+import { generateKeyPairSync } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import { Vault } from "../../../main/src/vault/vault.js";
 
 describe("br-SUMP-000006-sJpO9KMY", () => {
   // BUG-000001-uKKrzikI, Critical: becomes a real test with roadmap Item 18
@@ -41,9 +46,33 @@ describe("br-SUMP-000003-sJpO9KMY", () => {
   it.todo(
     "cttc BUG-000006: Choosing 'Later' after adding a gateway leaves the window on a dead connection",
   );
-  // BUG-000007-uKKrzikI, High: becomes a real test with roadmap Item 10
-  // (RM-000011-sJpO9KMY).
-  it.todo("cttc BUG-000007: Edit Gateway overwrites the working key before the new one is proven");
+  // BUG-000007-uKKrzikI, High (roadmap Item 10, RM-000011-sJpO9KMY): Edit
+  // Gateway wrote the new key over the working one before connecting with it.
+  // The vault now keeps the working key until the new one is proven
+  // (br-VAULT-000007-sJpO9KMY); the Edit Sump flow itself comes with Phase 3.
+  it("cttc BUG-000007: Edit Gateway overwrites the working key before the new one is proven", async () => {
+    const dir = path.join(mkdtempSync(path.join(tmpdir(), "cttc-sump-")), "vault");
+    try {
+      const pem = () =>
+        generateKeyPairSync("ed25519").privateKey.export({
+          type: "pkcs8",
+          format: "pem",
+        }) as string;
+      const vault = new Vault(dir, undefined, {
+        scrypt: { N: 2 ** 10, r: 8, p: 1 },
+        logger: { info: () => {}, warn: () => {} },
+      });
+      vault.create("a passphrase", "a passphrase");
+      const working = pem();
+      vault.put("sump", working);
+      await expect(
+        vault.replace("sump", pem(), () => Promise.reject(new Error("connect failed"))),
+      ).rejects.toThrow("connect failed");
+      expect(vault.get("sump")).toBe(working);
+    } finally {
+      rmSync(path.dirname(dir), { recursive: true, force: true });
+    }
+  });
 });
 
 describe("br-SUMP-000008-sJpO9KMY", () => {
