@@ -14,6 +14,16 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from correlate_sump.otel import configure_otel
 
 
+@pytest.fixture(autouse=True)
+def no_installed_plugins(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The core's tests see only the plugins they give it: the SSH plugin,
+    installed in this environment (REQ-000024-sJpO9KMY), is not discovered
+    unless a test says so; a test that stubs discovery itself overrides this."""
+    monkeypatch.setattr(
+        "correlate_sump.plugins._discover_entry_points", lambda group="sump.plugins": []
+    )
+
+
 @pytest.fixture(scope="session")
 def otel_test_exporters() -> tuple[InMemorySpanExporter, InMemoryMetricReader]:
     """Install the global providers once, with in-memory span and metric exporters."""
