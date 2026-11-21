@@ -8,7 +8,8 @@
  * lifecycle states, never set them (br-SUMP-000011-sJpO9KMY), `plan()` and
  * `provisionLocal()`/`provisionRemote()` drive the Add Sump flow
  * (REQ-000014-sJpO9KMY), `list()`, `rename()`, `replaceKey()`, `switchTo()`
- * and `uninstall()` manage Sumps (REQ-000015-sJpO9KMY), and
+ * and `uninstall()` manage Sumps (REQ-000015-sJpO9KMY), `audit()` checks
+ * them (REQ-000017-sJpO9KMY), and
  * `request()` names a Sump (by default the window's), a method and a path,
  * never a URL, and resolves to
  * `{ ok: true, value }` or `{ ok: false, error }` (see
@@ -31,6 +32,7 @@ const RENAME_CHANNEL = "sump:rename";
 const REPLACE_KEY_CHANNEL = "sump:replaceKey";
 const SWITCH_CHANNEL = "sump:switch";
 const UNINSTALL_CHANNEL = "sump:uninstall";
+const AUDIT_CHANNEL = "sump:audit";
 
 contextBridge.exposeInMainWorld("correlate", {
   sump: {
@@ -60,6 +62,8 @@ contextBridge.exposeInMainWorld("correlate", {
     switchTo: (target) => ipcRenderer.invoke(SWITCH_CHANNEL, target),
     /** Uninstall a Sump, everything removed, once `{ id, confirmed: true }`. */
     uninstall: (target) => ipcRenderer.invoke(UNINSTALL_CHANNEL, target),
+    /** Audit every known Sump now: `{ ok, results: [{ id, existence, ... }] }`. */
+    audit: () => ipcRenderer.invoke(AUDIT_CHANNEL),
     /** Send one request to a Sump; resolves to its reply, never rejects. */
     request: (message) => ipcRenderer.invoke(SUMP_REQUEST_CHANNEL, message),
   },

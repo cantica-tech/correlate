@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Lifecycle } from "../../catalog/lifecycle.js";
 import { SessionTokens } from "../../sump/tokens.js";
 import {
+  AUDIT_CHANNEL,
   LIST_CHANNEL,
   PLAN_CHANNEL,
   PROVISION_LOCAL_CHANNEL,
@@ -53,6 +54,7 @@ describe("REQ-000015-sJpO9KMY: managing Sumps over the bridge", () => {
     });
     expect(await call(SWITCH_CHANNEL, { id: "x" })).toMatchObject({ ok: false });
     expect(await call(UNINSTALL_CHANNEL, { id: "x" })).toMatchObject({ ok: false, step: "check" });
+    expect(await call(AUDIT_CHANNEL)).toMatchObject({ ok: false, step: "check" });
   });
 });
 
@@ -68,6 +70,7 @@ describe("REQ-000014-sJpO9KMY: provisioning over the bridge", () => {
         REPLACE_KEY_CHANNEL,
         SWITCH_CHANNEL,
         UNINSTALL_CHANNEL,
+        AUDIT_CHANNEL,
       ].sort(),
     );
   });

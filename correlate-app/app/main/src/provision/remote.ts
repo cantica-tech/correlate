@@ -63,6 +63,10 @@ export interface RemoteContext extends ProvisionContext {
   forwards?: Forwards;
   /** How long a first connect waits for the forward; 30 s. */
   firstConnectTimeoutMs?: number;
+  /** Runs after each new Sump's first successful connect (the audit). */
+  afterConnect?: () => void;
+  /** Runs the audit on demand. */
+  audit?: () => Promise<unknown>;
   /** Pending Sumps, until Item 17 connects them. */
   pending: Map<string, PendingSump>;
   /** Streams the image to the host when it cannot pull it. */

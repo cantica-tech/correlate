@@ -224,3 +224,66 @@ describe("br-SUMP-000005-sJpO9KMY: probing remote Sumps through SSH", () => {
     expect(strip(catalog.get(a.id))).toEqual(strip(a));
   });
 });
+
+describe("br-SUMP-000005-sJpO9KMY: when the audit runs", () => {
+  it("runs one audit at a time: a call while one runs joins it", async () => {
+    const slow = await serve((_req, res) => {
+      setTimeout(() => {
+        res.writeHead(200);
+        res.end("{}");
+      }, 100);
+    });
+    cleanups.push(() => slow.close());
+    let probes = 0;
+    const counting = await serve((_req, res) => {
+      probes += 1;
+      res.writeHead(200);
+      res.end("{}");
+    });
+    cleanups.push(() => counting.close());
+    catalog.recordConnect({ kind: "local", sumpPort: portOf(counting) });
+    catalog.recordConnect({ kind: "remote", sumpPort: 1, sshTarget: "x" });
+    const forwards = { urlOf: () => slow.sump.baseUrl } as unknown as Forwards;
+    const { Auditor } = await import("../audit.js");
+    const auditor = new Auditor({ catalog, forwards }, { timeoutMs: 2_000 });
+    const [a, b] = await Promise.all([auditor.run(), auditor.run()]);
+    expect(a).toBe(b);
+    expect(probes).toBe(1);
+    auditor.soon();
+    expect((await auditor.run()).length).toBe(2);
+  });
+
+  it("runs after a successful login, without holding it up", async () => {
+    const { LOGIN_NAMESPACE } = await import("../../identity/sshkey.js");
+    const sump = await serve((req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      if (req.url === "/session/challenge") {
+        res.end(JSON.stringify({ challenge: "c", namespace: LOGIN_NAMESPACE, expires_in: 60 }));
+      } else res.end(JSON.stringify({ token: "t", user: "olivier", owner: true }));
+    });
+    cleanups.push(() => sump.close());
+    const vault = new Vault(path.join(dir, "vault"), undefined, {
+      scrypt: { N: 2 ** 10, r: 8, p: 1 },
+      logger: quiet,
+    });
+    vault.create("a passphrase", "a passphrase");
+    const { configuredSumps, reloginWith } = await import("../../index.js");
+    const { SessionTokens } = await import("../../sump/tokens.js");
+    const tokens = new SessionTokens();
+    const env = { CORRELATE_SUMP_URL: sump.sump.baseUrl };
+    let audits = 0;
+    await reloginWith(
+      vault,
+      configuredSumps(env, tokens, catalog),
+      tokens,
+      env,
+      catalog,
+      undefined,
+      () => {
+        audits += 1;
+      },
+    )("local");
+    expect(audits).toBe(1);
+    expect(tokens.get("local")).toBe("t");
+  });
+});

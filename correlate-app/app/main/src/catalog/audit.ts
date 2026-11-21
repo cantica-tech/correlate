@@ -166,3 +166,32 @@ export async function auditSumps(
   await Promise.all(Array.from({ length: workers }, worker));
   return results;
 }
+
+/**
+ * Runs the audit after each successful connect, and on demand, never two at
+ * once: a call while one runs gets that one's results. `soon()` does not wait,
+ * so a connect is never held up by it.
+ */
+export class Auditor {
+  private running: Promise<AuditResult[]> | undefined;
+
+  constructor(
+    private readonly ctx: AuditContext,
+    private readonly options: AuditOptions = {},
+  ) {}
+
+  /** Audit now, or join the audit already running. */
+  run(): Promise<AuditResult[]> {
+    if (!this.running) {
+      this.running = auditSumps(this.ctx, this.options).finally(() => {
+        this.running = undefined;
+      });
+    }
+    return this.running;
+  }
+
+  /** Audit in the background, after a connect. */
+  soon(): void {
+    void this.run().catch(() => {});
+  }
+}

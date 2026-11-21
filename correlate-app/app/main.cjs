@@ -18,6 +18,8 @@ const { app, BrowserWindow, ipcMain, safeStorage } = require("electron");
 const path = require("node:path");
 const {
   ActiveSumps,
+  Auditor,
+  connectSsh,
   Forwards,
   HealthProbe,
   Lifecycle,
@@ -79,7 +81,13 @@ app.whenReady().then(() => {
       window.webContents.send(SUMP_STATE_EVENT, record);
     }
   });
-  const relogin = reloginWith(vault, sumps, tokens, process.env, catalog, lifecycle);
+  // After each successful connect, the other Sumps are audited in the
+  // background; nothing is switched or added (br-SUMP-000005).
+  const auditor = catalog
+    ? new Auditor({ catalog, vault, forwards, connect: connectSsh })
+    : undefined;
+  const afterConnect = () => auditor?.soon();
+  const relogin = reloginWith(vault, sumps, tokens, process.env, catalog, lifecycle, afterConnect);
   registerSumpIpc(ipcMain, sumps, tokens, relogin, activeSumps, lifecycle);
   const probe = new HealthProbe(lifecycle, sumps);
   probe.start();
@@ -96,6 +104,8 @@ app.whenReady().then(() => {
     pending: new Map(),
     resolve: sumps,
     forwards,
+    afterConnect,
+    audit: auditor ? () => auditor.run() : undefined,
     // Recordings plug in with Phase 8; until then none is ever live.
     guard: { liveRecording: () => undefined },
   });

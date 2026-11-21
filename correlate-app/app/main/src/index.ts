@@ -25,9 +25,11 @@ import { SessionTokens } from "./sump/tokens.js";
 import type { SafeStorageLike } from "./vault/cipher.js";
 import { Vault, type VaultLogger } from "./vault/vault.js";
 
+export { Auditor } from "./catalog/audit.js";
 export { identityPublicKey, importIdentity, userName } from "./identity/identity.js";
 export { registerProvisionIpc } from "./provision/ipc.js";
 export { runCommand } from "./provision/runner.js";
+export { connectSsh } from "./provision/ssh.js";
 export { logout } from "./sump/client.js";
 export { registerSumpIpc, SUMP_STATE_EVENT } from "./sump/ipc.js";
 export { login } from "./sump/login.js";
@@ -119,6 +121,7 @@ export function reloginWith(
   env: Record<string, string | undefined>,
   catalog?: Catalog,
   lifecycle?: Lifecycle,
+  afterConnect?: () => void,
 ): Relogin {
   return async (name) => {
     const sump = resolve(name);
@@ -138,6 +141,7 @@ export function reloginWith(
       );
     }
     lifecycle?.reachable(name, `logged in as ${result.user}`);
+    afterConnect?.();
   };
 }
 
