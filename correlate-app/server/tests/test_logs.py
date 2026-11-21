@@ -11,7 +11,7 @@ import pytest
 
 from correlate_sump.app import create_app
 from correlate_sump.ingest import stream_key
-from correlate_sump.logs import find_row, log_density, log_page
+from correlate_sump.logs import find_row, log_density, log_page, nearest_row
 from correlate_sump.records import QueryError
 
 T0 = datetime(2026, 11, 21, 18, 0, tzinfo=UTC)
@@ -60,6 +60,20 @@ async def test_finds_the_next_and_previous_match() -> None:
     assert (await find_row(redis, "self/web", q="nowhere", from_index=-1, **args))["index"] is None
 
 
+async def test_finds_the_row_nearest_a_time_in_either_order() -> None:
+    """REQ-000030-sJpO9KMY Requirement 1."""
+    redis = await logs()
+    args: dict[str, Any] = {"start": at(0), "end": at(60)}
+    assert (await nearest_row(redis, "self/web", t=at(3.2), order="oldest", **args))["index"] == 3
+    # Newest first, "line 3" is at index 6.
+    assert (await nearest_row(redis, "self/web", t=at(3.2), **args))["index"] == 6
+    # A tie goes to the earlier index; a time past the rows, to the end.
+    assert (await nearest_row(redis, "self/web", t=at(3.5), order="oldest", **args))["index"] == 3
+    assert (await nearest_row(redis, "self/web", t=at(500), order="oldest", **args))["index"] == 9
+    empty = await nearest_row(redis, "self/none", t=at(1), **args)
+    assert empty == {"index": None, "total": 0}
+
+
 async def test_counts_rows_per_bucket() -> None:
     redis = await logs()
     density = await log_density(redis, "self/web", start=at(0), end=at(10), buckets=5)
@@ -86,6 +100,14 @@ async def test_counts_rows_per_bucket() -> None:
             "next or previous",
         ),
         (lambda r: log_density(r, "s", start=at(0), end=at(1), buckets=0), "between 1 and 2000"),
+        (
+            lambda r: nearest_row(r, "s", start=at(0), end=at(1), t=datetime(2026, 1, 1)),
+            "timezone",
+        ),
+        (
+            lambda r: nearest_row(r, "s", start=at(0), end=at(1), t=at(0), order="up"),
+            "newest or oldest",
+        ),
     ],
 )
 async def test_refuses_a_bad_query(call, why: str) -> None:
@@ -102,7 +124,12 @@ async def test_the_routes_answer_behind_the_session() -> None:
         span = {"source": "self/web", "from": at(0).isoformat(), "to": at(60).isoformat()}
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://sump") as client:
-            for path in ("/records/logs", "/records/logs/find", "/records/density"):
+            for path in (
+                "/records/logs",
+                "/records/logs/find",
+                "/records/logs/at",
+                "/records/density",
+            ):
                 assert (await client.get(path, params={**span, "q": "x"})).status_code == 401
             page = await client.get("/records/logs", params={**span, "limit": 2}, headers=auth)
             assert page.json()["total"] == 10
@@ -114,5 +141,9 @@ async def test_the_routes_answer_behind_the_session() -> None:
                 "/records/density", params={**span, "buckets": 6}, headers=auth
             )
             assert sum(density.json()["counts"]) == 10
+            near = await client.get(
+                "/records/logs/at", params={**span, "t": at(2).isoformat()}, headers=auth
+            )
+            assert near.json() == {"index": 7, "total": 10}
             bad = await client.get("/records/logs", params={**span, "limit": 0}, headers=auth)
             assert bad.status_code == 422

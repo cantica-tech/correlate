@@ -2,7 +2,8 @@
 Requirement 1): by index over a time range, newest or oldest first, with
 their total, so a virtual list knows its height and fetches only the pages in
 view (cttc's panels paged by number); the next or previous row matching a
-search; and the rows' count per time bucket, for the event-density lanes.
+search; the row nearest a time, for the cursor (REQ-000030-sJpO9KMY); and
+the rows' count per time bucket, for the event-density lanes.
 """
 
 from __future__ import annotations
@@ -103,6 +104,32 @@ async def find_row(
         if needle in str(rows[i].get("text", "")).lower():
             return {"index": i, "total": len(rows)}
     return {"index": None, "total": len(rows)}
+
+
+async def nearest_row(
+    redis_client: RedisLike,
+    source: str,
+    *,
+    start: datetime,
+    end: datetime,
+    t: datetime,
+    order: str = "newest",
+) -> dict[str, Any]:
+    """The index of the row whose time is nearest `t` in `order`, the earlier
+    index on a tie; `None` when there are no rows (REQ-000030-sJpO9KMY), for
+    a panel following the cursor, as cttc's `index_at`."""
+    _check_range(start, end)
+    _check_order(order)
+    if t.tzinfo is None:
+        raise QueryError("t needs a timezone")
+    rows = await _rows(redis_client, source, start, end, order)
+    best: int | None = None
+    best_gap = 0.0
+    for i, row in enumerate(rows):
+        gap = abs((datetime.fromisoformat(row["ts"]) - t).total_seconds())
+        if best is None or gap < best_gap:
+            best, best_gap = i, gap
+    return {"index": best, "total": len(rows)}
 
 
 async def log_density(

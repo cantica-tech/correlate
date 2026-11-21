@@ -43,7 +43,7 @@ from correlate_sump.ingest import (
     maxlen_from_env,
     run_ingest_server,
 )
-from correlate_sump.logs import find_row, log_density, log_page
+from correlate_sump.logs import find_row, log_density, log_page, nearest_row
 from correlate_sump.otel import SumpMetrics
 from correlate_sump.plugins import PluginManager
 from correlate_sump.records import DEFAULT_LIMIT, QueryError, query_records
@@ -461,6 +461,20 @@ def create_app(
                 direction=direction,
                 order=order,
             )
+        except QueryError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/records/logs/at")
+    async def record_logs_at(
+        source: str,
+        start: Annotated[datetime, Query(alias="from")],
+        end: Annotated[datetime, Query(alias="to")],
+        t: datetime,
+        order: str = "newest",
+    ) -> dict[str, Any]:
+        """The index of `source`'s row nearest `t` (REQ-000030-sJpO9KMY)."""
+        try:
+            return await nearest_row(redis_client, source, start=start, end=end, t=t, order=order)
         except QueryError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
