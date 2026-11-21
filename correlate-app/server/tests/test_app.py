@@ -19,11 +19,17 @@ T0 = datetime(2026, 11, 21, 10, 0, tzinfo=UTC)
 
 
 @asynccontextmanager
-async def running(app):
-    """The app with its lifespan started, and an HTTP client for it."""
+async def running(app, user: str | None = "tester"):
+    """The app with its lifespan started, and an HTTP client for it, sending a
+    session token for `user` (none when `user` is None; br-CONN-000004)."""
     async with app.router.lifespan_context(app):
+        headers = {}
+        if user is not None:
+            headers["Authorization"] = f"Bearer {await app.state.sessions.issue(user)}"
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://sump") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://sump", headers=headers
+        ) as client:
             yield client
 
 

@@ -23,7 +23,7 @@ Rule IDs omit their `-sJpO9KMY` suffix; Roadmap gives the item numbers in
 
 | Bug | Title | Severity | Rule | Roadmap | Status |
 |---|---|---|---|---|---|
-| 11 | Corrupt token file silently regenerates tokens | Critical | `br-CONN-000004` | 11 | placeholder |
+| 11 | Corrupt token file silently regenerates tokens | Critical | `br-CONN-000004` | 11 | passing |
 | 15 | UI metric events are evaluated against displayed, not live, data | High | `br-EVENT-000004` | 45 | placeholder |
 | 22 | Metric condition checks only the first series with data | High | `br-EVENT-000004` | 45 | placeholder |
 | 23 | Log condition skips lines beyond 200 per tick | High | `br-EVENT-000004` | 45 | placeholder |
