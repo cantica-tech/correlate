@@ -25,11 +25,11 @@ tasks:
     cmd: npm ci
 
   build:
-    desc: Bundle the renderer once
-    cmd: npm run build:renderer
+    desc: Bundle the main process and the renderer once
+    cmd: npm run build
 
   start:
-    desc: Bundle the renderer, then open the app
+    desc: Bundle the main process and the renderer, then open the app
     cmds:
       - task: build
       - "{{.ELECTRON}} ."
@@ -63,5 +63,5 @@ tasks:
       - task: test
 
   clean:
-    desc: Remove the bundle and node_modules (task install restores them)
-    cmd: rm -rf renderer/dist dist node_modules
+    desc: Remove the bundles and node_modules (task install restores them)
+    cmd: rm -rf main/dist renderer/dist dist node_modules

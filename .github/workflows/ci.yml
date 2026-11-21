@@ -49,6 +49,7 @@ jobs:
           cache-dependency-path: correlate-app/app/package-lock.json
       - run: task app:install
       - run: task app:check
+      - run: task app:build
 
   # The Sump server and the repository checks: ruff, ty, pytest, check_layout.py
   # and check_cttc_corpus.py (br-BUILD-000006).
