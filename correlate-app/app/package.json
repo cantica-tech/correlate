@@ -13,6 +13,7 @@
     "build:renderer": "node build/build-renderer.js",
     "watch:main": "node build/build-main.js --watch",
     "watch:renderer": "node build/build-renderer.js --watch",
+    "icons": "node build/icons.js",
     "typecheck": "tsc --noEmit -p renderer/src && tsc --noEmit -p main/src && tsc --noEmit -p build && tsc --noEmit -p tests",
     "lint": "biome check .",
     "format": "biome format --write .",

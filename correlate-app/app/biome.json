@@ -11,7 +11,8 @@
       "!main/dist",
       "!node_modules",
       "!**/*.md",
-      "!**/*.reference.css"
+      "!**/*.reference.css",
+      "!**/icons.generated.ts"
     ]
   },
   "formatter": {
