@@ -21,6 +21,7 @@ import { COMPONENT_LIMIT, compare, type Mask, readPng, writePng } from "./compar
 import { cttcMenuBar } from "./cttcMenuBar.js";
 import { cttcSidebar, cttcWidthScript } from "./cttcSidebar.js";
 import { cttcPillMenu, cttcStatusBar } from "./cttcStatusBar.js";
+import { cttcStreamsDialog } from "./cttcStreams.js";
 import { SIDEBAR_CASES } from "./page/sidebar-cases.js";
 import { ARRIVING, HISTORY, STATUSBAR_CASES } from "./page/statusbar-data.js";
 
@@ -58,6 +59,7 @@ async function buildOurs(): Promise<void> {
       path.join(here, "page/ours-sidebar.tsx"),
       path.join(here, "page/ours-statusbar.tsx"),
       path.join(here, "page/ours-menubar.tsx"),
+      path.join(here, "page/ours-streams.tsx"),
     ],
     outdir: path.join(here, "dist"),
     bundle: true,
@@ -240,6 +242,29 @@ async function captureMenuBar(side: "cttc" | "ours", pictures: Map<string, Buffe
   }
 }
 
+/**
+ * The picker, opened as Edit after its fetch (REQ-000025-sJpO9KMY
+ * Requirement 5): on cttc's page, cttc's `#dlg-set` written in and opened;
+ * on ours, our dialog on a bridge answering with fixed data.
+ */
+async function captureStreams(side: "cttc" | "ours", pictures: Map<string, Buffer>): Promise<void> {
+  for (const theme of THEMES) {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.goto(pathToFileURL(path.join(here, `page/${side}-streams.html`)).href);
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.body.insertAdjacentHTML("beforeend", ${JSON.stringify(cttcStreamsDialog())}); document.getElementById("dlg-set").showModal(); })()`,
+      );
+    }
+    await page.waitForSelector("#dlg-set[open] #docker-targets label.unavailable");
+    // No field or button lit up by focus or hover: the same on both pages.
+    await page.evaluate("document.activeElement?.blur()");
+    await page.mouse.move(1, 1);
+    await page.evaluate("document.fonts.ready.then(() => true)");
+    pictures.set(`streams-dialog-${theme}`, await shoot("#dlg-set"));
+  }
+}
+
 let cttc: Map<string, Buffer>;
 let ours: Map<string, Buffer>;
 
@@ -265,6 +290,8 @@ describe.skipIf(process.platform !== "darwin")(
       await captureStatusBar("ours", ours);
       await captureMenuBar("cttc", cttc);
       await captureMenuBar("ours", ours);
+      await captureStreams("cttc", cttc);
+      await captureStreams("ours", ours);
     }, 120_000);
 
     afterAll(async () => {
@@ -278,6 +305,7 @@ describe.skipIf(process.platform !== "darwin")(
       ...Object.keys(SIDEBAR_CASES).map((c) => `sidebar-${c}`),
       ...STATUSBAR_CASES.map((c) => `statusbar-${c}`),
       ...MENUBAR_CASES.map((c) => `menubar-${c}`),
+      "streams-dialog",
     ].flatMap((n) => THEMES.map((t) => `${n}-${t}`));
 
     it.each(names)("%s looks as in cttc", (name) => {
