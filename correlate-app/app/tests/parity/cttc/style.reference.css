@@ -1,0 +1,2016 @@
+/* Palette: dataviz reference instance (light + dark). */
+:root {
+  color-scheme: light dark;
+  --surface-1: #fcfcfb;
+  --surface-2: #f1f0ec;
+  --surface-3: #e7e6e0;
+  --page: #f9f9f7;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.13);
+  --border-strong: rgba(11, 11, 11, 0.22);
+  --accent: #2a78d6;
+  /* user-configurable via File > Preferences > Theme (see app.js prefs.hlColor) */
+  --hl-color: #eaff00;
+  --hl: color-mix(in srgb, var(--hl-color) 30%, transparent);
+  /* user-configurable via Preferences > Appearance > "Live tracking" */
+  --live-track-color: #22c55e;
+  --live-track: color-mix(in srgb, var(--live-track-color) 30%, transparent);
+  --critical: #d03b3b;
+  --warning: #fab219;
+  --series-1: #2a78d6;
+  --series-2: #008300;
+  --series-3: #e87ba4;
+  --series-4: #eda100;
+  --series-5: #1baf7a;
+  --series-6: #eb6834;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+  --radius-sm: 5px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-1: #18181a;
+    --surface-2: #212123;
+    --surface-3: #2b2b2d;
+    --page: #0b0b0c;
+    --text-primary: #f4f4f4;
+    --text-secondary: #c3c2b7;
+    --muted: #8f8d87;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255, 255, 255, 0.11);
+    --border-strong: rgba(255, 255, 255, 0.18);
+    --accent: #4a90f0;
+    --hl-color: #eaff00;
+    --hl: color-mix(in srgb, var(--hl-color) 40%, transparent);
+    --live-track-color: #22c55e;
+    --live-track: color-mix(in srgb, var(--live-track-color) 40%, transparent);
+    --critical: #e35454;
+    --warning: #fab219;
+    --series-1: #3987e5;
+    --series-2: #008300;
+    --series-3: #d55181;
+    --series-4: #c98500;
+    --series-5: #199e70;
+    --series-6: #d95926;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 8px 28px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* { box-sizing: border-box; }
+/* Any author-origin rule setting `display` on an element (e.g. `.ctl {
+   display: inline-flex }`, `label { display: block }`) beats the browser's
+   default `[hidden] { display: none }` UA-stylesheet rule regardless of
+   selector specificity -- origin order always wins over specificity in the
+   cascade. Toggling .hidden via JS then silently does nothing. This was
+   patched piecemeal per-selector over a dozen times across this file
+   (#chart-block[hidden], .panel[hidden], .gateway-dropdown[hidden], ...);
+   one !important rule here replaces all of them and closes the whole bug
+   class instead of relying on remembering it per new element. */
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font: 13px/1.45 -apple-system, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: var(--page);
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+}
+
+/* custom menu bar — replaces the native OS menu so the vertical spacing
+   between items can actually be tuned (impossible for the native menu on
+   either macOS or Windows) */
+#menubar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+  font-size: 12px;
+  user-select: none;
+}
+#menubar .menu { position: relative; }
+#menubar .menu-label {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  padding: 4px 9px;
+  line-height: 1.2;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+#menubar .menu-label:hover,
+#menubar .menu.open .menu-label { background: var(--surface-2); }
+#menubar .menu-list {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 220px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  z-index: 50;
+  flex-direction: column;
+}
+#menubar .menu.open .menu-list { display: flex; }
+#menubar .menu-list button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  text-align: left;
+  padding: 5px 9px;
+  line-height: 1.3;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+}
+#menubar .menu-list button:hover { background: var(--accent); color: #fff; }
+#menubar .menu-list button:disabled { color: var(--muted); cursor: default; }
+#menubar .menu-list button:disabled:hover { background: none; color: var(--muted); }
+#menubar .menu-list button.menu-indent { padding-left: 20px; }
+/* Wraps an icon (cloned from the action-bar/toolbar button it duplicates,
+   see menu-load-metrics/menu-export-metrics in index.html) together with its
+   label as a single flex child, so it stays grouped on the left even for
+   entries whose button also carries a trailing .acc pinned right via this
+   list's own justify-content: space-between. */
+.menu-item-label { display: inline-flex; align-items: center; gap: 8px; }
+/* .ctxmenu-icon's own "color: var(--muted)" would otherwise outlive the
+   hover/disabled color flips above -- same treatment as .acc just below. */
+#menubar .menu-list button:hover .ctxmenu-icon { color: #fff; }
+#menubar .menu-list button:disabled .ctxmenu-icon { color: var(--muted); }
+#menubar .menu-sub-label {
+  padding: 3px 8px 1px;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+#menubar .menu-sep {
+  height: 1px;
+  margin: 3px 4px;
+  background: var(--border);
+}
+#menubar .acc { color: var(--muted); font-size: 11px; margin-left: 12px; }
+#menubar .menu-list button:hover .acc { color: #fff; }
+
+/* Shared by the View pill (top toolbar) and the Gateway/Docker Host pills
+   (relocated into the status bar, see .app-status-bar's own overrides
+   below) -- position: relative anchors each one's own dropdown/popup
+   wherever it lives. */
+.server-status {
+  position: relative;
+}
+.server-status-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+.server-status-btn:hover,
+.server-status.open .server-status-btn { background: var(--surface-2); }
+.server-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: 0 0 auto;
+}
+.server-status[data-state="up"] .server-status-dot { background: #2ecc71; }
+.server-status[data-state="checking"] .server-status-dot { background: #f1c40f; }
+.server-status[data-state="down"] .server-status-dot { background: var(--critical); }
+.server-status[data-state="down"] .server-status-btn { color: var(--critical); }
+.server-status-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+.gateway-dropdown {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 260px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  z-index: 50;
+}
+.gateway-dropdown .gateway-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 9px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.gateway-dropdown .gateway-item:hover { background: var(--accent); color: #fff; }
+.gateway-dropdown .gateway-item[data-active="true"] { cursor: default; }
+.gateway-dropdown .gateway-item-label { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.gateway-dropdown .gateway-item-loc { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.gateway-dropdown .gateway-item:hover .gateway-item-loc { color: inherit; }
+.gateway-dropdown .gateway-item[data-active="true"] .gateway-item-label::after {
+  content: "● active";
+  font-weight: 400;
+  font-size: 10px;
+  color: #2ecc71;
+}
+/* purely informational (see app.js's per-item checkGateway call) -- never
+   switches anything on its own, even for the active entry. Same specificity
+   as the "active" rule above; declared after it so an item that's both
+   active and unreachable (the gateway currently in use has gone down)
+   shows this instead, which is the more urgent thing to know. */
+.gateway-dropdown .gateway-item[data-reachable="false"] { opacity: 0.6; }
+.gateway-dropdown .gateway-item[data-reachable="false"] .gateway-item-label::after {
+  content: "● unreachable";
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--critical);
+}
+.gateway-dropdown .gateway-empty { padding: 6px 8px; font-size: 12px; color: var(--muted); }
+.gateway-dropdown .gateway-item-sep { border-top: 1px solid var(--border); margin: 2px 4px; }
+
+/* Right-click the Gateway or Docker Host status pill, "Current Status":
+   read-only connection detail (Gateway: connection type + ssh details when
+   tunneled; Docker Host: SSH connection/key + which transforms are on) --
+   see app.js's showGatewayStatus/showDockerHostStatus. Same floating-card
+   look as .gateway-dropdown, but no buttons/hover state, since there's
+   nothing to click here. */
+.connection-info-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 220px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 8px 10px;
+  z-index: 50;
+  font-size: 12px;
+}
+.connection-info-popup .cip-row { display: flex; justify-content: space-between; gap: 12px; }
+.connection-info-popup .cip-label { color: var(--muted); }
+.connection-info-popup .cip-val { font-variant-numeric: tabular-nums; text-align: right; }
+.connection-info-popup .cip-sep { border-top: 1px solid var(--border); margin: 2px 0; }
+
+/* Record toolbar button's own status dot -- hidden (no dot) when idle or
+   paused (paused colors the ⏺ glyph itself instead, see below), bright
+   red+blinking while actively recording, orange+blinking while
+   stopped-but-not-yet-saved (still needs attention: the Stop save prompt
+   was cancelled/failed, see stopRecording). The bottom status bar's own
+   #status-bar-recording-dot mirrors these exact same rules (same colors,
+   same animation) so the two always read as the same state at a glance;
+   it's hidden outright while paused (see syncRecordingMenu), replaced by
+   #status-bar-recording-glyph instead. */
+.recording-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 4px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+#btn-start-recording[data-state="recording"] .recording-dot,
+#status-bar-recording-dot[data-state="recording"] {
+  background: var(--critical);
+  animation: recording-pulse 1.5s ease-in-out infinite;
+}
+#btn-start-recording[data-state="stopped"] .recording-dot,
+#status-bar-recording-dot[data-state="stopped"] {
+  background: var(--warning);
+  animation: recording-pulse 1.5s ease-in-out infinite;
+}
+/* the button's own ⏺ glyph (white/light in dark mode, since it's plain
+   button text) would otherwise sit right next to the red dot, reading as
+   two dots at once -- hidden whenever the dot itself is showing a real
+   state (recording/stopped) so only one is ever visible. Paused is the
+   one exception: the glyph itself becomes the indicator there (solid
+   orange, not blinking -- blinking is reserved for the pause button/status
+   bar glyph below, so only one thing on screen blinks at a time), which
+   is why "paused" isn't in this hide list. */
+#btn-start-recording[data-state="recording"] #recording-glyph,
+#btn-start-recording[data-state="stopped"] #recording-glyph {
+  display: none;
+}
+#btn-start-recording[data-state="paused"] #recording-glyph {
+  color: var(--warning);
+}
+/* Pause button/status-bar pause glyph -- both blink orange while actually
+   paused, so "paused" reads clearly from either without relying solely on
+   the small recording-dot. #pause-glyph stays inside a disabled button
+   while paused (there's nothing left to pause further) -- opacity is
+   restored to 1 here, overriding the shared button:disabled dimming
+   below, since a dimmed "blinking orange" reads as barely-there instead
+   of as the state indicator it's meant to be. */
+#btn-pause-recording[data-state="paused"] {
+  opacity: 1;
+}
+#btn-pause-recording[data-state="paused"] #pause-glyph,
+#status-bar-recording-glyph {
+  color: var(--warning);
+  animation: recording-pulse 1.5s ease-in-out infinite;
+}
+@keyframes recording-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+
+/* #app-body wraps #action-bar + #main-content (the pre-existing #toolbar +
+   #layout) below #menubar. data-dock controls the flex-direction, and since
+   #action-bar is always the first DOM child, row/row-reverse and
+   column/column-reverse alone are enough to put it on any of the four
+   edges without touching the DOM order or #main-content's own CSS at all. */
+#app-body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+#app-body[data-dock="top"] { flex-direction: column; }
+#app-body[data-dock="bottom"] { flex-direction: column-reverse; }
+#app-body[data-dock="left"] { flex-direction: row; }
+#app-body[data-dock="right"] { flex-direction: row-reverse; }
+/* detached: the bar lives in its own window (see action-bar.html) instead */
+#app-body[data-dock="detached"] { flex-direction: row; }
+#app-body[data-dock="detached"] #action-bar { display: none; }
+
+/* Drag to resize the sidebar -- a thin strip between #action-bar and
+   #main-content, positioned correctly for all four dock directions for
+   free: it's the DOM child right after #action-bar, and row/row-reverse/
+   column/column-reverse (the same trick #action-bar's own placement
+   already relies on) puts it on the correct edge without any extra
+   positioning logic. Negative margin lets it overlap #action-bar's own
+   border by a couple px so the drag target isn't razor-thin. */
+#action-bar-splitter {
+  flex: 0 0 auto;
+  background: transparent;
+  position: relative;
+  z-index: 1;
+}
+#action-bar-splitter:hover, #action-bar-splitter.dragging {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+#app-body[data-dock="left"] #action-bar-splitter,
+#app-body[data-dock="right"] #action-bar-splitter {
+  width: 6px;
+  margin: 0 -3px;
+  cursor: col-resize;
+}
+#app-body[data-dock="top"] #action-bar-splitter,
+#app-body[data-dock="bottom"] #action-bar-splitter {
+  height: 6px;
+  margin: -3px 0;
+  cursor: row-resize;
+}
+#app-body[data-dock="detached"] #action-bar-splitter,
+#action-bar[data-collapsed="true"] ~ #action-bar-splitter {
+  display: none;
+}
+
+#main-content {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Dashboard-sidebar + VS Code sidebar hybrid: flat borderless rows with a
+   rounded hover/active fill (no boxed buttons), grouped under small muted
+   uppercase section labels, generous row padding. Horizontal (top/bottom)
+   dock has no room for that list treatment, so rows become rounded pill
+   chips in a wrapping row instead -- section labels are dropped there
+   (the wrap-gap between groups already reads as separation on its own). */
+#action-bar {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  /* top padding matches #toolbar's (3px) so the dock-control row lines up
+     with the main toolbar's row instead of sitting visibly lower. */
+  padding: 3px 10px 10px;
+  background: var(--surface-2);
+  overflow: auto;
+}
+#app-body[data-dock="top"] #action-bar,
+#app-body[data-dock="bottom"] #action-bar {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+#app-body[data-dock="bottom"] #action-bar {
+  border-bottom: none;
+  border-top: 1px solid var(--border);
+}
+#app-body[data-dock="left"] #action-bar,
+#app-body[data-dock="right"] #action-bar {
+  flex-direction: column;
+  width: 210px;
+  border-right: 1px solid var(--border);
+}
+#app-body[data-dock="right"] #action-bar {
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+
+/* Collapsed: shrinks to a thin rail along the dock's own axis (width for
+   left/right, height for top/bottom) -- the cross axis (height/width) still
+   spans the full app-body automatically, same as expanded, since neither
+   state sets it explicitly and flex's default align-items:stretch already
+   does that. Only #ab-collapse-toggle stays visible; everything else
+   (.ab-group sections, the other dock buttons) is hidden outright rather
+   than just scrolled out of view, so there's nothing to accidentally tab
+   into while collapsed. */
+#action-bar[data-collapsed="true"] .ab-group,
+#action-bar[data-collapsed="true"] .ab-dock-btn[data-dock-to] {
+  display: none;
+}
+#action-bar[data-collapsed="true"] {
+  overflow: visible;
+  padding: 3px;
+}
+/* .ab-dock-controls normally bleeds past #action-bar's own side padding to
+   sit flush edge-to-edge (see its own comment) -- that negative-margin trick
+   assumes the wider expanded padding, so it has to be reset here or it'd
+   overshoot the much narrower collapsed rail. */
+#action-bar[data-collapsed="true"] .ab-dock-controls {
+  margin: 0;
+  padding: 0;
+  border-bottom: none;
+  background: none;
+  justify-content: center;
+}
+#app-body[data-dock="left"] #action-bar[data-collapsed="true"],
+#app-body[data-dock="right"] #action-bar[data-collapsed="true"] {
+  width: 28px;
+}
+#app-body[data-dock="top"] #action-bar[data-collapsed="true"],
+#app-body[data-dock="bottom"] #action-bar[data-collapsed="true"] {
+  width: 100%;
+  height: 28px;
+  flex-wrap: nowrap;
+}
+
+/* The row itself is the thing that shrinks (50% less padding around it) --
+   the icons inside stay the same size as icon buttons anywhere else in the
+   app (.icon-btn: 26px box, 17px glyph -- see the panel popout/close
+   buttons in the graph/log panels), so they don't look like a different,
+   miniaturized species of button next to everything else. */
+/* A slim ribbon, not a section: bleeds edge-to-edge past #action-bar's own
+   side/top padding (VS Code's title-bar strip above its file tree is the
+   reference -- a distinct strip, not just the first item in the list) with
+   its own background and a hairline divider, discreetly separating these
+   positioning controls from the actual navigation items below. */
+.ab-dock-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: -3px -10px 4px;
+  padding: 3px 10px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+#app-body[data-dock="left"] .ab-dock-controls,
+#app-body[data-dock="right"] .ab-dock-controls {
+  flex-wrap: wrap;
+}
+.ab-dock-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 17px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+.ab-dock-btn:hover { background: var(--surface-3); color: var(--text-primary); }
+.ab-dock-btn[data-current="true"] { background: var(--surface-3); color: var(--accent); }
+/* detach/"popout" into its own window is a different kind of action than
+   the four position toggles beside it -- set apart at the opposite end of
+   the row instead of grouped in with them. Same size as the rest (see
+   comment above); only its position is different, not its scale. */
+.ab-dock-popout { margin-left: auto; }
+
+.ab-group {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+#app-body[data-dock="left"] .ab-group,
+#app-body[data-dock="right"] .ab-group,
+#action-bar.detached .ab-group {
+  flex-direction: column;
+  padding-top: 6px;
+}
+.ab-dock-controls + .ab-group {
+  padding-top: 0;
+}
+/* About/Quit pinned to the very bottom of the sidebar -- only meaningful in
+   the vertical (left/right/detached) layouts #action-bar itself is a
+   column in; a no-op in the horizontal top/bottom dock, where there's no
+   "bottom" to pin to. */
+.ab-group-bottom { margin-top: auto; }
+
+/* Collapsible sections (Gateway/Sources/Metrics/Preferences): a header
+   button (icon + title + chevron) toggles its .ab-group-body -- collapsed
+   by default (see app.js's sidebar-section toggle), expanding in place
+   rather than as a flyout so the sidebar stays a single scrollable column.
+   Meaningless in the horizontal top/bottom dock (no room for a title,
+   and nothing to collapse into) -- there the header hides and the body's
+   buttons always show, flowing in a row like any other top-level button
+   (see the two overrides below), matching the flat About/Quit buttons'
+   own display there. */
+.ab-group-header {
+  width: 100%;
+  justify-content: flex-start;
+  height: 32px; /* matches the main content's panel heads (#chart-head etc) */
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.ab-group-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ab-group-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex: 0 0 auto;
+}
+/* the custom sidebar icons (Gateway/Sources/Metrics/Preferences) are
+   inlined <svg> with fill="currentColor" -- flat, single-color art rather
+   than the original multi-tone exports, so they pick up --muted normally
+   and invert for free under the :active rule below (no per-icon override
+   needed, unlike .ab-icon's emoji glyphs, which set their own color). */
+.ab-group-icon svg { width: 24px; height: 24px; color: var(--muted); }
+.ab-chevron {
+  margin-left: auto;
+  font-size: 24.75px; /* 175% bigger than the original 9px */
+  color: var(--muted);
+  transition: transform 0.15s ease;
+  /* The ▾ glyph sits low in its own em box (most of the glyph's ink is in
+     the bottom half), which reads as "too low" next to the icon/title it's
+     lined up with -- nudge it up rather than fight the glyph's own metrics. */
+  position: relative;
+  top: -3px;
+}
+.ab-group[data-expanded="true"] .ab-chevron { transform: rotate(180deg); }
+.ab-group-body {
+  display: flex;
+  flex-direction: column;
+}
+/* Sub-items read as nested under their section header: a markedly
+   different (recessed-panel) background from the sidebar's own
+   --surface-2, plus extra left padding shifting the icon+label right --
+   distinguishes them from both the header row above and the flat
+   About/Quit buttons, which get neither. */
+.ab-group-body button {
+  background: var(--surface-1);
+  padding-left: 102px; /* header's own 10px padding + three icon-widths (24px each) + its 8px gap to the label -- shifted one more full icon-step right than before */
+}
+#app-body[data-dock="top"] .ab-group-header,
+#app-body[data-dock="bottom"] .ab-group-header {
+  display: none;
+}
+#app-body[data-dock="top"] .ab-group-body,
+#app-body[data-dock="bottom"] .ab-group-body {
+  display: flex !important;
+  flex-direction: row;
+}
+/* thin, unobtrusive divider between related sub-items in a group body --
+   a hairline rather than a labeled section, so it reads as a soft grouping
+   hint rather than a hard boundary. */
+.ab-sep {
+  background: var(--border);
+  margin: 4px 10px;
+  height: 1px;
+}
+#app-body[data-dock="top"] .ab-sep,
+#app-body[data-dock="bottom"] .ab-sep {
+  width: 1px;
+  height: auto;
+  margin: 4px 0;
+}
+.ab-sep--dotted {
+  background: none;
+  border-top: 1px dotted var(--border);
+  height: 0;
+}
+#app-body[data-dock="top"] .ab-sep--dotted,
+#app-body[data-dock="bottom"] .ab-sep--dotted {
+  border-top: none;
+  border-left: 1px dotted var(--border);
+  width: 0;
+}
+/* the left-shift only reads as "nested under a header" in the vertical
+   sidebar layout -- in the horizontal dock every button sits in one flat
+   row already, so the indent (and the header it'd be relative to) has no
+   meaning there. */
+#app-body[data-dock="top"] .ab-group-body button,
+#app-body[data-dock="bottom"] .ab-group-body button {
+  padding-left: 10px;
+}
+.ab-group button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14.5px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+/* Sub-items (Set Docker Daemon, Remove Docker Daemon, etc.) can carry a
+   longer label than a section header or the flat About/Quit buttons ever
+   do -- those wrap onto a second line rather than clipping or forcing the
+   whole sidebar wider (widening it instead shrinks the chart area, which in
+   a narrow window can push a drag's pixel distance under the 6px
+   zoom-vs-click threshold in timelineUp()). Scoped to .ab-group-body button
+   alone so single-line buttons keep their icon vertically centered against
+   the label instead of top-aligned against a line that never wraps. */
+.ab-group-body button {
+  align-items: flex-start;
+  white-space: normal;
+  text-wrap: balance;
+}
+.ab-group-body button .ab-icon { margin-top: 1px; } /* keeps the icon aligned with the label's first line now that this row start-aligns instead of center */
+.ab-group button:hover { background: var(--surface-3); }
+/* Click feedback: reverse fg/bg instead of the usual accent-tinted hover --
+   applies uniformly to every sidebar button (section headers, their
+   sub-items, and the flat top-level About/Quit buttons alike), so About
+   presses the same way any other top-level item does. currentColor-based
+   children (.ab-group-icon svg, .ab-chevron) invert for free by inheriting
+   this element's color; .ab-icon's emoji glyphs set their own color and so
+   need the explicit override just below. */
+.ab-group button:active {
+  background: var(--text-primary);
+  color: var(--page);
+}
+.ab-group button:active .ab-icon,
+.ab-group button:active .ab-group-icon svg,
+.ab-group button:active .ab-chevron,
+.ab-group button:active .ab-group-title {
+  color: var(--page);
+}
+/* An open section's header stays reversed for as long as it's expanded
+   (not just the momentary :active flash above) -- same fg/bg swap, same
+   child-color overrides, so an open dropdown reads as "open" at a glance. */
+.ab-group[data-expanded="true"] .ab-group-header {
+  background: var(--text-primary);
+  color: var(--page);
+}
+.ab-group[data-expanded="true"] .ab-group-header .ab-icon,
+.ab-group[data-expanded="true"] .ab-group-header .ab-group-icon svg,
+.ab-group[data-expanded="true"] .ab-group-header .ab-chevron,
+.ab-group[data-expanded="true"] .ab-group-header .ab-group-title {
+  color: var(--page);
+}
+.ab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 22.5px;
+  font-variant-emoji: text;
+}
+.ab-icon svg { width: 1em; height: 1em; }
+#app-body[data-dock="left"] .ab-group button,
+#app-body[data-dock="right"] .ab-group button,
+#action-bar.detached .ab-group button {
+  text-align: left;
+  width: 100%;
+}
+
+/* action-bar.html (the detached window) -- no #app-body wrapper there, so
+   it's always laid out like the left/right docked style above. */
+#action-bar.detached {
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* ~30% shorter than the default control sizing: reduced toolbar padding
+   plus toolbar-scoped (not global) button/icon-btn compacting, so the
+   sidebar/dialogs elsewhere keep their normal, more comfortable sizing.
+
+   The various inter-control gaps/margins across the toolbar (see
+   --toolbar-gap/--toolbar-gap-sm, used by .toolbar-section/.toolbar-divider/
+   etc. below) all scale down together as the window narrows, via clamp()
+   against viewport width -- nothing here shrinks the *controls* themselves,
+   only the breathing room between them, so everything (including the
+   right-aligned gateway status pill, the thing most likely to get pushed
+   off the visible edge -- see #toolbar > * { flex-shrink: 0 } below, which
+   deliberately never lets controls themselves shrink/wrap) has a better
+   chance of actually fitting before that clipping kicks in. */
+#toolbar {
+  --toolbar-gap: clamp(3px, 1vw, 10px);
+  --toolbar-gap-sm: clamp(2px, 0.6vw, 8px);
+  display: flex;
+  align-items: center;
+  gap: var(--toolbar-gap);
+  padding: 3px clamp(4px, 1.2vw, 12px);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  flex: 0 0 auto;
+}
+#toolbar button { padding: 2px 9px; }
+#toolbar .icon-btn { width: 20px; height: 20px; padding: 0; }
+#toolbar .icon-btn svg { width: 12px; height: 12px; }
+/* 20% larger than the shared 12px toolbar icon-btn default. */
+#btn-freq-help svg { width: 14.4px; height: 14.4px; }
+/* 45% larger than the shared 12px toolbar icon-btn default. */
+#btn-export-metrics svg { width: 17.4px; height: 17.4px; }
+/* keeps the row a single line under width pressure (many sections competing
+   for space) instead of the flex item shrinking below its text's natural
+   width and wrapping onto a second line, which was inflating the toolbar's
+   height well beyond what the padding/control-size reduction alone shows.
+   No overflow-x here -- it clips the absolutely-positioned gateway
+   dropdown (any overflow-x other than visible forces overflow-y to also
+   clip, per spec), so an overflowing toolbar just extends past the window
+   edge instead of scrolling; an acceptable trade for keeping the dropdown
+   visible. */
+#toolbar { flex-wrap: nowrap; }
+#toolbar > * { flex-shrink: 0; }
+/* #status/#view-range-label read as one right-aligned status cluster --
+   the margin-left:auto belongs on the first of the two (here) so there's
+   a single gap pushing the whole group right, not a second auto margin
+   further along competing for the same leftover space and splitting it
+   into two gaps. */
+#toolbar #status {
+  margin-left: auto;
+  flex-shrink: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Groups the toolbar's Recording/Frequency/Live tracking controls -- the
+   dividers between them are explicit .toolbar-divider elements (see below),
+   not a border on the section itself, so the space on both sides of every
+   divider in the toolbar is the same (10px) rather than however each
+   section's own padding happened to work out. */
+.toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: var(--toolbar-gap-sm, 8px);
+}
+/* Frequency/Live tracking -- Recording (#section-recording) is a DOM
+   sibling, not nested here (see index.html's comment for why), but both are
+   hidden together (see app.js's setLiveHidden) whenever a loaded
+   metric/recording is being viewed, since none of them mean anything
+   without live collection currently being watched. */
+#live-data-group {
+  display: flex;
+  align-items: center;
+}
+/* A thin vertical rule with equal space on both sides -- used between
+   Recording/Frequency/Live tracking, and once more before #status, so
+   every divider in the toolbar reads the same regardless of what's next
+   to it. */
+.toolbar-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 var(--toolbar-gap, 10px);
+}
+/* After the toolbar's mode icon specifically -- drawn as a double dotted
+   vertical line rather than .toolbar-divider's single solid one, so the
+   mode icon reads as its own distinct little unit rather than just another
+   section boundary. */
+.toolbar-mode-divider {
+  width: 4px;
+  align-self: stretch;
+  /* #toolbar's own flex gap (10px) already provides space on each side;
+     the negative margin-left here pulls that down to 6px -- half of the
+     icon's 12px gap from the toolbar's own left edge (see the icon's own
+     margin-left below), so both the "before" and "after" gaps around the
+     icon are equal and both halved from their un-tightened 12px default. */
+  margin: 0 10px 0 -4px;
+  border-left: 1px dotted var(--border);
+  border-right: 1px dotted var(--border);
+}
+/* Toolbar mode indicator, leftmost element: the live.svg-based icon while
+   collecting, swapped for record.svg while viewing a loaded metric/
+   recording (see app.js's setLiveHidden) -- exactly one of the two is ever
+   unhidden at a time. */
+.toolbar-mode-icon {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.toolbar-mode-icon svg { width: 16px; height: 16px; color: var(--text-secondary); }
+/* Flat rounded frame (see .toolbar-mode-divider above for what follows it)
+   -- only in the toolbar; the bottom status bar reuses the same
+   .toolbar-mode-icon markup without this framing. Negative margin-left
+   halves this icon's gap from #toolbar's own left edge padding
+   (12px -> 6px), matching the halved gap on its other side (see
+   .toolbar-mode-divider above) -- scoped to #toolbar specifically so the
+   status bar's copy of this icon is unaffected. */
+#toolbar .toolbar-mode-icon {
+  margin-left: -6px;
+  padding: 5px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+/* A toolbar action that reads as a plain label with an icon, not a boxed
+   button -- background:none/border:none override the shared `button`
+   rule (style.css's own base, which every other toolbar button keeps).
+   Used by #btn-back-to-live so it doesn't compete visually with the real
+   buttons (Record/Pause/Stop/Open) beside it while still being obviously
+   clickable via the accent color + underline-on-hover. */
+.flat-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  color: var(--accent);
+  font: inherit;
+}
+.flat-action:hover, .flat-action:active { background: none; text-decoration: underline; }
+.flat-action-icon { width: 14px; height: 14px; flex: 0 0 auto; }
+/* Segment picker for a loaded multi-segment .cttc-record -- only shown
+   once such a file is active (see app.js's setActiveRecordSections), so
+   it stays out of the way for the common single-segment case. */
+#record-sections {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.ts-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.muted { color: var(--muted); }
+.error { color: var(--critical); }
+.linklike {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 12px;
+}
+.activity-log {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+.ctl { display: inline-flex; align-items: center; gap: 5px; color: var(--text-secondary); }
+.ctl.block { display: flex; margin: 6px 0; }
+/* SSH key's own row/button plus its "(optional...)" hint, stacked tightly
+   underneath the label instead of .ctl.block's default side-by-side
+   row -- keeps the hint visually anchored to the exact controls it's
+   about, not floating as a separate paragraph below everything. */
+.ssh-key-row { flex-wrap: wrap; row-gap: 3px; }
+/* flex-basis: 100% wraps this onto its own line below the label/input/
+   button row above (still the same flex container) instead of sitting
+   beside them, without needing a separate column layout that would also
+   push "SSH key" itself off that row. */
+.ssh-key-hint { flex-basis: 100%; margin: 0; font-size: 11px; }
+/* Fetch/Refresh Sources + Show activity -- a bit more breathing room before
+   the status/error/activity-log area right below. */
+.fetch-row { margin-top: 8px; margin-bottom: 10px; }
+.ctl input[type="number"] { width: 56px; }
+/* Frequency's and Live tracking's number fields only -- just wide enough
+   for two digits plus the native up/down spinner, nothing more. */
+#section-poll .ctl input[type="number"],
+#section-live-track .ctl input[type="number"] { width: 40px; padding-right: 2px; }
+.ctl input[type="text"] { flex: 1; min-width: 240px; }
+.switch-row { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+/* Enable Live tracking's switch + label, and its seconds field, on one row
+   instead of the field sitting alone on the line below. */
+.live-track-enable-row { justify-content: space-between; }
+.switch { position: relative; display: inline-block; flex: 0 0 auto; width: 34px; height: 18px; }
+.switch input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.switch-track {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease;
+}
+.switch input:checked + .switch-track { background: var(--accent); }
+.switch input:checked + .switch-track .switch-thumb { transform: translateX(16px); }
+.switch input:focus-visible + .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* margin-left:auto removed -- #toolbar #status already pushes the tail
+   end right; keeping it here too just left a second, redundant gap. */
+.cursor-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+.cursor-label-icon { width: 12px; height: 12px; flex: 0 0 auto; color: var(--muted); }
+/* 20% larger than the shared 12px cursor-label-icon default. */
+#view-range-label .cursor-label-icon { width: 14.4px; height: 14.4px; }
+
+button {
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 4px 11px;
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+button:hover { background: var(--surface-3); border-color: var(--border-strong); }
+button:active { background: var(--surface-3); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+button.primary:hover { filter: brightness(1.08); background: var(--accent); }
+/* Deliberately a different color from .primary (amber, not accent-blue) --
+   this is the button that actually connects to the daemon and pulls the
+   container/service list everything else in the dialog depends on, so it
+   needs to read as the important one at a glance, not just another action. */
+.btn-fetch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--warning);
+  border-color: var(--warning);
+  color: #1a1200;
+  font-weight: 600;
+}
+.btn-fetch:hover { filter: brightness(1.08); background: var(--warning); }
+.btn-fetch-icon { width: 15px; height: 15px; flex: 0 0 auto; }
+button:disabled, input:disabled { opacity: 0.5; cursor: default; }
+button:disabled:hover { background: var(--surface-2); border-color: var(--border-strong); }
+/* Scissors cursor only over a graph (the thing a capture-mode drag actually
+   acts on) -- everywhere else in capture mode keeps the ordinary pointer,
+   since dragging there wouldn't start a capture. */
+body.sample-armed .strip {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><text x="0" y="22" font-size="22">%E2%9C%82%EF%B8%8F</text></svg>') 4 20, crosshair;
+}
+
+#layout { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+
+#chart-block {
+  /* Rigid 70/30 split with #panels below (flex: 0 0 30%) -- no grow, no
+     shrink, so it stays exactly 70% regardless of content (strip count/
+     height, legend size, live vs. loaded metrics) rather than drifting
+     with whatever's rendered; each side scrolls internally if it needs
+     more room than its fixed share. */
+  flex: 0 0 70%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  padding: 4px 0 2px;
+}
+/* Telemetry (#svc-graph) and Host telemetry (#host-block) -- equal shares
+   of #chart-block's height, each internally scrollable if its own content
+   (e.g. a multi-line legend) would otherwise want more than its half. */
+.graph-block {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.graph-block #legend,
+.graph-block #chart-nav,
+.graph-block #host-nav,
+.graph-block #chart-head,
+.graph-block #host-head,
+.graph-block #host-loading,
+.graph-block .panel-head-divider {
+  flex: 0 0 auto;
+}
+.graph-block #charts,
+.graph-block #host-charts {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+#empty-state { padding: 28px 16px; text-align: center; }
+
+/* Experimental: a light divider between the telemetry header (title +
+   buttons) and the list of containers below it. */
+.panel-head-divider {
+  width: 100%;
+  height: 1px;
+  margin-bottom: 6px;
+  background: var(--border);
+}
+
+#chart-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  height: 32px; /* matches the sidebar's .ab-group-header */
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+#legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 2px 12px 4px;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  user-select: none;
+}
+.legend-item.off { opacity: 0.35; }
+.legend-item.disabled { opacity: 0.55; cursor: context-menu; }
+.legend-item.disabled .legend-swatch { opacity: 0.5; }
+.legend-item.sample .legend-swatch { border: 1px dashed var(--text-secondary); background-clip: padding-box; }
+.legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
+#sample-files {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px dashed var(--border);
+}
+.sample-file-row { gap: 8px; font-size: 12px; }
+.legend-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.legend-chip:hover { border-color: var(--accent); color: var(--text-secondary); }
+
+#ctxmenu {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+#ctxmenu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+}
+#ctxmenu button:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+#ctxmenu button:disabled:hover { background: none; }
+#ctxmenu button:focus-visible { background: color-mix(in srgb, var(--accent) 12%, transparent); outline: none; }
+/* Mutually-exclusive choices (e.g. a sort direction) mark their active
+   entry via ctxMenu's optional 4th tuple element -- same "selected" look
+   as .seg-control button[data-active="true"]. */
+#ctxmenu button[data-active="true"] { background: var(--accent); color: #fff; }
+#ctxmenu button[data-active="true"] .ctxmenu-icon { color: #fff; }
+/* Divider between groups of entries (see ctxMenu's "separator" sentinel) --
+   same look as .gateway-dropdown's own .gateway-item-sep. */
+.ctxmenu-sep { border-top: 1px solid var(--border); margin: 2px 4px; }
+/* Entries that pass an icon (see ctxMenu's optional 3rd tuple element) --
+   either reuses whichever action-bar button's own .ab-icon markup it was
+   given, or a raw inline SVG for an entry with no button to clone from;
+   just sized down for a menu row instead of the sidebar. */
+.ctxmenu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+.ctxmenu-icon svg { width: 14px; height: 14px; }
+
+#charts { position: relative; }
+.strip { display: block; width: 100%; cursor: crosshair; }
+
+/* a scrollbar-style navigator: the track spans the entire width of the
+   graph panel, the thumb shows the current view as a fraction of the whole
+   available time range, and "now" sits fixed in the middle as a click
+   target to re-center on the present. Not a button row. */
+.timeline-nav { padding: 3px 12px 5px; }
+.tl-track {
+  position: relative;
+  height: 14px;
+  width: 100%;
+  border-radius: 7px;
+  background: var(--grid);
+  cursor: pointer;
+}
+.tl-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  min-width: 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  border: 1px solid var(--accent);
+  cursor: grab;
+}
+.tl-thumb:active { cursor: grabbing; }
+.tl-now-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  pointer-events: auto;
+}
+.tl-now-label[data-live="true"] { color: var(--accent); }
+.tl-now-label[data-live="false"]::after { content: " \25c0"; }
+
+#lanes-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px; /* matches the sidebar's .ab-group-header */
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+#lanes { padding-top: 2px; }
+/* Hidden outright, regardless of the toggle/prefs state -- a real,
+   documented feature (per-log-source event-density overview strip), just
+   not one anybody actually uses in practice. Kept dormant here (JS/backend
+   left intact) rather than torn out, so it's a one-line revert if that
+   changes rather than a full re-implementation. */
+#lanes-head, #lanes { display: none !important; }
+
+#host-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  height: 32px; /* matches the sidebar's .ab-group-header */
+  padding: 0 12px;
+  border-top: 2px solid var(--border); /* doubled -- the separator between the svc and host telemetry panels */
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+#host-loading { padding: 20px 16px; text-align: center; }
+.hourglass {
+  display: inline-block;
+  animation: hourglass-flip 1.4s ease-in-out infinite;
+  transform-origin: 50% 55%;
+}
+@keyframes hourglass-flip {
+  0%, 40% { transform: rotate(0deg); }
+  60%, 100% { transform: rotate(180deg); }
+}
+
+/* hide/pop-out style buttons always cluster at the far right of their panel
+   header, regardless of which of them are hidden. */
+.panel-head-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* Telemetry/host-telemetry headers (#chart-head, #host-head): title
+   centered regardless of button-cluster width, button cluster on
+   whichever side the OS's own window-control buttons are actually on
+   (see app.js's controlsSide) -- same rule as the log panel header's
+   icon cluster, just with no hamburger to occupy the other column.
+   Both get an explicit grid-row: 1 -- items placed with an explicit
+   column but no explicit row don't reliably auto-place into the same
+   row (the sparse-packing cursor can advance past row 1 for the second
+   one), so without this they silently land in two separate implicit
+   rows instead of sharing the header's one row. */
+.panel-head-title { grid-column: 2; grid-row: 1; justify-self: center; }
+#chart-head .panel-head-right,
+#host-head .panel-head-right {
+  grid-row: 1;
+  /* the grid's justify-self (below) positions the cluster instead of
+     the auto-margin trick .panel-head-right's base rule above relies on
+     for the flex-based log panel header. */
+  margin-left: 0;
+}
+body.controls-left #chart-head .panel-head-right,
+body.controls-left #host-head .panel-head-right {
+  grid-column: 1;
+  justify-self: start;
+}
+body.controls-right #chart-head .panel-head-right,
+body.controls-right #host-head .panel-head-right {
+  grid-column: 3;
+  justify-self: end;
+}
+
+#splitter {
+  flex: 0 0 5px;
+  cursor: row-resize;
+  background: transparent;
+}
+#splitter:hover, #splitter.dragging { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* windows for a panel popped out on its own: show only the relevant part.
+   popout-telemetry and popout-series hide the exact same set -- a single
+   series popout is just telemetry-style layout with one series only. */
+body.popout-telemetry #panels,
+body.popout-telemetry #splitter,
+body.popout-telemetry #btn-set,
+body.popout-telemetry #btn-load-sample,
+body.popout-telemetry #btn-clear-sources,
+body.popout-telemetry #recording-transport,
+body.popout-telemetry #btn-open-recording,
+body.popout-telemetry #host-block,
+body.popout-series #panels,
+body.popout-series #splitter,
+body.popout-series #btn-set,
+body.popout-series #btn-load-sample,
+body.popout-series #btn-clear-sources,
+body.popout-series #recording-transport,
+body.popout-series #btn-open-recording,
+body.popout-series #host-block {
+  display: none;
+}
+body.popout-log #chart-block,
+body.popout-log #splitter {
+  display: none;
+}
+body.popout-log #panels { flex: 1 1 auto; }
+
+/* popouts show only their one panel -- the full action bar (Set Sources,
+   gateway management, etc.) doesn't belong in that minimal chrome */
+body[class*="popout-"] #action-bar { display: none; }
+
+/* a host-only popout: show just the host panel, full-size. */
+body.popout-host #legend,
+body.popout-host #charts,
+body.popout-host #chart-nav,
+body.popout-host #lanes-head,
+body.popout-host #lanes,
+body.popout-host #empty-state,
+body.popout-host #panels,
+body.popout-host #splitter,
+body.popout-host #btn-set,
+body.popout-host #btn-load-sample,
+body.popout-host #btn-clear-sources,
+body.popout-host #recording-transport,
+body.popout-host #btn-open-recording,
+body.popout-host #btn-popout-telemetry,
+body.popout-host #btn-style-toggle-svc {
+  display: none;
+}
+
+.btn-group { display: inline-flex; }
+.btn-group button { border-radius: 0; margin-left: -1px; }
+.btn-group button:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); margin-left: 0; }
+.btn-group button:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+/* segmented control: both options always visible/enabled (unlike a switch,
+   which reads one side as "off"), the active one highlighted instead. */
+.seg-control button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.seg-control button[data-active="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.seg-icon { width: 13px; height: 13px; flex: 0 0 auto; }
+.lane-canvas { flex: 1 1 auto; display: block; cursor: crosshair; }
+
+#panels {
+  /* Fixed 30% share -- see #chart-block's own comment; the popout-log
+     override below still gives this the full height when #chart-block
+     itself is hidden entirely. */
+  flex: 0 0 30%;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  min-height: 0;
+  overflow-x: auto;
+}
+.panel {
+  flex: 1 1 0;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  min-height: 0;
+}
+.panel-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+/* 3 columns, the outer two equal (1fr) -- keeps the center column (the
+   name) truly centered no matter how wide the hamburger vs. the right
+   icon cluster is, instead of drifting toward whichever side is lighter. */
+.panel-head-top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.panel-head-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0; /* lets the name ellipsis instead of forcing the center column wide */
+  max-width: 100%;
+}
+/* When the OS's own window-control buttons sit on the left (see app.js's
+   controlsSide detection), Panel swaps which zone occupies which grid
+   column -- .panel-head-right's own margin-left:auto and
+   .panel-menu-btn's default grid "start" alignment are both tied to a
+   fixed assumption about which column they occupy, so both need an
+   explicit override here regardless of which zone actually moved. */
+body.controls-left .panel-head-top > .panel-head-right {
+  margin-left: 0;
+  margin-right: auto;
+}
+body.controls-left .panel-head-top > .panel-menu-btn {
+  justify-self: end;
+}
+.panel-head-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.panel-head .name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sample-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border: 1px dashed var(--muted);
+  border-radius: 8px;
+  color: var(--muted);
+}
+.icon-btn,
+.panel-head .close {
+  border: none;
+  padding: 0;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 6px;
+  flex: 0 0 auto;
+}
+.icon-btn svg { width: 14px; height: 14px; }
+.icon-btn:hover,
+.panel-head .close:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: transparent;
+}
+/* shared "flat" treatment for Bring Back (popback) and the detached
+   action bar's own Bring Back -- these navigate/dismiss, they aren't a
+   primary action, so no boxed button look (border/fill), just an icon+text
+   row like the sidebar's own list items. */
+.btn-flat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-flat:hover { background: var(--surface-3); color: var(--text-primary); }
+.btn-flat-icon { width: 14px; height: 14px; flex: 0 0 auto; }
+.panel-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  background: var(--surface-1);
+  color: inherit;
+}
+.panel-search .search-status { white-space: nowrap; font-size: 11px; }
+.log-row.search-hit { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.panel-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  position: relative;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+.panel-spacer { position: absolute; inset: 0 auto auto 0; width: 1px; }
+.panel-empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 16px;
+  color: var(--critical);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+.log-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 22px;
+  line-height: 22px;
+  padding: 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.log-row:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.log-row.hl { background: var(--hl); }
+/* Live tracking's own auto-click highlight (see setCursor's liveTrack
+   option) -- same shape as .hl above, but liveTrackColor instead of the
+   ordinary selection highlight color, so it reads as distinct. */
+.log-row.hl-live { background: var(--live-track); }
+/* dotted boundary marking the top/bottom edge of a contiguous run of
+   highlighted log entries (see the .hl-top/.hl-bottom logic in app.js) */
+.log-row.hl-top { border-top: 2px dashed var(--hl-color); }
+.log-row.hl-bottom { border-bottom: 2px dashed var(--hl-color); }
+.log-row.hl-live.hl-top { border-top: 2px dashed var(--live-track-color); }
+.log-row.hl-live.hl-bottom { border-bottom: 2px dashed var(--live-track-color); }
+.log-row.cursor-row { border-left-color: var(--accent); }
+.log-row.selected { outline: 1px solid var(--accent); outline-offset: -1px; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.log-row .ts { color: var(--muted); margin-right: 6px; }
+.log-row.lvl-error { border-left-color: var(--critical); }
+.log-row.lvl-warn { border-left-color: var(--warning); }
+
+#tooltip {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 6px 9px;
+  font-size: 11px;
+  max-width: 340px;
+}
+#tooltip .tt-time { color: var(--text-secondary); margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+#tooltip .tt-row { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+#tooltip .tt-row .legend-swatch { flex: 0 0 auto; }
+#tooltip .tt-val { margin-left: auto; padding-left: 12px; }
+
+#hint {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 4px 8px;
+  font-size: 11px;
+  max-width: 280px;
+  color: var(--text-primary);
+}
+
+dialog {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  min-width: 460px;
+  max-width: 620px;
+}
+dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
+dialog h2 { margin: 0 0 10px; font-size: 15px; }
+
+/* Settings/Preferences, combined -- a macOS System Settings-style layout:
+   a narrow pane list on the left, the selected pane's fields on the right.
+   See app.js's selectPreferencesPane for how .mac-settings-item[data-active]
+   and .mac-settings-pane[hidden] get toggled. */
+#dlg-preferences {
+  padding: 0;
+  min-width: 620px;
+  max-width: 760px;
+  overflow: hidden;
+}
+.mac-settings {
+  display: flex;
+  align-items: stretch;
+  /* Height follows content (however many fieldsets the selected pane has),
+     not a fixed value -- max-height is just a ceiling so a pane with a lot
+     of controls scrolls instead of pushing the dialog off-screen. */
+  max-height: 80vh;
+}
+.mac-settings-sidebar {
+  flex: 0 0 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 8px;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+/* Not wired up yet (see index.html's comment) -- same visual weight as a
+   .mac-settings-item so it reads as part of the same list, not a stray
+   control floating above it. */
+.mac-settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--muted);
+}
+.mac-settings-search svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.mac-settings-sidebar-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.mac-settings-sidebar-label svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.mac-settings-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.mac-settings-item-icon { display: inline-flex; flex: 0 0 auto; }
+.mac-settings-item-icon svg { width: 15px; height: 15px; }
+.mac-settings-item:hover { background: var(--surface-3); }
+.mac-settings-item[data-active="true"] { background: var(--accent); color: #fff; }
+.mac-settings-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 20px 22px;
+  overflow-y: auto;
+}
+/* The selected pane's own header, right above its fields -- same icon and
+   name as its .mac-settings-item on the left, so the two always read as
+   the same thing. */
+.mac-settings-pane-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mac-settings-pane-title svg { width: 18px; height: 18px; flex: 0 0 auto; color: var(--text-secondary); }
+.mac-settings-pane .dlg-actions { margin-top: 16px; }
+#docker-targets { max-height: 180px; overflow-y: auto; margin-top: 8px; }
+#docker-targets label { display: block; padding: 1px 0; }
+#docker-targets label.unavailable { opacity: 0.75; }
+#docker-targets label.unavailable .tdoc { color: var(--critical); }
+#docker-targets .mark { display: inline-block; width: 1.4em; text-align: center; }
+.tdoc { color: var(--muted); }
+#docker-targets .group { font-weight: 600; margin-top: 6px; color: var(--text-secondary); cursor: pointer; user-select: none; }
+#docker-targets .group:hover { color: var(--text-primary); }
+#transforms-box { border: 1px solid var(--border); border-radius: var(--radius-md); margin: 8px 0; }
+#transforms-box legend { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-secondary); padding: 0 4px; }
+.legend-icon { width: 15px; height: 15px; flex: 0 0 auto; }
+.dlg-intro { margin: 10px 0 6px; font-size: 12px; }
+.dlg-section { border: 1px solid var(--border); border-radius: var(--radius-md); margin: 10px 0; padding-bottom: 2px; }
+.dlg-section legend { display: flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600; color: var(--text-primary); padding: 0 4px; }
+.dlg-section-help { margin: 0 0 8px; font-size: 11.5px; }
+#transforms-list label { display: block; padding: 1px 0; color: var(--text-primary); }
+#transforms-list .tdoc { color: var(--muted); }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+
+/* Opened Metrics (#dlg-opened-data) -- same look/hover convention as
+   .gateway-dropdown's .gateway-item, but a static in-dialog list rather
+   than a floating popup, and each row carries its own Remove button
+   instead of a single shared action bar. */
+.opened-data-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+}
+.opened-data-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.opened-data-row:hover { background: var(--accent); color: #fff; }
+.opened-data-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opened-data-row[data-active="true"] .opened-data-row-name::after {
+  content: "● active";
+  font-weight: 400;
+  font-size: 10px;
+  margin-left: 6px;
+  color: #2ecc71;
+}
+.opened-data-row:hover .opened-data-row-name::after { color: inherit; }
+.opened-data-row-remove {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.opened-data-row:hover .opened-data-row-remove { background: var(--surface-1); }
+.opened-data-empty { padding: 6px 8px; font-size: 12px; color: var(--muted); }
+
+#dlg-snapshot { min-width: 560px; max-width: 760px; }
+#snapshot-view-switch { margin: 8px 0 6px; }
+.snapshot-body {
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+pre.snapshot-body {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.snapshot-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+.snapshot-table th, .snapshot-table td {
+  text-align: left;
+  padding: 2px 8px 2px 0;
+  font-variant-numeric: tabular-nums;
+}
+.snapshot-table th { color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+.snapshot-slice-head {
+  font-weight: 700;
+  margin: 10px 0 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+.snapshot-slice-head:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+.snapshot-log-head { font-weight: 600; color: var(--text-secondary); margin: 6px 0 2px; }
+.snapshot-log-row {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* settings dialog fieldsets (remote connection, update server image) */
+.keys-box { border: 1px solid var(--border); border-radius: var(--radius-md); margin: 8px 0; }
+/* "Ship logs" (Settings > Collect CTTC Own Logs): icon-only button, aligned
+   with the toggle/status row, no label text -- title="Ship logs" on hover is
+   the only affordance, same as the frequency "?" help button elsewhere. */
+.log-collect-row { display: flex; width: 100%; justify-content: space-between; }
+.keys-box .radio-row { display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 4px 0; }
+.keys-box .radio-row input { width: auto; }
+.keys-box legend { font-size: 12px; color: var(--text-secondary); padding: 0 4px; }
+.danger-zone { border-color: var(--critical); }
+.danger-zone legend { color: var(--critical); }
+.btn-danger {
+  background: var(--critical);
+  color: #fff;
+  border: 1px solid var(--critical);
+}
+.btn-danger:hover { background: color-mix(in srgb, var(--critical) 85%, black); }
+.keys-box input[type="text"] { flex: 1; min-width: 200px; }
+.keys-box textarea {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  margin: 6px 0;
+}
+
+/* #dlg-redis-cli -- output pane matches .panel-body's monospace log
+   styling, just not virtualized (a transcript, not a large scrollable
+   log). Input row matches .panel-search's flex-grow-input pattern. */
+#dlg-redis-cli { min-width: 560px; max-width: 720px; }
+.redis-cli-output {
+  min-height: 260px;
+  max-height: 50vh;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-top: 6px;
+}
+.redis-cli-input-row { display: flex; gap: 8px; margin-top: 8px; }
+.redis-cli-input-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  background: var(--surface-1);
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* gateway-setup.html (New Gateway / Edit Gateways -- a standalone page, not
+   a <dialog>, so it needs its own top-level layout) -- everything else
+   (labels/inputs via .ctl/.ctl.block, .keys-box fieldsets, .radio-row,
+   .muted/.error/.linklike/.activity-log, .dlg-actions, h2/.dlg-intro) reuses
+   the exact same rules as #dlg-gateway-setup (index.html's in-app version of
+   this same form) so the two look and behave identically -- this page is
+   just that dialog's content poured into a standalone window instead of a
+   <dialog> element, for the pre-main-window first-run case. */
+/* Scroll safety net, scoped to only this page (never the main window,
+   which manages its own internal scroll regions) via :has() -- a taller
+   form, a larger OS font scale, or a small display can still reach content
+   via scroll instead of silently clipping it. */
+body:has(#gateway-setup) { overflow-y: auto; background: var(--surface-1); }
+/* same card tone and width as the dialog it mirrors (dialog's own
+   min/max-width above), centered rather than left-edge-anchored since there's
+   no surrounding page chrome here to anchor against. */
+#gateway-setup { margin: 22px auto; padding: 0 20px 48px; max-width: 620px; }
+#gateway-setup h2 { margin: 0 0 10px; font-size: 15px; }
+.wait { text-align: center; margin-top: 40px; }
+.spinner {
+  width: 32px; height: 32px; margin: 0 auto 12px;
+  border: 3px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#activity {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 25%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  padding: 6px 16px;
+  box-sizing: border-box;
+}
+#activity .linklike { padding: 4px 0; align-self: flex-start; }
+#activity .activity-log { max-height: calc(25vh - 36px); min-height: 60px; }
+
+/* Slim status bar (Appearance > Status bar) reporting when an event is
+   created or fires -- separate from #status in the toolbar (which is for
+   ordinary action feedback like "metrics saved"), since events can report
+   from a background poll with nobody having just clicked anything. Plain
+   flow, not fixed -- sits as the last item in body's flex column, below
+   #app-body, so it never overlaps #activity's own fixed overlay. */
+.app-status-bar {
+  position: relative; /* anchors .status-bar-history-popup, springing up from the History button */
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+}
+/* Frames the Gateway/Docker Host pills (relocated here from the top
+   toolbar) as their own distinct little unit just left of History --
+   single bar before, double bar after, so the boundary with the free-
+   form status text on one side and History on the other both read
+   clearly. */
+.status-bar-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+}
+.status-bar-divider-double {
+  width: 4px;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: none;
+}
+/* The pills' own :hover/.open background (--surface-2) matches this bar's
+   background exactly -- invisible without this override. Their dropdown/
+   popup default to opening *below* (top: 100%, the correct direction in
+   the top toolbar they used to live in); down here at the bottom of the
+   window that would run off-screen, so they spring *up* instead, same as
+   .status-bar-history-popup already does. */
+.app-status-bar .server-status-btn:hover,
+.app-status-bar .server-status.open .server-status-btn {
+  background: var(--surface-3);
+}
+.app-status-bar .gateway-dropdown,
+.app-status-bar .connection-info-popup {
+  top: auto;
+  bottom: 100%;
+  margin-bottom: 6px;
+}
+#app-status-bar-text {
+  flex: 1 1 auto;
+  min-width: 0; /* lets it actually shrink/ellipsize instead of pushing History off the row */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* "capture mode ✂️" while Capture metrics is armed -- see setSampleArmed. */
+.status-bar-blink { animation: status-bar-blink 1s step-start infinite; }
+@keyframes status-bar-blink { 50% { opacity: 0; } }
+
+/* History button (right edge of the status bar) + its popup -- same icon
+   as the Logs section of Set/Update Docker Host (see .legend-icon), same
+   floating-card chrome as .connection-info-popup, but anchored to spring
+   up from the bottom-right (bottom: 100%) instead of dropping down, and
+   with an .activity-log-style scrollable body so it reads like the other
+   "logs windows" (Show activity, transforms doc, etc.) rather than a
+   one-off design. */
+.status-bar-history-btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.status-bar-history-btn:hover { color: var(--text-primary); }
+.status-bar-history-btn svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.status-bar-history-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: absolute;
+  bottom: 100%;
+  right: 12px;
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  z-index: 50;
+}
+.status-bar-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.status-bar-history-list {
+  margin: 0;
+  max-height: 45vh;
+}
+.status-bar-history-row { display: flex; gap: 8px; }
+.status-bar-history-row .sbh-ts { flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.status-bar-history-empty { color: var(--muted); }
