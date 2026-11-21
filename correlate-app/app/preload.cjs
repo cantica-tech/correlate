@@ -2,7 +2,8 @@
 
 /**
  * Preload bridge: the only path between the sandboxed renderer and the main
- * process. It exposes `window.correlate.sump`, the renderer's only way to a
+ * process. It exposes `window.correlate.theme` (`get()`, `set()`: the theme
+ * choice, REQ-000018-sJpO9KMY) and `window.correlate.sump`, the renderer's only way to a
  * Sump (br-CONN-000008-sJpO9KMY): `active()` says which Sump this window is
  * on (br-SUMP-000010-sJpO9KMY), `states()` and `onState()` read the Sumps'
  * lifecycle states, never set them (br-SUMP-000011-sJpO9KMY), `plan()` and
@@ -33,8 +34,17 @@ const REPLACE_KEY_CHANNEL = "sump:replaceKey";
 const SWITCH_CHANNEL = "sump:switch";
 const UNINSTALL_CHANNEL = "sump:uninstall";
 const AUDIT_CHANNEL = "sump:audit";
+/** Must match the channels in `main/src/theme.ts`. */
+const THEME_GET_CHANNEL = "theme:get";
+const THEME_SET_CHANNEL = "theme:set";
 
 contextBridge.exposeInMainWorld("correlate", {
+  theme: {
+    /** The theme choice: "system", "light" or "dark". */
+    get: () => ipcRenderer.invoke(THEME_GET_CHANNEL),
+    /** Change the theme everywhere, remembered across runs (REQ-000018-sJpO9KMY). */
+    set: (mode) => ipcRenderer.invoke(THEME_SET_CHANNEL, mode),
+  },
   sump: {
     /** This window's active Sump, `{ id, name, kind }`, or null. */
     active: () => ipcRenderer.invoke(SUMP_ACTIVE_CHANNEL),

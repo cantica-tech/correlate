@@ -14,12 +14,13 @@
  * `docs/roadmap/correlate-app-rewrite.md`. CommonJS, as in cttc and
  * correlator, because Electron's own module loads most reliably this way.
  */
-const { app, BrowserWindow, ipcMain, safeStorage } = require("electron");
+const { app, BrowserWindow, ipcMain, nativeTheme, safeStorage } = require("electron");
 const path = require("node:path");
 const {
   ActiveSumps,
   Auditor,
   connectSsh,
+  defaultSettingsPath,
   Forwards,
   HealthProbe,
   Lifecycle,
@@ -29,9 +30,11 @@ const {
   openVault,
   registerProvisionIpc,
   registerSumpIpc,
+  registerThemeIpc,
   runCommand,
   reloginWith,
   SessionTokens,
+  Settings,
   startForwards,
 } = require("./main/dist/main.cjs");
 
@@ -59,6 +62,12 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // The theme first, so no window paints in the wrong one (REQ-000018).
+  const settings = new Settings(defaultSettingsPath(process.env));
+  nativeTheme.themeSource = settings.themeMode();
+  registerThemeIpc(ipcMain, settings, (mode) => {
+    nativeTheme.themeSource = mode;
+  });
   // Session tokens live in memory only: quitting forgets them (br-CONN-000004).
   // A refused token is renewed by logging in with the vault's SSH key
   // (br-CONN-000007).

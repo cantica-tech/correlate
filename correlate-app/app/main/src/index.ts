@@ -33,6 +33,7 @@ export { connectSsh } from "./provision/ssh.js";
 export { logout } from "./sump/client.js";
 export { registerSumpIpc, SUMP_STATE_EVENT } from "./sump/ipc.js";
 export { login } from "./sump/login.js";
+export { defaultSettingsPath, registerThemeIpc, Settings } from "./theme.js";
 export { ActiveSumps, Forwards, HealthProbe, Lifecycle, SessionTokens };
 
 /** The Sump's default address (server/src/correlate_sump/__main__.py). */

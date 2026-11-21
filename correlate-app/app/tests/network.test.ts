@@ -136,7 +136,14 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
         request: (m: unknown) => Promise<unknown>;
       };
     };
-    expect(Object.keys(api)).toEqual(["sump"]);
+    expect(Object.keys(api)).toEqual(["theme", "sump"]);
+    const theme = (
+      exposed.correlate as { theme: Record<string, (m?: unknown) => Promise<unknown>> }
+    ).theme;
+    expect(Object.keys(theme)).toEqual(["get", "set"]);
+    await theme.get?.();
+    await theme.set?.("dark");
+    expect(invoked.splice(0)).toEqual([["theme:get"], ["theme:set", "dark"]]);
     expect(Object.keys(api.sump)).toEqual([
       "active",
       "states",
