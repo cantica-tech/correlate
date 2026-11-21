@@ -26,7 +26,7 @@ const SOURCES = path.resolve(APP, "../../..");
 const CTTC = path.join(SOURCES, "cttc/app/renderer");
 const CORRELATOR = path.join(SOURCES, "icons/correlator");
 
-/** The correlator set: file → icon name (FEAT-000020-sJpO9KMY). */
+/** The correlator set: file → icon name (FEAT-000020-sJpO9KMY). @type {Record<string, string>} */
 const CORRELATOR_NAMES = {
   "sump.svg": "sump",
   "data-stream.svg": "data-stream",
@@ -47,6 +47,7 @@ export const COLORED = new Set(["correlator-app"]);
  * correlator set takes its place (FEAT-000020-sJpO9KMY). A shape not listed
  * stops the import, so every new cttc icon is named by hand.
  */
+/** @type {Record<string, string | null>} */
 const CTTC_SHAPES = {
   "4bacdf": null, // Gateway group: the correlator `sump`.
   "72fd1e": null, // Docker Host group: the correlator `data-stream`.
@@ -86,12 +87,16 @@ const CTTC_SHAPES = {
   "4e840d": "settings-action",
 };
 
-/** The shape key of an SVG. */
+/** The shape key of an SVG. @param {string} svg */
 function shapeOf(svg) {
   return createHash("sha1").update(svg.replace(/\s+/g, "")).digest("hex").slice(0, 6);
 }
 
-/** A clean SVG: see the module comment. */
+/**
+ * A clean SVG: see the module comment.
+ * @param {string} svg
+ * @param {string} name
+ */
 export function clean(svg, name) {
   let s = svg
     .replace(/<\?xml[^>]*\?>/g, "")
@@ -105,6 +110,8 @@ export function clean(svg, name) {
       /\s(?:id|data-name|enable-background|version|xml:space|class|style|x|y)="[^"]*"(?=[^<]*>)/g,
       (m) => (/\sstyle="/.test(m) ? m : m.startsWith(" id=") && COLORED.has(name) ? m : ""),
     );
+  // Illustrator's `enable-background` is no CSS property; drop it, and any style left empty.
+  s = s.replace(/enable-background\s*:[^;"]*;?/g, "").replace(/\sstyle="\s*"/g, "");
   if (!COLORED.has(name)) {
     s = s
       .replace(/\s(fill|stroke)="(?!none")[^"]*"/g, ' $1="currentColor"')
@@ -152,12 +159,15 @@ function cttcInline() {
   return found;
 }
 
+/** @param {boolean} dryRun */
 function importAll(dryRun) {
   if (!existsSync(CTTC) || !existsSync(CORRELATOR)) {
     throw new Error(`--import needs ${CTTC} and ${CORRELATOR} checked out`);
   }
+  /** @type {Record<string, string>} */
   const sources = {};
   const seen = new Map();
+  /** @param {string} name @param {string} svg @param {string} where */
   const write = (name, svg, where) => {
     const body = clean(svg, name);
     const hash = createHash("sha256").update(body).digest("hex");

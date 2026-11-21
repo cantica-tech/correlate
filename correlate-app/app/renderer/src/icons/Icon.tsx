@@ -17,15 +17,24 @@ export interface IconProps {
 }
 
 export function Icon({ name, label, className }: IconProps) {
-  const svg = label ? ICONS[name].replace(' aria-hidden="true"', "") : ICONS[name];
+  const classes = className ? `icon ${className}` : "icon";
+  if (label) {
+    return (
+      <span
+        className={classes}
+        role="img"
+        aria-label={label}
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: the markup is the app's own committed, cleaned icon files, held clean by icons.test.ts.
+        dangerouslySetInnerHTML={{ __html: ICONS[name].replace(' aria-hidden="true"', "") }}
+      />
+    );
+  }
   return (
     <span
-      className={className ? `icon ${className}` : "icon"}
-      role={label ? "img" : undefined}
-      aria-label={label}
-      aria-hidden={label ? undefined : true}
+      className={classes}
+      aria-hidden={true}
       // biome-ignore lint/security/noDangerouslySetInnerHtml: the markup is the app's own committed, cleaned icon files, held clean by icons.test.ts.
-      dangerouslySetInnerHTML={{ __html: svg }}
+      dangerouslySetInnerHTML={{ __html: ICONS[name] }}
     />
   );
 }
