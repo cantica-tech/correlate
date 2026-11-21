@@ -1,0 +1,67 @@
+<!doctype html>
+<!--
+  cttc's side of the parity checks (REQ-000020-sJpO9KMY Requirement 2): cttc's
+  own markup (from its app/renderer/index.html at d8a444b, or built from its
+  classes where cttc made it in code) under cttc's own style.css, a verbatim
+  copy. Each fixture has the same name on our page, page/ours.tsx.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'none'" />
+    <title>cttc</title>
+    <link rel="stylesheet" href="../cttc/style.reference.css" />
+    <link rel="stylesheet" href="harness.css" />
+  </head>
+  <body>
+    <div class="stage">
+      <div class="fixture" data-fixture="button-default"><button>Close</button></div>
+      <div class="fixture" data-fixture="button-primary"><button class="primary">Save</button></div>
+      <div class="fixture" data-fixture="button-danger"><button class="btn-danger">Uninstall…</button></div>
+      <div class="fixture" data-fixture="button-disabled"><button disabled>Close</button><button class="btn-danger" disabled>Delete</button></div>
+      <!-- index.html:333 -->
+      <div class="fixture" data-fixture="button-fetch"><button id="btn-ps-refresh" class="btn-fetch" title="Lists containers/services running on this target's docker daemon right now"><svg class="btn-fetch-icon" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><circle cx="346" cy="407" r="15"/><circle cx="286" cy="407" r="15"/><circle cx="226" cy="407" r="15"/><circle cx="166" cy="407" r="15"/><path d="m497 332h-377v-121h15c8.284 0 15-6.716 15-15s-6.716-15-15-15h-45v-45c0-8.284-6.716-15-15-15s-15 6.716-15 15v45h-30v-45c0-8.284-6.716-15-15-15s-15 6.716-15 15v331c0 8.284 6.716 15 15 15h60c8.271 0 15 6.729 15 15 0 8.284 6.716 15 15 15h302c3.979 0 7.794-1.581 10.606-4.394 2.814-2.813 4.394-6.628 4.394-10.606 0-18.187 11.685-28.685 32.338-45.672 25.689-21.132 57.662-47.431 57.662-104.328 0-8.284-6.716-15-15-15zm-467 0v-121h60v121zm405.279 96.159c-17.837 14.672-36.183 29.761-41.649 53.841h-276.2c-6.19-17.461-22.873-30-42.43-30h-45v-90h450.97c-4.687 32.432-24.679 48.875-45.691 66.159z"/><path d="m497 90h-55.458l-79.542-53.028v-21.972c0-8.284-6.716-15-15-15s-15 6.716-15 15v21.972l-79.542 53.028h-55.458c-8.284 0-15 6.716-15 15v180c0 8.284 6.716 15 15 15h300c8.284 0 15-6.716 15-15v-180c0-8.284-6.716-15-15-15zm-150-26.972 40.458 26.972h-80.917zm135 206.972h-270v-150h270z"/><path d="m257 150c-8.284 0-15 6.716-15 15v60c0 8.284 6.716 15 15 15s15-6.716 15-15v-60c0-8.284-6.716-15-15-15z"/><path d="m317 150c-8.284 0-15 6.716-15 15v60c0 8.284 6.716 15 15 15s15-6.716 15-15v-60c0-8.284-6.716-15-15-15z"/><path d="m377 150c-8.284 0-15 6.716-15 15v60c0 8.284 6.716 15 15 15s15-6.716 15-15v-60c0-8.284-6.716-15-15-15z"/><path d="m437 150c-8.284 0-15 6.716-15 15v60c0 8.284 6.716 15 15 15s15-6.716 15-15v-60c0-8.284-6.716-15-15-15z"/></svg><span id="btn-ps-refresh-label">Fetch</span></button></div>
+      <!-- index.html:554-558, the active segment as app.js marks it -->
+      <div class="fixture" data-fixture="seg-control">
+        <span class="btn-group seg-control" id="theme-mode-switch">
+          <button type="button" data-mode="light">Light</button>
+          <button type="button" data-mode="dark" data-active="true">Dark</button>
+          <button type="button" data-mode="system">System</button>
+        </span>
+      </div>
+      <!-- index.html:603-609 -->
+      <div class="fixture" data-fixture="switch">
+        <label class="ctl switch-row">
+          <span class="switch">
+            <input id="theme-status-bar-toggle" type="checkbox" />
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </span>
+          <span>Show status bar</span>
+        </label>
+        <label class="ctl switch-row">
+          <span class="switch">
+            <input id="theme-recording-sprockets-toggle" type="checkbox" checked />
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </span>
+          <span>Sprocket holes</span>
+        </label>
+      </div>
+      <!-- cttc's panels are built in app.js from these classes -->
+      <div class="fixture sized" data-fixture="panel">
+        <div class="panel">
+          <div class="panel-head"><div class="panel-head-top"><span class="panel-head-title">Logs</span></div></div>
+          <div class="panel-body">2026-11-21 16:00:00 INFO started</div>
+        </div>
+      </div>
+    </div>
+    <!-- index.html:380-391, the Remove Docker Host dialog's shape -->
+    <dialog id="dlg-fixture">
+      <h2>Remove Sump</h2>
+      <p class="dlg-intro muted">Permanently forgets a saved Sump's connection and key.</p>
+      <div class="dlg-actions">
+        <button>Close</button>
+        <button class="btn-danger" disabled>Delete</button>
+      </div>
+    </dialog>
+  </body>
+</html>

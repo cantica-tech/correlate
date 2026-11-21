@@ -1,0 +1,19 @@
+<!doctype html>
+<!--
+  Our side of the parity checks (REQ-000020-sJpO9KMY Requirement 2): our
+  components and our CSS, bundled from page/ours.tsx into ../dist/ by the
+  parity test. Each fixture has the same name on cttc's page, page/cttc.html.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'none'" />
+    <title>ours</title>
+    <link rel="stylesheet" href="../dist/ours.css" />
+    <link rel="stylesheet" href="harness.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="../dist/ours.js"></script>
+  </body>
+</html>

@@ -1,12 +1,17 @@
-/* Icons (REQ-000019-sJpO9KMY): inline, 1em, in the text color. */
-.icon {
+/*
+ * Icons (REQ-000019-sJpO9KMY): inline, 1em, in the text color. `:where()`
+ * keeps these rules weakest, so a component's own icon size, cttc's
+ * `.btn-fetch-icon` or `.seg-icon`, wins wherever the stylesheets fall
+ * (REQ-000020-sJpO9KMY).
+ */
+:where(.icon) {
   display: inline-flex;
   width: 1em;
   height: 1em;
   flex: none;
   color: inherit;
 }
-.icon svg {
+:where(.icon) svg {
   width: 100%;
   height: 100%;
   display: block;

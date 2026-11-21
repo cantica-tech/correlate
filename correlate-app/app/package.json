@@ -14,7 +14,7 @@
     "watch:main": "node build/build-main.js --watch",
     "watch:renderer": "node build/build-renderer.js --watch",
     "icons": "node build/icons.js",
-    "typecheck": "tsc --noEmit -p renderer/src && tsc --noEmit -p main/src && tsc --noEmit -p build && tsc --noEmit -p tests",
+    "typecheck": "tsc --noEmit -p renderer/src && tsc --noEmit -p main/src && tsc --noEmit -p build && tsc --noEmit -p tests && tsc --noEmit -p tests/parity/page",
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run"
@@ -22,11 +22,15 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.10",
     "@types/node": "^26.5.0",
+    "@types/pngjs": "^6.0.5",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@types/ssh2": "^1.15.6",
     "electron": "^44.3.0",
     "esbuild": "^0.28.2",
+    "pixelmatch": "^8.0.0",
+    "playwright-core": "^1.65.1",
+    "pngjs": "^7.0.0",
     "typescript": "^7.0.2",
     "vitest": "^3.0.0"
   },

@@ -9,10 +9,12 @@
       "**",
       "!renderer/dist",
       "!main/dist",
+      "!tests/parity/dist",
       "!node_modules",
       "!**/*.md",
       "!**/*.reference.css",
-      "!**/icons.generated.ts"
+      "!**/icons.generated.ts",
+      "!tests/parity/page/cttc.html"
     ]
   },
   "formatter": {
