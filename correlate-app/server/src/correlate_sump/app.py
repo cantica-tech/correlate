@@ -35,6 +35,7 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from correlate_sump import __version__
+from correlate_sump.buckets import query_buckets
 from correlate_sump.ingest import (
     DEFAULT_HOST,
     DEFAULT_PORT,
@@ -386,6 +387,33 @@ def create_app(
                 log_cursor=log_cursor,
                 metric_cursor=metric_cursor,
                 limit=limit,
+            )
+        except QueryError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/records/buckets")
+    async def record_buckets(
+        source: str,
+        start: Annotated[datetime, Query(alias="from")],
+        end: Annotated[datetime, Query(alias="to")],
+        field: Annotated[list[str], Query()],
+        buckets: int = 500,
+        over: str | None = None,
+        mode: str = "max",
+    ) -> dict[str, Any]:
+        """`source`'s metric values as at most `buckets` maxima, for a chart
+        (REQ-000028-sJpO9KMY): `field`s summed, as a percentage of `over`, or
+        a counter's rate in `rate` mode."""
+        try:
+            return await query_buckets(
+                redis_client,
+                source,
+                fields=field,
+                start=start,
+                end=end,
+                buckets=buckets,
+                over=over,
+                mode=mode,
             )
         except QueryError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
