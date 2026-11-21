@@ -55,7 +55,12 @@ function fakeHost(answer: (command: string, call: number) => RemoteResult) {
   return { connect, commands, targets, closed: () => closed };
 }
 
-const healthyHost = (command: string) => (command.includes("python -c") ? ok("True\n") : ok());
+const healthyHost = (command: string) => {
+  if (command.includes("python -c")) return ok("True\n");
+  // The Docker socket's group, read with the Sump image (REQ-000024-sJpO9KMY).
+  if (command.includes("'%g'")) return ok("999\n");
+  return ok();
+};
 
 function context(
   connect: RemoteContext["connect"],
@@ -98,9 +103,18 @@ describe("REQ-000014-sJpO9KMY: provisioning on a host over SSH", () => {
     const run = host.commands.map((c) => c.command);
     expect(run[0]).toBe("docker version --format '{{.Server.Version}}'");
     expect(run[1]).toBe("mkdir -p ~/.correlate-sump && chmod 700 ~/.correlate-sump");
-    expect(run[2]).toBe("cat > ~/.correlate-sump/docker-compose.yml");
-    expect(host.commands[2]?.input).toContain('"127.0.0.1:8765:8765"');
+    expect(run[2]).toBe(
+      "docker image inspect 'correlate-sump:dev' >/dev/null 2>&1 || docker pull 'correlate-sump:dev'",
+    );
     expect(run[3]).toBe(
+      "docker 'run' '--rm' '--entrypoint' 'stat' '-v' '/var/run/docker.sock:/var/run/docker.sock' 'correlate-sump:dev' '-c' '%g' '/var/run/docker.sock'",
+    );
+    expect(run[4]).toBe("cat > ~/.correlate-sump/docker-compose.yml");
+    expect(host.commands[4]?.input).toContain('"127.0.0.1:8765:8765"');
+    // The host's Docker socket, with the group read on the host (REQ-000024-sJpO9KMY).
+    expect(host.commands[4]?.input).toContain("      - /var/run/docker.sock:/var/run/docker.sock");
+    expect(host.commands[4]?.input).toContain('    group_add:\n      - "999"');
+    expect(run[5]).toBe(
       "docker compose -f ~/.correlate-sump/docker-compose.yml -p correlate-sump up -d",
     );
     expect(run.at(-1)).toContain("set-owner --user 'olivier'");
@@ -120,10 +134,8 @@ describe("REQ-000014-sJpO9KMY: provisioning on a host over SSH", () => {
   it("streams the image over SSH when the host cannot pull it", async () => {
     let ups = 0;
     const host = fakeHost((command) => {
-      if (command.endsWith(" up -d")) {
-        ups += 1;
-        return ups === 1 ? fail("pull access denied for correlate-sump") : ok();
-      }
+      if (command.includes("docker pull")) return fail("pull access denied for correlate-sump");
+      if (command.endsWith(" up -d")) ups += 1;
       return healthyHost(command);
     });
     const streamed: string[] = [];
@@ -135,7 +147,8 @@ describe("REQ-000014-sJpO9KMY: provisioning on a host over SSH", () => {
     const result = await provisionRemote(ctx, details);
     expect(result.ok).toBe(true);
     expect(streamed).toEqual(["correlate-sump:dev"]);
-    expect(ups).toBe(2);
+    // Streamed before the socket's group is read and the Sump started, once.
+    expect(ups).toBe(1);
   });
 
   it("uses a key imported for this Sump, kept under its own vault id", async () => {
@@ -164,7 +177,14 @@ describe("br-SUMP-000007-sJpO9KMY: a failed remote provisioning leaves nothing b
       (c: string) =>
         c.includes("set-owner") ? fail("alice already owns this Sump") : healthyHost(c),
     ],
-    ["wait for the Sump", (c: string) => (c.includes("python -c") ? ok("False\n") : ok())],
+    [
+      "find the Docker socket's group",
+      (c: string) => (c.includes("'%g'") ? ok("stat: cannot stat\n") : healthyHost(c)),
+    ],
+    [
+      "wait for the Sump",
+      (c: string) => (c.includes("python -c") ? ok("False\n") : healthyHost(c)),
+    ],
   ])("at %s: imported key deleted, Sump retired, no window moved", async (step, answer) => {
     const host = fakeHost(answer);
     const ctx = context(host.connect);
@@ -183,8 +203,12 @@ describe("br-SUMP-000007-sJpO9KMY: a failed remote provisioning leaves nothing b
     expect(ctx.pending.size).toBe(0);
     expect(ctx.active?.get(1)).toBe("local");
     expect(host.closed()).toBe(1);
-    if (step !== "check Docker on the host") {
+    // Nothing was started before the compose file: nothing to take down.
+    const before = ["check Docker on the host", "find the Docker socket's group"];
+    if (!before.includes(step)) {
       expect(host.commands.at(-1)?.command).toMatch(/ down$/);
+    } else {
+      expect(host.commands.some((c) => c.command.endsWith(" up -d"))).toBe(false);
     }
   });
 

@@ -3,6 +3,9 @@
 # The Sump image (REQ-000004-sJpO9KMY Requirement 5): the Sump, Redis and Fluent
 # Bit in one container, run by supervisord as the non-root user `sump`. Not
 # published before per-user session tokens exist (roadmap Items 11 and 12).
+# It carries the Sump's plugins (`plugins/`, REQ-000024-sJpO9KMY) and the
+# Docker CLI, which the SSH plugin runs against the host's Docker socket when
+# the compose file mounts it.
 
 FROM python:3.13-slim-bookworm AS builder
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -11,7 +14,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /opt/correlate-sump
 COPY pyproject.toml uv.lock README.md ./
 COPY src src
-RUN uv sync --frozen --no-dev --no-editable
+COPY plugins plugins
+# Every workspace member: the Sump and its plugins, found through `sump.plugins`.
+RUN uv sync --frozen --no-dev --no-editable --all-packages
 
 FROM python:3.13-slim-bookworm AS runtime
 RUN apt-get update \
@@ -20,8 +25,12 @@ RUN apt-get update \
         | gpg --dearmor -o /usr/share/keyrings/fluentbit-keyring.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/fluentbit-keyring.gpg] https://packages.fluentbit.io/debian/bookworm bookworm main" \
         > /etc/apt/sources.list.d/fluentbit.list \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg \
+        | gpg --dearmor -o /usr/share/keyrings/docker-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/docker-keyring.gpg] https://download.docker.com/linux/debian bookworm stable" \
+        > /etc/apt/sources.list.d/docker.list \
     && apt-get update \
-    && apt-get install -y --no-install-recommends fluent-bit \
+    && apt-get install -y --no-install-recommends fluent-bit docker-ce-cli \
     && apt-get purge -y curl gnupg \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/* \

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Catalog } from "../../catalog/catalog.js";
-import { checkRemoteDetails, DetailsError, startupPlan } from "../plan.js";
+import { checkRemoteDetails, DetailsError, PROVISIONING_NOTICES, startupPlan } from "../plan.js";
 import { mustRun, ProvisionError, type Runner, runCommand } from "../runner.js";
 
 // br-CONN-000006-sJpO9KMY, br-CONN-000003-sJpO9KMY (REQ-000014-sJpO9KMY
@@ -30,7 +30,14 @@ describe("br-CONN-000006-sJpO9KMY: the startup plan", () => {
       firstRun: true,
       docker: true,
       offers: ["local", "remote", "skip"],
+      notices: PROVISIONING_NOTICES,
     });
+  });
+
+  it("says the Sump gets its host's Docker socket (REQ-000024-sJpO9KMY)", async () => {
+    const { notices } = await startupPlan(catalog, docker(true));
+    expect(notices).toEqual([expect.stringContaining("Docker socket")]);
+    expect(notices[0]).toContain("any Docker command");
   });
 
   it("first run without Docker: remote only, no skip", async () => {

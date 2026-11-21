@@ -9,8 +9,16 @@ import { LOGIN_NAMESPACE } from "../../identity/sshkey.js";
 import { serve, type TestServer } from "../../sump/tests/servers.js";
 import { SessionTokens } from "../../sump/tokens.js";
 import { Vault } from "../../vault/vault.js";
-import { composeFile, LOCAL_PROJECT, type ProvisionContext, provisionLocal } from "../local.js";
-import type { CommandResult, Runner } from "../runner.js";
+import {
+  checkComposeLoopback,
+  composeFile,
+  LOCAL_PROJECT,
+  type ProvisionContext,
+  parseSocketGroup,
+  provisionLocal,
+  socketGroupArgs,
+} from "../local.js";
+import { type CommandResult, ProvisionError, type Runner } from "../runner.js";
 
 // REQ-000014-sJpO9KMY Requirements 3 and 5 (br-SUMP-000007-sJpO9KMY,
 // br-SUMP-000001-sJpO9KMY, br-SUMP-000011-sJpO9KMY): provisioning a Sump on
@@ -98,10 +106,12 @@ describe("br-SUMP-000001-sJpO9KMY: provisioning a local Sump", () => {
     const result = await provisionLocal(ctx, { sumpPort: port, windowId: 1, switchTo: true });
     expect(result).toEqual({ ok: true, id: "local", switched: true });
     const file = path.join(dir, "sumps", "local", "docker-compose.yml");
-    expect(ctx.commands.slice(1, 2)).toEqual([
+    expect(ctx.commands.slice(1, 3)).toEqual([
+      // The Docker socket's group, read with the Sump image (REQ-000024-sJpO9KMY).
+      ["docker", ...socketGroupArgs("correlate-sump:dev")],
       ["docker", "compose", "-f", file, "-p", LOCAL_PROJECT, "up", "-d"],
     ]);
-    expect(ctx.commands[2]?.slice(6)).toEqual([
+    expect(ctx.commands[3]?.slice(6)).toEqual([
       "exec",
       "-T",
       "sump",
@@ -112,7 +122,7 @@ describe("br-SUMP-000001-sJpO9KMY: provisioning a local Sump", () => {
       "--user",
       "olivier",
     ]);
-    expect(readFileSync(file, "utf8")).toBe(composeFile("correlate-sump:dev", port));
+    expect(readFileSync(file, "utf8")).toBe(composeFile("correlate-sump:dev", port, 29));
     expect(catalog.get("local")).toMatchObject({ kind: "local", sumpPort: port, user: "olivier" });
     expect(ctx.lifecycle.get("local")?.state).toBe("active");
     expect(ctx.tokens.get("local")).toBe("t");
@@ -123,10 +133,30 @@ describe("br-SUMP-000001-sJpO9KMY: provisioning a local Sump", () => {
   });
 
   it("publishes every port on loopback only", () => {
-    const text = composeFile("img", 8765);
-    const ports = text.split("\n").filter((l) => l.trim().startsWith('- "'));
+    const text = composeFile("img", 8765, 29);
+    const ports = text.split("\n").filter((l) => /^\s*- "[\d.]*:?\d+:\d+"$/.test(l));
     expect(ports.length).toBe(2);
     expect(ports.every((l) => l.includes('"127.0.0.1:'))).toBe(true);
+  });
+
+  it("mounts the host's Docker socket with its group (REQ-000024-sJpO9KMY)", () => {
+    const text = composeFile("img", 8765, 29);
+    expect(text).toContain('    group_add:\n      - "29"\n');
+    expect(text).toContain("      - /var/run/docker.sock:/var/run/docker.sock\n");
+    expect(() => checkComposeLoopback(text)).not.toThrow();
+    expect(() => composeFile("img", 8765, -1)).toThrow(/whole number/);
+  });
+
+  it("reads the socket's group, or names the step when it cannot", async () => {
+    expect(parseSocketGroup("999\n")).toBe(999);
+    expect(() => parseSocketGroup("stat: cannot stat")).toThrow(ProvisionError);
+    const ctx = context(async (_command, args) =>
+      args.includes("%g") ? { code: 0, stdout: "nope", stderr: "", timedOut: false } : ok,
+    );
+    expect(await provisionLocal(ctx)).toMatchObject({
+      ok: false,
+      step: "find the Docker socket's group",
+    });
   });
 
   it("fails clearly without Docker, running nothing else", async () => {

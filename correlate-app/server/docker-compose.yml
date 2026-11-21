@@ -20,8 +20,14 @@ services:
       # volume, since Redis in the container is not saved to disk.
       SUMP_DATA_DIR: /var/lib/correlate-sump
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    # The host's Docker, for the SSH plugin's "self" data stream
+    # (REQ-000024-sJpO9KMY): the socket, and its group, which the app reads
+    # with the image (0 under Docker Desktop; on Linux, the docker group's).
+    group_add:
+      - "${DOCKER_SOCKET_GID:-0}"
     volumes:
       - sump-data:/var/lib/correlate-sump
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   sump-data:

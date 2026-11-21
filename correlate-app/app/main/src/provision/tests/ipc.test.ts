@@ -80,6 +80,7 @@ describe("REQ-000014-sJpO9KMY: provisioning over the bridge", () => {
       firstRun: true,
       docker: false,
       offers: ["remote"],
+      notices: [expect.stringContaining("Docker socket")],
     });
   });
 

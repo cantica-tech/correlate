@@ -172,7 +172,7 @@ describe("br-SUMP-000007-sJpO9KMY: a remote Sump's first connect", () => {
 
 describe("br-SUMP-000009-sJpO9KMY: provisioning publishes on loopback only", () => {
   it("accepts the compose file the app writes", () => {
-    expect(() => checkComposeLoopback(composeFile("img", 8765))).not.toThrow();
+    expect(() => checkComposeLoopback(composeFile("img", 8765, 999))).not.toThrow();
   });
 
   it.each([

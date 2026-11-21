@@ -9,9 +9,19 @@ import type { Runner } from "./runner.js";
 export type Offer = "local" | "remote" | "skip";
 
 /** The startup plan. */
+/**
+ * What every provisioning gives the Sump beyond its own container, said
+ * plainly before the user confirms (decided in FEAT-000025-sJpO9KMY).
+ */
+export const PROVISIONING_NOTICES = [
+  "The Sump gets its host's Docker socket, so it can watch the host's containers: it can run any Docker command on that host.",
+] as const;
+
 export interface StartupPlan {
   /** No live Sump in the catalog. */
   firstRun: boolean;
+  /** What provisioning a Sump gives it, for the screen to say before the user confirms. */
+  notices: readonly string[];
   /** Docker answers on this machine. */
   docker: boolean;
   offers: Offer[];
@@ -36,7 +46,7 @@ export async function startupPlan(catalog: Catalog | undefined, run: Runner): Pr
   if (docker) offers.push("local");
   offers.push("remote");
   if (firstRun && docker) offers.push("skip");
-  return { firstRun, docker, offers };
+  return { firstRun, docker, offers, notices: PROVISIONING_NOTICES };
 }
 
 /** A new remote Sump's details, checked. */

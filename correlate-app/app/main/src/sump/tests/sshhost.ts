@@ -100,4 +100,9 @@ export async function sshHost(allowed: KeyObject, reply: Reply = () => [0, ""]):
 }
 
 /** Commands of provisioning answered as a healthy host would. */
-export const healthyHost: Reply = (command) => [0, command.includes("python -c") ? "True\n" : ""];
+export const healthyHost: Reply = (command) => {
+  if (command.includes("python -c")) return [0, "True\n"];
+  // The Docker socket's group, read with the Sump image (REQ-000024-sJpO9KMY).
+  if (command.includes("'%g'")) return [0, "999\n"];
+  return [0, ""];
+};

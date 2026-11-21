@@ -43,7 +43,8 @@ function host(accept: (target: SshTarget) => boolean = () => true) {
       hostKey: "SHA256:host",
       exec: async (command) => ({
         code: 0,
-        stdout: command.includes("python -c") ? "True\n" : "",
+        // The health check, and the Docker socket's group (REQ-000024-sJpO9KMY).
+        stdout: command.includes("python -c") ? "True\n" : command.includes("'%g'") ? "999\n" : "",
         stderr: "",
         timedOut: false,
       }),

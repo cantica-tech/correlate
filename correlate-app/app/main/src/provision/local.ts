@@ -39,11 +39,58 @@ export function sumpImage(env: Record<string, string | undefined>, appVersion: s
   return env.CORRELATE_SUMP_IMAGE || `${IMAGE_REPOSITORY}:${appVersion}`;
 }
 
+/** The Docker socket, mounted into the Sump so it watches its own host (REQ-000024-sJpO9KMY). */
+export const DOCKER_SOCKET = "/var/run/docker.sock";
+
+/**
+ * `docker` arguments that print the Docker socket's group ID as the Sump's
+ * container sees it, with the Sump image itself: the Sump runs as a user who
+ * may use the socket only through that group, and the ID differs between
+ * hosts (0 under Docker Desktop, the `docker` group's on Linux).
+ */
+export function socketGroupArgs(image: string): string[] {
+  return [
+    "run",
+    "--rm",
+    "--entrypoint",
+    "stat",
+    "-v",
+    `${DOCKER_SOCKET}:${DOCKER_SOCKET}`,
+    image,
+    "-c",
+    "%g",
+    DOCKER_SOCKET,
+  ];
+}
+
+/** The group ID `socketGroupArgs` printed; a `ProvisionError` if it is not one. */
+export function parseSocketGroup(stdout: string): number {
+  const text = stdout.trim();
+  if (!/^\d{1,10}$/.test(text)) {
+    throw new ProvisionError(
+      "find the Docker socket's group",
+      `expected a group ID, got ${JSON.stringify(text.slice(0, 80))}`,
+    );
+  }
+  return Number(text);
+}
+
 /**
  * The compose file of a Sump: every port on 127.0.0.1 only
- * (br-SUMP-000009), Redis not published, users and keys on a volume.
+ * (br-SUMP-000009), Redis not published, users and keys on a volume; and
+ * the host's Docker socket mounted, with its group, so the Sump can watch
+ * its own host (decided in FEAT-000025-sJpO9KMY): this lets the Sump run any
+ * Docker command on its host, which the provisioning plan says.
  */
-export function composeFile(image: string, sumpPort: number, fluentPort = 5140): string {
+export function composeFile(
+  image: string,
+  sumpPort: number,
+  socketGroup: number,
+  fluentPort = 5140,
+): string {
+  if (!Number.isInteger(socketGroup) || socketGroup < 0) {
+    throw new Error(`the Docker socket's group is a whole number, not ${socketGroup}`);
+  }
   return [
     "# Written by correlate-app (REQ-000014-sJpO9KMY); every port is loopback only.",
     "services:",
@@ -55,8 +102,12 @@ export function composeFile(image: string, sumpPort: number, fluentPort = 5140):
     `      - "127.0.0.1:${fluentPort}:5140"`,
     "    environment:",
     "      SUMP_DATA_DIR: /var/lib/correlate-sump",
+    "    # The host's Docker, for the Sump to watch its own host (REQ-000024-sJpO9KMY).",
+    "    group_add:",
+    `      - "${socketGroup}"`,
     "    volumes:",
     "      - sump-data:/var/lib/correlate-sump",
+    `      - ${DOCKER_SOCKET}:${DOCKER_SOCKET}`,
     "volumes:",
     "  sump-data:",
     "",
@@ -206,7 +257,16 @@ export async function provisionLocal(
     const user = userName(ctx.env);
     ensurePrivateDir(path.dirname(dir));
     mkdirSync(dir, { recursive: true });
-    const composeText = composeFile(sumpImage(ctx.env, ctx.appVersion), sumpPort);
+    const image = sumpImage(ctx.env, ctx.appVersion);
+    // Pulls the image if it is not here yet, as `up` would.
+    const group = await mustRun(
+      ctx.run,
+      "find the Docker socket's group",
+      "docker",
+      socketGroupArgs(image),
+      { timeoutMs: 10 * 60_000 },
+    );
+    const composeText = composeFile(image, sumpPort, parseSocketGroup(group.stdout));
     checkComposeLoopback(composeText);
     writeFileSync(file, composeText);
     log.info(`provisioning the local Sump with ${sumpImage(ctx.env, ctx.appVersion)}`);

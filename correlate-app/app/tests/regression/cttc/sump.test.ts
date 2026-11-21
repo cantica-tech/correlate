@@ -164,7 +164,12 @@ describe("br-SUMP-000002-sJpO9KMY", () => {
             probePort: async () => "open" as const,
             exec: async (command: string) => ({
               code: 0,
-              stdout: command.includes("python -c") ? "True\n" : "",
+              // The health check, and the Docker socket's group (REQ-000024-sJpO9KMY).
+              stdout: command.includes("python -c")
+                ? "True\n"
+                : command.includes("'%g'")
+                  ? "999\n"
+                  : "",
               stderr: "",
               timedOut: false,
             }),

@@ -33,6 +33,8 @@ import {
   confirmNeeded,
   type ProvisionContext,
   type ProvisionResult,
+  parseSocketGroup,
+  socketGroupArgs,
   sumpImage,
   unlockedIdentity,
 } from "./local.js";
@@ -186,20 +188,31 @@ export async function provisionRemote(
       timeoutMs: 20_000,
     });
     await must(shell, "prepare the host", `mkdir -p ${REMOTE_DIR} && chmod 700 ${REMOTE_DIR}`);
-    const compose = composeFile(image, details.sumpPort);
+    // The image first: the socket's group is read with it (REQ-000024-sJpO9KMY).
+    const quoted = shellQuote(image);
+    const have = await shell.exec(
+      `docker image inspect ${quoted} >/dev/null 2>&1 || docker pull ${quoted}`,
+      {
+        timeoutMs: 10 * 60_000,
+      },
+    );
+    if (have.code !== 0) {
+      log.warn(`the host could not pull the image (${have.stderr.trim()}); copying it over SSH`);
+      await (ctx.streamImage ?? streamImageOverSsh)(shell, image);
+    }
+    const group = await must(
+      shell,
+      "find the Docker socket's group",
+      `docker ${socketGroupArgs(image).map(shellQuote).join(" ")}`,
+      { timeoutMs: 60_000 },
+    );
+    const compose = composeFile(image, details.sumpPort, parseSocketGroup(group.stdout));
     checkComposeLoopback(compose);
     await must(shell, "write the compose file", `cat > ${REMOTE_DIR}/docker-compose.yml`, {
       input: compose,
     });
     started = true;
-    const up = await shell.exec(`${composeCommand} up -d`, { timeoutMs: 10 * 60_000 });
-    if (up.code !== 0) {
-      log.warn(
-        `the host could not start the Sump (${up.stderr.trim()}); copying the image over SSH`,
-      );
-      await (ctx.streamImage ?? streamImageOverSsh)(shell, image);
-      await must(shell, "start the Sump", `${composeCommand} up -d`, { timeoutMs: 5 * 60_000 });
-    }
+    await must(shell, "start the Sump", `${composeCommand} up -d`, { timeoutMs: 5 * 60_000 });
     const healthy = `${composeCommand} exec -T sump python -c ${shellQuote(
       "import json,urllib.request;print(json.load(urllib.request.urlopen('http://127.0.0.1:8765/health'))['redis'])",
     )}`;
