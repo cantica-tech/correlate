@@ -37,5 +37,6 @@
   "ship-logs": "cttc app/renderer/index.html (Status Bar)",
   "connect": "cttc app/renderer/action-bar.html (Connect Docker Host… )",
   "appearance-action": "cttc app/renderer/action-bar.html (Appearance… )",
-  "settings-action": "cttc app/renderer/action-bar.html (Settings… )"
+  "settings-action": "cttc app/renderer/action-bar.html (Settings… )",
+  "current-status": "cttc app/renderer/src/shared/toolbar-pills/index.ts (CLIPBOARD_ICON_SVG)"
 }

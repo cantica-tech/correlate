@@ -167,7 +167,7 @@ export function StatusBar({ bridge, onSwitched }: StatusBarProps) {
       onSelect: never,
     },
     "separator",
-    { label: "Current Status", onSelect: () => void showStatus() },
+    { label: "Current Status", icon: "current-status", onSelect: () => void showStatus() },
   ];
 
   return (

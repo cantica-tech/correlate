@@ -1,0 +1,14 @@
+/*
+ * The status bar parity pages' frame, the same on cttc's page and ours
+ * (REQ-000022-sJpO9KMY Requirement 5): a window-wide stage, empty above,
+ * the bar at its foot, room for what springs up from it.
+ */
+#stage {
+  width: 760px;
+  height: 340px;
+  display: flex;
+  flex-direction: column;
+}
+#stage .filler {
+  flex: 1 1 auto;
+}

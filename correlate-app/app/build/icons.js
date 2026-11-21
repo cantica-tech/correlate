@@ -159,6 +159,17 @@ function cttcInline() {
   return found;
 }
 
+/** Where cttc's "Current Status" icon lives. */
+const CLIPBOARD_WHERE = "cttc app/renderer/src/shared/toolbar-pills/index.ts (CLIPBOARD_ICON_SVG)";
+
+/** cttc's `CLIPBOARD_ICON_SVG`, the pills' "Current Status" icon, if found. */
+export function cttcClipboard() {
+  const file = path.join(CTTC, "src/shared/toolbar-pills/index.ts");
+  if (!existsSync(file)) return undefined;
+  const m = readFileSync(file, "utf8").match(/CLIPBOARD_ICON_SVG =\s*'(<svg[\s\S]*?<\/svg>)'/);
+  return m?.[1];
+}
+
 /** @param {boolean} dryRun */
 function importAll(dryRun) {
   if (!existsSync(CTTC) || !existsSync(CORRELATOR)) {
@@ -198,6 +209,9 @@ function importAll(dryRun) {
     const name = CTTC_SHAPES[shape];
     if (name) write(name, icon.svg, `${icon.where} (${icon.label})`);
   }
+  // The pills' "Current Status" entry: raw markup in cttc's code, not in a page.
+  const clipboard = cttcClipboard();
+  if (clipboard) write("current-status", clipboard, CLIPBOARD_WHERE);
   if (dryRun) {
     for (const [name, where] of Object.entries(sources)) console.log(`${name.padEnd(28)} ${where}`);
     return;

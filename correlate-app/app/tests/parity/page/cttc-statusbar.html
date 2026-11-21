@@ -1,0 +1,18 @@
+<!doctype html>
+<!--
+  cttc's side of the status bar parity check (REQ-000022-sJpO9KMY
+  Requirement 5): the test writes cttc's status bar markup
+  (cttcStatusBar.ts) into #stage, under cttc's own style.css.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'none'" />
+    <title>cttc status bar</title>
+    <link rel="stylesheet" href="../cttc/style.reference.css" />
+    <link rel="stylesheet" href="statusbar.css" />
+  </head>
+  <body>
+    <div id="stage"></div>
+  </body>
+</html>

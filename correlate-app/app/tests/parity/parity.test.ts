@@ -19,7 +19,9 @@ import { _electron, type ElectronApplication, type Page } from "playwright-core"
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COMPONENT_LIMIT, compare, type Mask, readPng, writePng } from "./compare.js";
 import { cttcSidebar, cttcWidthScript } from "./cttcSidebar.js";
+import { cttcPillMenu, cttcStatusBar } from "./cttcStatusBar.js";
 import { SIDEBAR_CASES } from "./page/sidebar-cases.js";
+import { ARRIVING, HISTORY, STATUSBAR_CASES } from "./page/statusbar-data.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(here, "out");
@@ -50,7 +52,11 @@ let page: Page;
 /** Bundle our side of the parity checks into `dist/`. */
 async function buildOurs(): Promise<void> {
   await build({
-    entryPoints: [path.join(here, "page/ours.tsx"), path.join(here, "page/ours-sidebar.tsx")],
+    entryPoints: [
+      path.join(here, "page/ours.tsx"),
+      path.join(here, "page/ours-sidebar.tsx"),
+      path.join(here, "page/ours-statusbar.tsx"),
+    ],
     outdir: path.join(here, "dist"),
     bundle: true,
     format: "iife",
@@ -133,6 +139,71 @@ async function captureSidebar(side: "cttc" | "ours", pictures: Map<string, Buffe
   }
 }
 
+/**
+ * The status bar with each thing open (REQ-000022-sJpO9KMY Requirement 5):
+ * on cttc's page, cttc's markup for it written into the stage; on ours, our
+ * bar, opened by clicking as a user would. The context menu is compared on
+ * its own, wherever it opens.
+ */
+async function captureStatusBar(
+  side: "cttc" | "ours",
+  pictures: Map<string, Buffer>,
+): Promise<void> {
+  for (const theme of THEMES) {
+    await page.emulateMedia({ colorScheme: theme });
+    for (const name of STATUSBAR_CASES) {
+      await page.goto(pathToFileURL(path.join(here, `page/${side}-statusbar.html`)).href);
+      if (side === "cttc") {
+        const times: Record<string, string> = {};
+        for (const n of [...HISTORY, ARRIVING]) {
+          times[n.at] = String(
+            await page.evaluate(`new Date(${JSON.stringify(n.at)}).toLocaleTimeString()`),
+          );
+        }
+        await page.evaluate(
+          `document.getElementById("stage").innerHTML = ${JSON.stringify(cttcStatusBar(name, times))}`,
+        );
+        if (name === "menu") {
+          await page.evaluate(
+            `(() => { document.body.insertAdjacentHTML("beforeend", ${JSON.stringify(cttcPillMenu())}); document.querySelector("#ctxmenu button:not(:disabled)").focus(); })()`,
+          );
+        }
+      } else {
+        await page.waitForSelector("#server-status");
+        await page.waitForFunction(
+          () =>
+            (
+              globalThis as unknown as {
+                document: { getElementById(id: string): { textContent: string } | null };
+              }
+            ).document.getElementById("app-status-bar-text")?.textContent !== "",
+        );
+        if (name === "switcher") {
+          await page.click("#server-status-btn");
+          await page.waitForSelector(".gateway-item");
+        } else if (name === "menu") {
+          await page.click("#server-status-btn", { button: "right" });
+          await page.waitForSelector("#ctxmenu");
+        } else if (name === "status") {
+          await page.click("#server-status-btn", { button: "right" });
+          await page.click('#ctxmenu button:has-text("Current Status")');
+          await page.waitForSelector("#connection-info-popup");
+        } else if (name === "history") {
+          await page.click("#status-bar-history-btn");
+          await page.waitForSelector(".status-bar-history-row");
+        }
+        // Away from anything it would light up on hover.
+        await page.mouse.move(1, 1);
+      }
+      await page.evaluate("document.fonts.ready.then(() => true)");
+      pictures.set(
+        `statusbar-${name}-${theme}`,
+        await shoot(name === "menu" ? "#ctxmenu" : "#stage"),
+      );
+    }
+  }
+}
+
 let cttc: Map<string, Buffer>;
 let ours: Map<string, Buffer>;
 
@@ -154,6 +225,8 @@ describe.skipIf(process.platform !== "darwin")(
       ours = await capture("ours");
       await captureSidebar("cttc", cttc);
       await captureSidebar("ours", ours);
+      await captureStatusBar("cttc", cttc);
+      await captureStatusBar("ours", ours);
     }, 120_000);
 
     afterAll(async () => {
@@ -165,6 +238,7 @@ describe.skipIf(process.platform !== "darwin")(
       "dialog",
       "dialog-page",
       ...Object.keys(SIDEBAR_CASES).map((c) => `sidebar-${c}`),
+      ...STATUSBAR_CASES.map((c) => `statusbar-${c}`),
     ].flatMap((n) => THEMES.map((t) => `${n}-${t}`));
 
     it.each(names)("%s looks as in cttc", (name) => {

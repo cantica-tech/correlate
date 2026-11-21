@@ -2,9 +2,12 @@
  * cttc's context menu (`shared/ctx-menu`, REQ-000022-sJpO9KMY Requirement 3):
  * `#ctxmenu` at the pointer, entries with an optional icon, separators,
  * disabled entries; arrow keys move between entries, Escape or a click
- * elsewhere closes it and gives focus back to what had it.
+ * elsewhere closes it and gives focus back to what had it. Drawn in
+ * `<body>`, as cttc appended it there, so it takes the page's type, not
+ * that of what was right-clicked (the status bar's is smaller).
  */
 import { type KeyboardEvent, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Icon, type IconName } from "../icons/Icon.js";
 
 /** One entry, or a separator. */
@@ -69,7 +72,7 @@ export function ContextMenu({ x, y, entries, onClose, label }: ContextMenuProps)
     items[next]?.focus();
   };
 
-  return (
+  const menu = (
     <div id="ctxmenu" ref={ref} role="menu" aria-label={label} tabIndex={-1} onKeyDown={move}>
       {entries.map((entry, i) =>
         entry === "separator" ? (
@@ -94,4 +97,6 @@ export function ContextMenu({ x, y, entries, onClose, label }: ContextMenuProps)
       )}
     </div>
   );
+  // In a test without a document (server rendering), it is drawn in place.
+  return typeof document === "undefined" ? menu : createPortal(menu, document.body);
 }
