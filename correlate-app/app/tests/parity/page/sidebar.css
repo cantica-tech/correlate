@@ -1,0 +1,14 @@
+/*
+ * The sidebar parity pages' frame, the same on cttc's page and ours
+ * (REQ-000021-sJpO9KMY Requirement 5): a window-sized stage holding the app
+ * body, or the detached window's sidebar.
+ */
+#stage {
+  width: 480px;
+  height: 700px;
+  display: flex;
+  flex-direction: column;
+}
+#stage.detached {
+  width: 260px;
+}

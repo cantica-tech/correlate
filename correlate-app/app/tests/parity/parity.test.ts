@@ -18,6 +18,8 @@ import { build } from "esbuild";
 import { _electron, type ElectronApplication, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COMPONENT_LIMIT, compare, type Mask, readPng, writePng } from "./compare.js";
+import { cttcSidebar, cttcWidthScript } from "./cttcSidebar.js";
+import { SIDEBAR_CASES } from "./page/sidebar-cases.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(here, "out");
@@ -48,8 +50,8 @@ let page: Page;
 /** Bundle our side of the parity checks into `dist/`. */
 async function buildOurs(): Promise<void> {
   await build({
-    entryPoints: [path.join(here, "page/ours.tsx")],
-    outfile: path.join(here, "dist/ours.js"),
+    entryPoints: [path.join(here, "page/ours.tsx"), path.join(here, "page/ours-sidebar.tsx")],
+    outdir: path.join(here, "dist"),
     bundle: true,
     format: "iife",
     jsx: "automatic",
@@ -101,6 +103,36 @@ async function capture(side: "cttc" | "ours"): Promise<Map<string, Buffer>> {
   return pictures;
 }
 
+/**
+ * The sidebar in each of its cases (REQ-000021-sJpO9KMY Requirement 5): on
+ * cttc's page, cttc's markup for the case written into the stage; on ours,
+ * our sidebar for it.
+ */
+async function captureSidebar(side: "cttc" | "ours", pictures: Map<string, Buffer>): Promise<void> {
+  for (const theme of THEMES) {
+    await page.emulateMedia({ colorScheme: theme });
+    for (const [name, { layout, detached }] of Object.entries(SIDEBAR_CASES)) {
+      if (side === "cttc") {
+        await page.goto(pathToFileURL(path.join(here, "page/cttc-sidebar.html")).href);
+        const aside = cttcSidebar(layout, detached);
+        const html = detached
+          ? aside
+          : `<div id="app-body" data-dock="${layout.dock}">${aside}<div id="action-bar-splitter"></div><div id="main-content"></div></div>`;
+        await page.evaluate(
+          `(() => { const s = document.getElementById("stage"); s.className = ${JSON.stringify(detached ? "detached" : "")}; s.innerHTML = ${JSON.stringify(html)}; ${cttcWidthScript(layout, detached)} })()`,
+        );
+      } else {
+        const url = pathToFileURL(path.join(here, "page/ours-sidebar.html"));
+        url.searchParams.set("case", name);
+        await page.goto(url.href);
+      }
+      await page.waitForSelector("#action-bar");
+      await page.evaluate("document.fonts.ready.then(() => true)");
+      pictures.set(`sidebar-${name}-${theme}`, await shoot("#stage"));
+    }
+  }
+}
+
 let cttc: Map<string, Buffer>;
 let ours: Map<string, Buffer>;
 
@@ -120,15 +152,20 @@ describe.skipIf(process.platform !== "darwin")(
       page = await app.firstWindow();
       cttc = await capture("cttc");
       ours = await capture("ours");
+      await captureSidebar("cttc", cttc);
+      await captureSidebar("ours", ours);
     }, 120_000);
 
     afterAll(async () => {
       await app?.close();
     });
 
-    const names = [...FIXTURES, "dialog", "dialog-page"].flatMap((n) =>
-      THEMES.map((t) => `${n}-${t}`),
-    );
+    const names = [
+      ...FIXTURES,
+      "dialog",
+      "dialog-page",
+      ...Object.keys(SIDEBAR_CASES).map((c) => `sidebar-${c}`),
+    ].flatMap((n) => THEMES.map((t) => `${n}-${t}`));
 
     it.each(names)("%s looks as in cttc", (name) => {
       const expected = cttc.get(name);

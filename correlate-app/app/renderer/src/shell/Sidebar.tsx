@@ -7,14 +7,10 @@
 import type { CSSProperties } from "react";
 import { Icon } from "../icons/Icon.js";
 import type { LayoutChange, SidebarLayout } from "./bridge.js";
+import { railArrow } from "./rail.js";
 import { AVAILABLE, type Entry, NOT_YET, SECTIONS, SEPARATOR } from "./sections.js";
 
-/** The rail button's arrow, as cttc's `updateCollapseToggleIcon` (`app.js:4460-4466`). */
-export function railArrow(layout: SidebarLayout): string {
-  const dock = layout.dock === "detached" ? layout.lastDock : layout.dock;
-  if (layout.collapsed) return dock === "right" ? "▸" : "◂";
-  return dock === "right" ? "◂" : "▸";
-}
+export { railArrow };
 
 /** The sidebar's props. */
 export interface SidebarProps {
