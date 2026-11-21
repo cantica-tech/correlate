@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { auditSumps } from "../../../main/src/catalog/audit.js";
 import { Catalog } from "../../../main/src/catalog/catalog.js";
 import { Lifecycle } from "../../../main/src/catalog/lifecycle.js";
 import { ActiveSumps } from "../../../main/src/catalog/windows.js";
@@ -38,15 +39,73 @@ async function answeringSump() {
 const quietLog = { info: () => {}, warn: () => {} };
 
 describe("br-SUMP-000006-sJpO9KMY", () => {
-  // BUG-000001-uKKrzikI, Critical: becomes a real test with roadmap Item 18
-  // (RM-000019-sJpO9KMY).
-  it.todo("cttc BUG-000001: PowerShell command injection via peer gateway host");
+  // BUG-000001-uKKrzikI, Critical (roadmap Item 18, RM-000019-sJpO9KMY): cttc
+  // pasted a peer's host into a PowerShell command. The audit runs no shell
+  // and no OS tool: a host full of quotes and commands reaches the SSH library
+  // as one plain value, and nothing is executed.
+  it("cttc BUG-000001: PowerShell command injection via peer gateway host", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cttc-inject-"));
+    const hostile = "box';Remove-Item -Recurse C:\\;$(touch /tmp/pwned)'";
+    try {
+      const catalog = Catalog.open(path.join(dir, "catalog.db"));
+      catalog.recordConnect({ kind: "remote", sumpPort: 8765, sshTarget: `ops@${hostile}` });
+      const vault = new Vault(path.join(dir, "vault"), undefined, {
+        scrypt: { N: 2 ** 10, r: 8, p: 1 },
+        logger: quietLog,
+      });
+      vault.create("a passphrase", "a passphrase");
+      vault.put(
+        "identity",
+        generateKeyPairSync("ed25519").privateKey.export({
+          type: "pkcs8",
+          format: "pem",
+        }) as string,
+      );
+      const asked: string[] = [];
+      const [result] = await auditSumps(
+        {
+          catalog,
+          vault,
+          connect: async (target) => {
+            asked.push(target.host);
+            throw new Error("no such host");
+          },
+        },
+        { timeoutMs: 1_000 },
+      );
+      expect(asked).toEqual([hostile]);
+      expect(result?.existence).toBe("unknown");
+      const here = path.dirname(fileURLToPath(import.meta.url));
+      const source = readFileSync(path.join(here, "../../../main/src/catalog/audit.ts"), "utf8");
+      const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+      expect(code).not.toMatch(/child_process|powershell|telnet|\bnc\b|spawn|execFile/i);
+      catalog.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("br-SUMP-000005-sJpO9KMY", () => {
-  // BUG-000002-uKKrzikI, Medium: becomes a real test with roadmap Item 18
-  // (RM-000019-sJpO9KMY).
-  it.todo("cttc BUG-000002: Telnet fallback reports open ports as closed");
+  // BUG-000002-uKKrzikI, Medium (roadmap Item 18, RM-000019-sJpO9KMY): cttc's
+  // telnet fallback held the connection open until its time-out and read the
+  // time-out as "closed". Probes now never read an open port as closed: a port
+  // that accepts but never answers is unknown, never absent, even for a Sump
+  // confirmed before; only a refused connection can make it absent.
+  it("cttc BUG-000002: Telnet fallback reports open ports as closed", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cttc-telnet-"));
+    const silent = await serve(() => {});
+    try {
+      const catalog = Catalog.open(path.join(dir, "catalog.db"));
+      catalog.recordConnect({ kind: "local", sumpPort: Number(new URL(silent.sump.baseUrl).port) });
+      const [result] = await auditSumps({ catalog }, { timeoutMs: 300 });
+      expect(result?.existence).toBe("unknown");
+      catalog.close();
+    } finally {
+      await silent.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("br-SUMP-000001-sJpO9KMY", () => {
@@ -102,6 +161,7 @@ describe("br-SUMP-000002-sJpO9KMY", () => {
           logger: { info: () => {}, warn: () => {} },
           connect: async () => ({
             hostKey: "SHA256:host",
+            probePort: async () => "open" as const,
             exec: async (command: string) => ({
               code: 0,
               stdout: command.includes("python -c") ? "True\n" : "",

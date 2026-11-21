@@ -32,6 +32,12 @@ export interface RemoteShell {
     command: string,
     options?: { input?: string | Buffer | Readable; timeoutMs?: number },
   ): Promise<RemoteResult>;
+  /**
+   * Whether `port` on the host's loopback accepts a connection, asked through
+   * SSH (a forward opened and closed at once): "open", "refused", or "error"
+   * when the host would not say (forwarding not allowed, a time-out).
+   */
+  probePort(port: number, timeoutMs?: number): Promise<"open" | "refused" | "error">;
   close(): void;
 }
 
@@ -103,6 +109,7 @@ export const connectSsh: SshConnect = (target) =>
         resolve({
           hostKey,
           exec: (command, options = {}) => execOn(client, command, options),
+          probePort: (port, timeoutMs = 10_000) => probePortOn(client, port, timeoutMs),
           close: () => client.end(),
         });
       })
@@ -159,6 +166,28 @@ function execOn(
       if (input === undefined) stream.end();
       else if (typeof input === "string" || Buffer.isBuffer(input)) stream.end(input);
       else input.pipe(stream);
+    });
+  });
+}
+
+/** Ask the host whether its loopback `port` accepts a connection. */
+function probePortOn(
+  client: Client,
+  port: number,
+  timeoutMs: number,
+): Promise<"open" | "refused" | "error"> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve("error"), timeoutMs);
+    client.forwardOut("127.0.0.1", 0, "127.0.0.1", port, (error, stream) => {
+      clearTimeout(timer);
+      if (error) {
+        // SSH_OPEN_CONNECT_FAILED (2) is what OpenSSH answers for a closed
+        // port; any other reason (forwarding not allowed, ...) says nothing.
+        resolve((error as Error & { reason?: unknown }).reason === 2 ? "refused" : "error");
+        return;
+      }
+      stream.close();
+      resolve("open");
     });
   });
 }

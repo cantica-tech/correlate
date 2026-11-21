@@ -124,6 +124,7 @@ function host(downFails = false, containerLeft = true) {
         if (command.endsWith(" ps -q")) return { ...ok, stdout: containerLeft ? "abc123\n" : "" };
         return ok;
       },
+      probePort: async () => "open" as const,
       close: () => {},
     };
   };

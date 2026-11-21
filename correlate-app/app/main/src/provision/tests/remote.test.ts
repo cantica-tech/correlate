@@ -46,6 +46,7 @@ function fakeHost(answer: (command: string, call: number) => RemoteResult) {
         });
         return answer(command, commands.length);
       },
+      probePort: async () => "open" as const,
       close: () => {
         closed += 1;
       },

@@ -47,6 +47,7 @@ function host(accept: (target: SshTarget) => boolean = () => true) {
         stderr: "",
         timedOut: false,
       }),
+      probePort: async () => "open" as const,
       close: () => {},
     };
   };

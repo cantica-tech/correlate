@@ -51,11 +51,18 @@ export interface SumpEntry {
   hostKey?: string;
   /** Remote Sumps: the vault id of the SSH key (`identity`, or `ssh:<id>`). */
   sshKeyId?: string;
+  /** The last audit's finding (br-SUMP-000005-sJpO9KMY). */
+  existence?: Existence;
+  lastContactAt?: string;
+  lastContactResult?: "ok" | "failed";
   addedAt: string;
   lastConnectedAt: string;
   /** Set when retired; the entry stays as history. */
   retiredAt?: string;
 }
+
+/** What an audit found about a Sump (br-SUMP-000005-sJpO9KMY). */
+export type Existence = "existing" | "unknown" | "absent";
 
 /** What a successful connect tells the catalog. */
 export interface ConnectInput {
@@ -109,6 +116,9 @@ export function entryProblem(doc: unknown): string | undefined {
     "user",
     "hostKey",
     "sshKeyId",
+    "existence",
+    "lastContactAt",
+    "lastContactResult",
     "addedAt",
     "lastConnectedAt",
     "retiredAt",
@@ -141,6 +151,25 @@ export function entryProblem(doc: unknown): string | undefined {
     return "a local Sump has no SSH target";
   }
   if (e.user !== undefined && !text(e.user)) return "user must be text";
+  if (
+    e.existence !== undefined &&
+    !["existing", "unknown", "absent"].includes(e.existence as string)
+  ) {
+    return "existence must be existing, unknown or absent";
+  }
+  if (
+    e.lastContactAt !== undefined &&
+    (typeof e.lastContactAt !== "string" || !ISO.test(e.lastContactAt))
+  ) {
+    return "lastContactAt must be a time";
+  }
+  if (
+    e.lastContactResult !== undefined &&
+    e.lastContactResult !== "ok" &&
+    e.lastContactResult !== "failed"
+  ) {
+    return "lastContactResult must be ok or failed";
+  }
   for (const field of ["addedAt", "lastConnectedAt"]) {
     if (typeof e[field] !== "string" || !ISO.test(e[field] as string)) return `${field} missing`;
   }
@@ -269,13 +298,27 @@ export class Catalog {
       }
       const user = input.user ?? existing?.user;
       if (user !== undefined) entry.user = user;
+      // A connect is a contact: the Sump exists.
+      entry.existence = "existing";
+      entry.lastContactAt = at;
+      entry.lastContactResult = "ok";
       this.write(entry);
       return entry;
     });
   }
 
   /** Change a live Sump's name, or a remote Sump's pinned host key or SSH key id. */
-  amend(id: string, patch: { name?: string; hostKey?: string; sshKeyId?: string }): SumpEntry {
+  amend(
+    id: string,
+    patch: {
+      name?: string;
+      hostKey?: string;
+      sshKeyId?: string;
+      existence?: Existence;
+      lastContactAt?: string;
+      lastContactResult?: "ok" | "failed";
+    },
+  ): SumpEntry {
     return this.transaction(() => {
       const entry = this.get(id);
       if (!entry || entry.retiredAt !== undefined) {
@@ -285,6 +328,9 @@ export class Catalog {
       if (patch.name !== undefined) next.name = patch.name.trim();
       if (patch.hostKey !== undefined) next.hostKey = patch.hostKey;
       if (patch.sshKeyId !== undefined) next.sshKeyId = patch.sshKeyId;
+      if (patch.existence !== undefined) next.existence = patch.existence;
+      if (patch.lastContactAt !== undefined) next.lastContactAt = patch.lastContactAt;
+      if (patch.lastContactResult !== undefined) next.lastContactResult = patch.lastContactResult;
       this.write(next);
       return next;
     });

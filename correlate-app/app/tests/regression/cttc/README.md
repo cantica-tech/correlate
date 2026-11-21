@@ -23,8 +23,8 @@ Rule IDs omit their `-sJpO9KMY` suffix; Roadmap gives the item numbers in
 
 | Bug | Title | Severity | Rule | Roadmap | Status |
 |---|---|---|---|---|---|
-| 1 | PowerShell command injection via peer gateway host | Critical | `br-SUMP-000006` | 18 | placeholder |
-| 2 | Telnet fallback reports open ports as closed | Medium | `br-SUMP-000005` | 18 | placeholder |
+| 1 | PowerShell command injection via peer gateway host | Critical | `br-SUMP-000006` | 18 | passing |
+| 2 | Telnet fallback reports open ports as closed | Medium | `br-SUMP-000005` | 18 | passing |
 | 3 | Corrupt gateways.json is silently overwritten | Critical | `br-SUMP-000001` | 13 | passing |
 | 4 | Uninstalled gateway's host can never be re-added | High | `br-SUMP-000002` | 16 | passing |
 | 5 | Failed switch to a remote gateway tears down the current tunnel | High | `br-SUMP-000003` | 16, 17 | passing |

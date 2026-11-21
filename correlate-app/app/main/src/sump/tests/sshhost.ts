@@ -68,13 +68,18 @@ export async function sshHost(allowed: KeyObject, reply: Reply = () => [0, ""]):
             });
           });
         });
-        client.on("tcpip", (accept, _reject, info) => {
+        client.on("tcpip", (accept, reject, info) => {
           forwarded.push(info.destPort);
-          const stream = accept();
+          // As OpenSSH does: connect first, refuse the channel if that fails.
           const socket = tcpConnect(info.destPort, "127.0.0.1");
-          socket.on("error", () => stream.close());
-          stream.on("error", () => socket.destroy());
-          stream.pipe(socket).pipe(stream);
+          socket.once("error", () => reject());
+          socket.once("connect", () => {
+            socket.removeAllListeners("error");
+            const stream = accept();
+            socket.on("error", () => stream.close());
+            stream.on("error", () => socket.destroy());
+            stream.pipe(socket).pipe(stream);
+          });
         });
       })
       .on("error", () => {});
