@@ -10,11 +10,15 @@ As cttc's gateway did, but in the Sump (decided in FEAT-000026-sJpO9KMY):
   long as it is followed.
 - One stats poll per stream that follows containers: `docker stats
   --no-stream` every 5 s, each followed container a `metric` record.
+- One host reader per stream that follows anything (REQ-000032-sJpO9KMY):
+  a loop on the host printing its `/proc` figures every 5 s
+  (`sump_plugin_ssh.host`), each sample a `metric` record of
+  `<stream>/__host__`; it starts and stops with the stream's collection and
+  is tried again after 5 s when it ends.
 
 `apply` makes one stream's running followers exactly its followed set
 (br-STREAM-000002-sJpO9KMY); other streams are untouched. Records go to the
 Sump's record store through its ingest adapter, `source` `<stream>/<name>`.
-Host telemetry is Item 33's.
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 from correlate_sump.transport import Transport
+from sump_plugin_ssh.host import BEGIN, END, host_record, parse_sample
 from sump_plugin_ssh.streams import Followed
 
 logger = logging.getLogger(__name__)
@@ -40,6 +45,9 @@ RETRY_AFTER_S = 5.0
 Sink = Callable[[bytes], Awaitable[bool]]
 #: The transport of a stream, or None while it cannot be reached.
 TransportFor = Callable[[str], Transport | None]
+#: How to read a stream's host: its transport, the reader's command, and the
+#: host's name for the records; None when it cannot be read now.
+HostReaderFor = Callable[[str], Awaitable[tuple[Transport, list[str], str] | None]]
 
 _TS = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:\d\d) ?(.*)$", re.S)
 _SIZE = re.compile(r"^\s*([\d.]+)\s*([A-Za-z]*)\s*$")
@@ -120,17 +128,19 @@ class Collection:
         stats_every: float = STATS_EVERY_S,
         retry_after: float = RETRY_AFTER_S,
         now: Callable[[], datetime] = _now,
+        host_reader: HostReaderFor | None = None,
     ) -> None:
         self._sink = sink
         self._transport_for = transport_for
         self._stats_every = stats_every
         self._retry_after = retry_after
         self._now = now
+        self._host_reader = host_reader
         self._followed: dict[str, Followed] = {}
         self._tasks: dict[tuple[str, str, str], asyncio.Task[None]] = {}
 
     def running(self) -> list[tuple[str, str, str]]:
-        """What runs: `(stream, "container" | "service" | "stats", name)`."""
+        """What runs: `(stream, "container" | "service" | "stats" | "host", name)`."""
         return sorted(key for key, task in self._tasks.items() if not task.done())
 
     def apply(self, stream_id: str, followed: Followed) -> None:
@@ -140,6 +150,8 @@ class Collection:
         wanted |= {(stream_id, "service", n) for n in followed.services}
         if followed.containers:
             wanted.add((stream_id, "stats", ""))
+        if self._host_reader is not None and (followed.containers or followed.services):
+            wanted.add((stream_id, "host", ""))
         mine = {key for key in self._tasks if key[0] == stream_id}
         for key in sorted(mine - wanted):
             logger.info("collection: stop %s %s on %s", key[1], key[2] or "", stream_id)
@@ -148,6 +160,8 @@ class Collection:
             logger.info("collection: start %s %s on %s", key[1], key[2] or "", stream_id)
             if key[1] == "stats":
                 self._tasks[key] = asyncio.create_task(self._stats(stream_id))
+            elif key[1] == "host":
+                self._tasks[key] = asyncio.create_task(self._host(stream_id))
             else:
                 self._tasks[key] = asyncio.create_task(self._follow(stream_id, key[1], key[2]))
 
@@ -230,3 +244,37 @@ class Collection:
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("collection: stats on %s failed: %s", stream_id, exc)
             await asyncio.sleep(self._stats_every)
+
+    async def _host(self, stream_id: str) -> None:
+        """Read the stream's host until cancelled; a reader that ends is tried
+        again after a while, its CPU % starting over."""
+        assert self._host_reader is not None
+        while True:
+            previous = None
+            try:
+                reader = await self._host_reader(stream_id)
+                if reader is not None:
+                    transport, args, host = reader
+                    async with transport.stream_lines(args) as lines:
+                        block: list[str] | None = None
+                        async for line in lines:
+                            text = line.text.strip()
+                            if line.stream == "stderr":
+                                logger.warning("collection: host of %s: %s", stream_id, text[:200])
+                            elif text == BEGIN:
+                                block = []
+                            elif text == END and block is not None:
+                                sample = parse_sample(block)
+                                ts = self._now().isoformat()
+                                await self._store(
+                                    host_record(stream_id, host, sample, previous, ts)
+                                )
+                                previous, block = sample, None
+                            elif block is not None:
+                                block.append(text)
+                    logger.warning("collection: host reader of %s ended", stream_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 -- the host never stops the others
+                logger.warning("collection: host of %s failed: %s", stream_id, exc)
+            await asyncio.sleep(self._retry_after)

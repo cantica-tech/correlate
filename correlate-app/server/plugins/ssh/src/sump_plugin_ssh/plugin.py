@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import socket
 from typing import Any
 
 from correlate_sump.datasource import DataSource
@@ -26,6 +27,7 @@ from correlate_sump.users import data_dir_from_env
 from sump_plugin_ssh import __version__
 from sump_plugin_ssh.collect import Collection
 from sump_plugin_ssh.datasource import DockerHostDataSource
+from sump_plugin_ssh.host import SCRIPT, helper_name, self_reader_args
 from sump_plugin_ssh.identity import SumpIdentity, ensure_identity
 from sump_plugin_ssh.routes import add_removal_routes, add_stream_routes
 from sump_plugin_ssh.streams import SELF_ID, Followed, StreamDef, StreamStore
@@ -65,6 +67,9 @@ class SumpPluginSSH:
         #: The running collection, once the background task has started.
         self.collection: Collection | None = None
         self._ssh: dict[str, SSHTransport] = {}
+        #: The Sump's own image, for the "self" host reader (REQ-000032-sJpO9KMY).
+        self._image: str | None = None
+        self._image_warned = False
 
     def _data_dir(self):
         env = self._env if self._env is not None else dict(os.environ)
@@ -125,6 +130,46 @@ class SumpPluginSSH:
             self._ssh[stream_id] = self.ssh_transport(stream)
         return self._ssh[stream_id]
 
+    async def host_reader(self, stream_id: str) -> tuple[Transport, list[str], str] | None:
+        """How to read a stream's host (REQ-000032-sJpO9KMY): over SSH, the loop
+        as a shell command; for "self", in a container of the Sump's own image
+        on the host's network. None when it cannot be read now."""
+        transport = self.transport_for(stream_id)
+        if transport is None:
+            return None
+        if stream_id != SELF_ID:
+            stream = self.store().get(stream_id)
+            return transport, transport.shell_args(SCRIPT), stream.host if stream else stream_id
+        image = await self._own_image(transport)
+        if image is None:
+            return None
+        return transport, self_reader_args(image, helper_name(self._own_container())), "localhost"
+
+    @staticmethod
+    def _own_container() -> str:
+        """The Sump's own container: Docker names its host after it."""
+        return os.environ.get("HOSTNAME") or socket.gethostname()
+
+    async def _own_image(self, transport: Transport) -> str | None:
+        """The Sump's own image, found once by inspecting its container."""
+        if self._image is not None:
+            return self._image
+        result = await transport.run(
+            ["docker", "inspect", "--format", "{{.Config.Image}}", self._own_container()]
+        )
+        image = result.stdout.strip()
+        if result.returncode != 0 or not image:
+            if not self._image_warned:
+                self._image_warned = True
+                logger.warning(
+                    "host telemetry: the Sump's own image is not known (%s); no host figures"
+                    " for self",
+                    (result.stderr or result.stdout).strip()[:200],
+                )
+            return None
+        self._image = image
+        return image
+
     @hookimpl
     def sump_plugin_info(self) -> dict[str, Any]:
         return {"name": PLUGIN_NAME, "version": __version__}
@@ -154,7 +199,9 @@ class SumpPluginSSH:
             if adapter is None:
                 logger.warning("collection: no record store; nothing will be collected")
                 await asyncio.Event().wait()
-            collection = Collection(adapter.ingest, self.transport_for)
+            collection = Collection(
+                adapter.ingest, self.transport_for, host_reader=self.host_reader
+            )
             self.collection = collection
             try:
                 # Resume what was followed before the Sump stopped.

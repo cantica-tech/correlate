@@ -102,6 +102,11 @@ class Transport(ABC):
         """Run a compound shell command (supports `;`, pipes, redirection, ...)."""
         return await self.run(self._shell_command(script))
 
+    def shell_args(self, script: str) -> list[str]:
+        """The argv running `script` in a shell on this transport, for
+        `stream_lines` (a long-lived script, as the host reader's loop)."""
+        return self._shell_command(script)
+
 
 async def merge_streams(
     stdout: asyncio.StreamReader, stderr: asyncio.StreamReader

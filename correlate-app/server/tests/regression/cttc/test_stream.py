@@ -102,10 +102,13 @@ async def test_cttc_bug_000028_relaunch_replays_every_historical_set_request(
     # The Sump restarts: its plugin is built again from its data volume.
     again, task = await started(sump)
     assert again.collection is not None
+    # Each stream's host is read while it collects (REQ-000032-sJpO9KMY).
     assert again.collection.running() == [
         ("self", "container", "db"),
+        ("self", "host", ""),
         ("self", "stats", ""),
         (lab.id, "container", "queue"),
+        (lab.id, "host", ""),
         (lab.id, "stats", ""),
     ]
     await stopped(task)
