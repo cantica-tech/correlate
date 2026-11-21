@@ -153,9 +153,19 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       "menu",
       "picker",
       "stream",
+      "live",
       "series",
       "logs",
     ]);
+    // The live view's settings: only their own channels (REQ-000031-sJpO9KMY).
+    const live = (exposed.correlate as { live: Record<string, (m?: unknown) => unknown> }).live;
+    expect(Object.keys(live)).toEqual(["get", "set", "onChanged"]);
+    await live.get?.();
+    await live.set?.({ windowSecs: 3 });
+    expect(invoked.splice(0)).toEqual([["live:get"], ["live:set", { windowSecs: 3 }]]);
+    const stopLive = live.onChanged?.(() => {}) as () => void;
+    expect(listeners.has("live:changed")).toBe(true);
+    stopLive();
     // Each stream's containers' order and hidden set: only their own channels (REQ-000030-sJpO9KMY).
     const series = (exposed.correlate as { series: Record<string, (m?: unknown) => unknown> })
       .series;

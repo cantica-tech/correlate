@@ -55,6 +55,7 @@ from correlate_sump.sessions import (
     SessionStore,
     session_limits_from_env,
 )
+from correlate_sump.span import data_range
 from correlate_sump.sshsig import LOGIN_NAMESPACE, SignatureError, verify
 from correlate_sump.users import (
     CorruptKeyStore,
@@ -475,6 +476,15 @@ def create_app(
         """The index of `source`'s row nearest `t` (REQ-000030-sJpO9KMY)."""
         try:
             return await nearest_row(redis_client, source, start=start, end=end, t=t, order=order)
+        except QueryError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/records/range")
+    async def record_range(sources: str) -> dict[str, Any]:
+        """The earliest and latest record of `sources`, comma-separated
+        (REQ-000031-sJpO9KMY), for the live view's navigator."""
+        try:
+            return await data_range(redis_client, [s for s in sources.split(",") if s])
         except QueryError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

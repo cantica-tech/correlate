@@ -35,6 +35,7 @@ const {
   openCatalog,
   openVault,
   registerMenuIpc,
+  registerLiveIpc,
   registerLogsIpc,
   registerPickerIpc,
   registerSeriesIpc,
@@ -232,6 +233,8 @@ app.whenReady().then(() => {
     (id) => catalog?.get(id)?.name ?? id,
   );
   registerStatusIpc(ipcMain, notifications, settings, broadcast);
+  // The live view's settings, every window told of a change (REQ-000031).
+  registerLiveIpc(ipcMain, settings, broadcast);
   // A Sump a window is on is probed every 5 s, the others every 30 s.
   const probe = new HealthProbe(lifecycle, sumps, { inUse: () => activeSumps.inUse() });
   probe.start();

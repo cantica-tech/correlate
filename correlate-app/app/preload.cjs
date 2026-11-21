@@ -26,7 +26,8 @@
  * this window's active data stream (REQ-000027-sJpO9KMY). `window.correlate.logs`
  * keeps the log panels' choices and runs Export .log (REQ-000029-sJpO9KMY);
  * `window.correlate.series` keeps each stream's containers' order and hidden
- * set (REQ-000030-sJpO9KMY).
+ * set (REQ-000030-sJpO9KMY); `window.correlate.live` the live view's
+ * settings (REQ-000031-sJpO9KMY).
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -67,6 +68,10 @@ const MENU_ACTION_CHANNEL = "menu:action";
 /** Must match the channels in `main/src/picker.ts`. */
 const PICKER_LAST_CHANNEL = "picker:lastStream";
 const PICKER_SET_LAST_CHANNEL = "picker:setLastStream";
+/** Must match the channels in `main/src/live.ts`. */
+const LIVE_GET_CHANNEL = "live:get";
+const LIVE_SET_CHANNEL = "live:set";
+const LIVE_CHANGED_EVENT = "live:changed";
 /** Must match the channels in `main/src/series.ts`. */
 const SERIES_GET_CHANNEL = "series:get";
 const SERIES_SET_CHANNEL = "series:set";
@@ -167,6 +172,14 @@ contextBridge.exposeInMainWorld("correlate", {
     active: () => ipcRenderer.invoke(STREAM_ACTIVE_CHANNEL),
     /** Make a stream this window's active one: `{ ok, stream }` or `{ ok: false, message }`. */
     setActive: (stream) => ipcRenderer.invoke(STREAM_SET_ACTIVE_CHANNEL, stream),
+  },
+  live: {
+    /** The live view's settings: windowSecs, liveTrack, liveTrackSecs, resumeSecs. */
+    get: () => ipcRenderer.invoke(LIVE_GET_CHANNEL),
+    /** Keep a part of them. */
+    set: (change) => ipcRenderer.invoke(LIVE_SET_CHANNEL, change),
+    /** Hear them change; returns the function that stops listening. */
+    onChanged: (listener) => listen(LIVE_CHANGED_EVENT, listener),
   },
   series: {
     /** A stream's containers' `{ order, hidden }` on this window's Sump. */

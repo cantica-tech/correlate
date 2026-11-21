@@ -27,6 +27,7 @@ import { Vault, type VaultLogger } from "./vault/vault.js";
 
 export { Auditor } from "./catalog/audit.js";
 export { identityPublicKey, importIdentity, userName } from "./identity/identity.js";
+export { registerLiveIpc } from "./live.js";
 export { registerLogsIpc } from "./logs.js";
 export { fieldMenuTemplate, nativeMenuTemplate, registerMenuIpc } from "./menu.js";
 export { Notifications, notifyLifecycle, registerStatusIpc } from "./notify.js";

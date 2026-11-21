@@ -78,6 +78,18 @@ export type SumpRequester = (message: {
   timeoutMs?: number;
 }) => Promise<{ ok: true; value: unknown } | { ok: false; error: SumpErrorInfo }>;
 
+/** The live view's settings, as the main process keeps them (REQ-000031-sJpO9KMY). */
+export interface LiveSettings {
+  /** Rows this close to the cursor are highlighted, in s. */
+  windowSecs: number;
+  /** Live tracking: the cursor follows now while live. */
+  liveTrack: boolean;
+  /** Where live tracking puts the cursor, relative to now, in s; never positive. */
+  liveTrackSecs: number;
+  /** After a double-click pause, live again after this many s; 0 stays paused. */
+  resumeSecs: number;
+}
+
 /** The bridge, as far as the shell goes. */
 export interface ShellBridge {
   menu: {
@@ -87,6 +99,12 @@ export interface ShellBridge {
   stream?: {
     active(): Promise<string | null>;
     setActive(stream: string): Promise<{ ok: boolean; message?: string }>;
+  };
+  /** The live view's settings (REQ-000031-sJpO9KMY). */
+  live?: {
+    get(): Promise<LiveSettings>;
+    set(change: Partial<LiveSettings>): Promise<{ ok: boolean; message?: string }>;
+    onChanged(listener: (settings: LiveSettings) => void): () => void;
   };
   /** Each stream's containers' order and hidden set (REQ-000030-sJpO9KMY). */
   series?: {
