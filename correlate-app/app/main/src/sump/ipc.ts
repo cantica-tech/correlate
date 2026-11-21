@@ -80,28 +80,59 @@ function parse(message: unknown): SumpRequestMessage {
   return m as SumpRequestMessage;
 }
 
+/** Logs in to the named Sump again (the SSH-key login); throws when it cannot. */
+export type Relogin = (sump: string) => Promise<void>;
+
 /**
  * Answer one renderer request; never throws. A Sump refusing the token (401)
- * makes the main process forget it: the next call needs a new login.
+ * makes the main process forget it, log in once (`relogin`) and retry the
+ * call once (br-CONN-000004-sJpO9KMY); a second refusal, or a failed login,
+ * reaches the renderer as `login-needed`.
  */
 export async function handleSumpRequest(
   message: unknown,
   resolve: SumpResolver,
   tokens?: SessionTokens,
+  relogin?: Relogin,
 ): Promise<SumpReply> {
+  let m: SumpRequestMessage;
   try {
-    const m = parse(message);
+    m = parse(message);
+  } catch (error) {
+    return { ok: false, error: describeError(error) };
+  }
+  const send = () => {
     const sump = resolve(m.sump);
     if (!sump) throw new SumpCallError(`no Sump named "${m.sump}"`);
-    const value = await request(sump, m.method, m.path, {
+    return request(sump, m.method, m.path, {
       body: m.body,
       query: m.query,
       timeoutMs: m.timeoutMs,
     });
-    return { ok: true, value };
+  };
+  try {
+    return { ok: true, value: await send() };
   } catch (error) {
-    if (error instanceof SumpHttpError && error.status === 401) tokens?.forget(error.sump);
-    return { ok: false, error: describeError(error) };
+    if (!(error instanceof SumpHttpError && error.status === 401)) {
+      return { ok: false, error: describeError(error) };
+    }
+    tokens?.forget(error.sump);
+    if (!relogin) return { ok: false, error: describeError(error) };
+    try {
+      await relogin(m.sump);
+    } catch (loginError) {
+      tokens?.forget(m.sump);
+      const why = loginError instanceof Error ? loginError.message : String(loginError);
+      return { ok: false, error: { kind: "login-needed", message: `login failed: ${why}` } };
+    }
+    try {
+      return { ok: true, value: await send() };
+    } catch (retryError) {
+      if (retryError instanceof SumpHttpError && retryError.status === 401) {
+        tokens?.forget(retryError.sump);
+      }
+      return { ok: false, error: describeError(retryError) };
+    }
   }
 }
 
@@ -110,8 +141,9 @@ export function registerSumpIpc(
   ipcMain: IpcMainLike,
   resolve: SumpResolver,
   tokens?: SessionTokens,
+  relogin?: Relogin,
 ): void {
   ipcMain.handle(SUMP_REQUEST_CHANNEL, (_event, message) =>
-    handleSumpRequest(message, resolve, tokens),
+    handleSumpRequest(message, resolve, tokens, relogin),
   );
 }

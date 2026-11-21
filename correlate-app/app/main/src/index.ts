@@ -7,17 +7,22 @@
  * at `CORRELATE_SUMP_URL` or the Sump's default `http://127.0.0.1:8765`.
  *
  * The key vault (REQ-000008-sJpO9KMY) lives in the app's user-data folder,
- * under `vault/`.
+ * under `vault/`; it holds the user's identity key, which logs in to Sumps
+ * (REQ-000011-sJpO9KMY).
  */
 import path from "node:path";
+import { ensureIdentity, userName } from "./identity/identity.js";
 import type { Sump } from "./sump/errors.js";
-import type { SumpResolver } from "./sump/ipc.js";
+import type { Relogin, SumpResolver } from "./sump/ipc.js";
+import { login } from "./sump/login.js";
 import { SessionTokens } from "./sump/tokens.js";
 import type { SafeStorageLike } from "./vault/cipher.js";
 import { Vault, type VaultLogger } from "./vault/vault.js";
 
+export { identityPublicKey, importIdentity, userName } from "./identity/identity.js";
 export { logout } from "./sump/client.js";
 export { registerSumpIpc } from "./sump/ipc.js";
+export { login } from "./sump/login.js";
 export { SessionTokens };
 
 /** The Sump's default address (server/src/correlate_sump/__main__.py). */
@@ -59,4 +64,26 @@ export function openVault(
     logger.warn(`vault not opened: ${(error as Error).message}`);
     return undefined;
   }
+}
+
+/**
+ * How the main process logs in again when a Sump refuses its token: the
+ * identity key from the vault (generated the first time), the user name from
+ * `userName`. A vault that does not exist yet is created when it needs no
+ * passphrase; a locked one, or none, means the user must act (Phase 4).
+ */
+export function reloginWith(
+  vault: Vault | undefined,
+  resolve: SumpResolver,
+  tokens: SessionTokens,
+  env: Record<string, string | undefined>,
+): Relogin {
+  return async (name) => {
+    const sump = resolve(name);
+    if (!sump) throw new Error(`no Sump named "${name}"`);
+    if (!vault) throw new Error("the key vault is not available");
+    if (vault.state === "none" && !vault.needsPassphrase()) vault.create();
+    if (vault.state !== "unlocked") throw new Error("the key vault is locked");
+    await login(sump, userName(env), ensureIdentity(vault), tokens);
+  };
 }

@@ -2,7 +2,9 @@
 /**
  * Bundles the main process's TypeScript (`main/src/index.ts`) into
  * `main/dist/main.cjs`, which `main.cjs` requires. Electron stays external:
- * it is provided at run time. Pass `--watch` to rebuild on every change.
+ * it is provided at run time. So does `ssh2`, loaded from `node_modules`: its
+ * optional native add-ons (`cpu-features`, `sshcrypto.node`) cannot be
+ * bundled. Pass `--watch` to rebuild on every change.
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +24,7 @@ const options = {
   platform: "node",
   format: "cjs",
   target: "node22",
-  external: ["electron"],
+  external: ["electron", "ssh2"],
   sourcemap: true,
   logLevel: "info",
 };

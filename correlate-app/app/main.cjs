@@ -18,6 +18,7 @@ const {
   configuredSumps,
   openVault,
   registerSumpIpc,
+  reloginWith,
   SessionTokens,
 } = require("./main/dist/main.cjs");
 
@@ -39,9 +40,12 @@ function createWindow() {
 
 app.whenReady().then(() => {
   // Session tokens live in memory only: quitting forgets them (br-CONN-000004).
+  // A refused token is renewed by logging in with the vault's SSH key
+  // (br-CONN-000007).
   const tokens = new SessionTokens();
-  registerSumpIpc(ipcMain, configuredSumps(process.env, tokens), tokens);
   const vault = openVault(app.getPath("userData"), safeStorage);
+  const sumps = configuredSumps(process.env, tokens);
+  registerSumpIpc(ipcMain, sumps, tokens, reloginWith(vault, sumps, tokens, process.env));
   // The passphrase's derived key lives only for the session.
   app.on("will-quit", () => vault?.lock());
   createWindow();

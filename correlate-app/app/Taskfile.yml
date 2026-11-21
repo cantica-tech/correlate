@@ -55,6 +55,15 @@ tasks:
     desc: Run the Vitest suite
     cmd: npm test
 
+  smoke:
+    desc: Log in to the real Sump container with the app's own code (needs Docker)
+    cmds:
+      - task: :server:up
+      - defer: { task: ":server:down" }
+      - npx vitest run tests/smoke
+    env:
+      SUMP_SMOKE: "1"
+
   check:
     desc: Lint, type-check and test
     cmds:
