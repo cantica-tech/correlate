@@ -13,6 +13,7 @@ import {
   Switch,
 } from "../../../renderer/src/components/index.js";
 import "../../../renderer/src/theme/tokens.css";
+import "../../../renderer/src/theme/cttc.generated.css";
 import "../../../renderer/src/icons/icons.css";
 
 /** What the test drives on this page. */

@@ -14,7 +14,8 @@
       "!**/*.md",
       "!**/*.reference.css",
       "!**/icons.generated.ts",
-      "!tests/parity/page/cttc.html"
+      "!tests/parity/page/cttc.html",
+      "!**/*.generated.css"
     ]
   },
   "formatter": {

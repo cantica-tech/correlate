@@ -9,6 +9,8 @@ import { App } from "./App.js";
 // cttc's design tokens and base type (br-STYLE-000001-sJpO9KMY), bundled into
 // renderer/dist/bundle.css.
 import "./theme/tokens.css";
+// cttc's rules, every area's, in cttc's own order (build/cttc-css.js).
+import "./theme/cttc.generated.css";
 
 const container = document.getElementById("root");
 if (!container) {

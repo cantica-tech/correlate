@@ -12,7 +12,6 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "../icons/Icon.js";
 import { NOT_YET } from "../shell/sections.js";
 import { accText, MENUS, type MenuItem, shortcutFor } from "./menus.js";
-import "./menubar.css";
 
 /** Whether this is macOS, for the shortcut text and modifier, as cttc's `IS_MAC`. */
 export const IS_MAC = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);

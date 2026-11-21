@@ -20,7 +20,6 @@ import {
   type Targets,
 } from "./api.js";
 import { followedFrom, initialChecked, TargetList } from "./TargetList.js";
-import "./streams.css";
 
 /** The choice that means "a new stream over SSH". */
 export const NEW_STREAM = "";

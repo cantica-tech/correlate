@@ -5,8 +5,7 @@
  */
 import { createRoot } from "react-dom/client";
 import "../../../renderer/src/theme/tokens.css";
-import "../../../renderer/src/components/components.css";
-import "../../../renderer/src/shell/shell.css";
+import "../../../renderer/src/theme/cttc.generated.css";
 import { MenuBar } from "../../../renderer/src/menubar/MenuBar.js";
 
 const root = document.getElementById("root");

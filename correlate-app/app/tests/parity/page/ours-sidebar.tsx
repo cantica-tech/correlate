@@ -5,8 +5,7 @@
  */
 import { createRoot } from "react-dom/client";
 import "../../../renderer/src/theme/tokens.css";
-import "../../../renderer/src/components/components.css";
-import "../../../renderer/src/shell/shell.css";
+import "../../../renderer/src/theme/cttc.generated.css";
 import { Sidebar } from "../../../renderer/src/shell/Sidebar.js";
 import { SIDEBAR_CASES } from "./sidebar-cases.js";
 

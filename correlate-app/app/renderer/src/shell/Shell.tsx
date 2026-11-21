@@ -11,7 +11,6 @@ import { StatusBar } from "../statusbar/StatusBar.js";
 import { StreamsDialog } from "../streams/StreamsDialog.js";
 import type { LayoutChange, ShellBridge, SidebarLayout, ThemeMode } from "./bridge.js";
 import { Sidebar } from "./Sidebar.js";
-import "./shell.css";
 
 /** The splitter's bounds, as the main process checks them. */
 const MIN_WIDTH = 120;

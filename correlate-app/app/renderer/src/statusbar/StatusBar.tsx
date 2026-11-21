@@ -18,7 +18,6 @@ import { Icon } from "../icons/Icon.js";
 import type { ListedSump, Notice, ShellBridge, StateRecord } from "../shell/bridge.js";
 import { NOT_YET } from "../shell/sections.js";
 import { PILL_WORDS, pillState, statusRows, whereIs } from "./pill.js";
-import "./statusbar.css";
 
 /** How long a message stays in the bar: cttc's default (5 s). */
 export const MESSAGE_MS = 5_000;

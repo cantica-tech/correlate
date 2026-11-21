@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit -p renderer/src && tsc --noEmit -p main/src && tsc --noEmit -p build && tsc --noEmit -p tests && tsc --noEmit -p tests/parity/page",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "css": "node build/cttc-css.js"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.10",
