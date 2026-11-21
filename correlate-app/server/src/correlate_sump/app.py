@@ -405,10 +405,12 @@ def create_app(
         (REQ-000028-sJpO9KMY): `field`s summed, as a percentage of `over`, or
         a counter's rate in `rate` mode."""
         try:
+            # `field` repeated, or comma-separated (the app's bridge sends one value).
+            fields = [name for item in field for name in item.split(",") if name]
             return await query_buckets(
                 redis_client,
                 source,
-                fields=field,
+                fields=fields,
                 start=start,
                 end=end,
                 buckets=buckets,

@@ -14,6 +14,8 @@ export interface Stream {
   paused?: boolean;
   /** How many containers and services it follows. */
   following?: number;
+  /** What it follows (REQ-000028-sJpO9KMY). */
+  followed?: FollowedSet;
 }
 
 /** A running container. */

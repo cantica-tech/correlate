@@ -69,6 +69,7 @@ def test_lists_self_then_the_ssh_streams(setup) -> None:
             {
                 "paused": False,
                 "following": 0,
+                "followed": {"containers": [], "services": []},
                 "id": "self",
                 "kind": "self",
                 "label": "This Sump's host",
@@ -173,6 +174,7 @@ def test_pauses_and_a_submit_resumes(setup) -> None:
     assert plugin.store().followed("self") == Followed(["db", "web"], [])
     listed = client.get("/streams").json()["streams"][0]
     assert (listed["paused"], listed["following"]) == (True, 2)
+    assert listed["followed"] == {"containers": ["db", "web"], "services": []}
     client.put("/streams/self/followed", json={"containers": ["web"]})
     assert not plugin.store().paused("self")
     assert plugin.collection.applied[-1] == ("self", Followed(["web"], []))

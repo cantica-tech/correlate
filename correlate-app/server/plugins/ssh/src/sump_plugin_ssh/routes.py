@@ -56,6 +56,8 @@ def _stream_dict(stream: Any, plugin: Any = None) -> dict[str, Any]:
         extra = {
             "paused": plugin.store().paused(stream.id),
             "following": len(followed.containers) + len(followed.services),
+            # What the charts draw (REQ-000028-sJpO9KMY), without asking Docker.
+            "followed": {"containers": followed.containers, "services": followed.services},
         }
     return {
         **extra,

@@ -1,0 +1,123 @@
+/*
+ * cttc's telemetry charts (br-STYLE-000001-sJpO9KMY, REQ-000028-sJpO9KMY),
+ * rule for rule from cttc `app/renderer/style.css` at d8a444b; loaded in
+ * cttc's order through `theme/cttc.generated.css`.
+ */
+
+/* The chart block, its head and legend. */
+/* cttc style.css:1025-1106 */
+#layout {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#chart-block {
+  /* Rigid 70/30 split with #panels below (flex: 0 0 30%) -- no grow, no
+     shrink, so it stays exactly 70% regardless of content (strip count/
+     height, legend size, live vs. loaded metrics) rather than drifting
+     with whatever's rendered; each side scrolls internally if it needs
+     more room than its fixed share. */
+  flex: 0 0 70%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  padding: 4px 0 2px;
+}
+/* Telemetry (#svc-graph) and Host telemetry (#host-block) -- equal shares
+   of #chart-block's height, each internally scrollable if its own content
+   (e.g. a multi-line legend) would otherwise want more than its half. */
+.graph-block {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.graph-block #legend,
+.graph-block #chart-nav,
+.graph-block #host-nav,
+.graph-block #chart-head,
+.graph-block #host-head,
+.graph-block #host-loading,
+.graph-block .panel-head-divider {
+  flex: 0 0 auto;
+}
+.graph-block #charts,
+.graph-block #host-charts {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+#empty-state {
+  padding: 28px 16px;
+  text-align: center;
+}
+
+/* Experimental: a light divider between the telemetry header (title +
+   buttons) and the list of containers below it. */
+.panel-head-divider {
+  width: 100%;
+  height: 1px;
+  margin-bottom: 6px;
+  background: var(--border);
+}
+
+#chart-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  height: 32px; /* matches the sidebar's .ab-group-header */
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+#legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 2px 12px 4px;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  user-select: none;
+}
+.legend-item.off {
+  opacity: 0.35;
+}
+.legend-item.disabled {
+  opacity: 0.55;
+  cursor: context-menu;
+}
+.legend-item.disabled .legend-swatch {
+  opacity: 0.5;
+}
+.legend-item.sample .legend-swatch {
+  border: 1px dashed var(--text-secondary);
+  background-clip: padding-box;
+}
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+/* The strips. */
+/* cttc style.css:1177-1178 */
+#charts {
+  position: relative;
+}
+.strip {
+  display: block;
+  width: 100%;
+  cursor: crosshair;
+}

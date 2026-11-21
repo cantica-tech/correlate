@@ -141,6 +141,12 @@ async def test_the_route_answers_behind_the_session() -> None:
             )
             assert answer.status_code == 200
             assert answer.json()["values"] == [12.5, None]
+            summed = await client.get(
+                "/records/buckets",
+                params={**query, "field": "cpu_percent,cpu_percent"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert summed.json()["values"] == [25.0, None]
             bad = await client.get(
                 "/records/buckets",
                 params={**query, "buckets": 0},

@@ -74,6 +74,7 @@ export type SumpRequester = (message: {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   body?: unknown;
+  query?: Record<string, string | number | boolean>;
   timeoutMs?: number;
 }) => Promise<{ ok: true; value: unknown } | { ok: false; error: SumpErrorInfo }>;
 
