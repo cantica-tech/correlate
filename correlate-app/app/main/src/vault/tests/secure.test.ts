@@ -28,25 +28,12 @@ afterEach(() => {
 });
 
 describe("br-VAULT-000006-sJpO9KMY: owner-only on this system, for real", () => {
-  it("writes a secret file atomically and owner-only", async () => {
+  it("writes a secret file atomically and owner-only", () => {
     const file = path.join(dir, "token.json");
     writeSecretFile(file, "first");
     writeSecretFile(file, "second");
     expect(readFileSync(file, "utf8")).toBe("second");
     expect(readdirSync(dir)).toEqual(["token.json"]);
-    if (WINDOWS) {
-      const { spawnSync } = await import("node:child_process");
-      for (const [cmd, args] of [
-        ["whoami", ["/user", "/fo", "csv", "/nh"]],
-        ["icacls", [file]],
-      ] as const) {
-        const r = spawnSync(cmd, [...args], { encoding: "utf8" });
-        console.log(`DIAG ${cmd}: ${JSON.stringify(r.stdout)} ${JSON.stringify(r.stderr)}`);
-      }
-      console.log(
-        `DIAG file: ${JSON.stringify(file)} problems: ${JSON.stringify(ownerOnlyProblems(file))}`,
-      );
-    }
     expect(ownerOnlyProblems(file)).toEqual([]);
   });
 
@@ -64,15 +51,33 @@ describe("br-VAULT-000006-sJpO9KMY: owner-only on this system, for real", () => 
   });
 });
 
-/** A fake Windows: records every command and answers from `answers`. */
-function fakeWindows(answers: Record<string, CommandResult>) {
+/**
+ * A fake Windows: records every command. `whoami` answers `user`; `icacls
+ * <path>` answers the next of `listings` (the last one repeats), or an
+ * owner-only listing; other icacls calls answer `set`.
+ */
+function fakeWindows(
+  options: { user?: CommandResult; listings?: string[][]; set?: CommandResult } = {},
+) {
   const calls: string[][] = [];
+  const listings = [...(options.listings ?? [])];
   restore = overridePlatformForTests({
     windows: true,
     run: (command, args) => {
       calls.push([command, ...args]);
-      const key = `${command} ${args.length === 1 ? "show" : args[0] === "/user" ? "user" : "set"}`;
-      return answers[key] ?? { status: 0, stdout: "", stderr: "" };
+      if (command === "whoami") return options.user ?? WHOAMI;
+      if (args.length > 1) return options.set ?? { status: 0, stdout: "", stderr: "" };
+      const entries = (listings.length > 1 ? listings.shift() : listings[0]) ?? [
+        "DESKTOP-1\\olivier:(F)",
+      ];
+      const [first, ...rest] = entries;
+      const stdout = [
+        `${args[0]} ${first}`,
+        ...rest.map((e) => `        ${e}`),
+        "",
+        "Successfully processed 1 files; Failed processing 0 files",
+      ].join("\r\n");
+      return { status: 0, stdout, stderr: "" };
     },
   });
   return calls;
@@ -81,21 +86,35 @@ function fakeWindows(answers: Record<string, CommandResult>) {
 const WHOAMI = { status: 0, stdout: '"desktop-1\\olivier","S-1-5-21-1-2-3-1001"\r\n', stderr: "" };
 
 describe("br-VAULT-000006-sJpO9KMY: owner-only on Windows, with icacls", () => {
-  it("restricts the temporary file by SID before writing, then renames it", () => {
-    const calls = fakeWindows({ "whoami user": WHOAMI });
+  it("restricts the temporary file by SID before writing, checks it, then renames it", () => {
+    const calls = fakeWindows();
     const file = path.join(dir, "secret");
     writeSecretFile(file, "s3cret");
     expect(calls[0]).toEqual(["whoami", "/user", "/fo", "csv", "/nh"]);
-    const icacls = calls[1] as string[];
-    expect(icacls[0]).toBe("icacls");
-    expect(icacls[1]).toMatch(/secret\.[0-9a-f]{12}\.tmp$/);
-    expect(icacls.slice(2)).toEqual(["/inheritance:r", "/grant:r", "*S-1-5-21-1-2-3-1001:(F)"]);
-    expect(calls).toHaveLength(2);
+    const [, set, show] = calls as [string[], string[], string[]];
+    expect(set[0]).toBe("icacls");
+    expect(set[1]).toMatch(/secret\.[0-9a-f]{12}\.tmp$/);
+    expect(set.slice(2)).toEqual(["/inheritance:r", "/grant:r", "*S-1-5-21-1-2-3-1001:(F)"]);
+    expect(show).toEqual(["icacls", set[1]]);
+    expect(calls.filter((c) => c.includes("/remove"))).toEqual([]);
     expect(readFileSync(file, "utf8")).toBe("s3cret");
   });
 
+  it("removes the explicit entries a new file came with, then checks again", () => {
+    const calls = fakeWindows({
+      listings: [
+        ["NT AUTHORITY\\SYSTEM:(F)", "BUILTIN\\Administrators:(F)", "DESKTOP-1\\olivier:(F)"],
+        ["DESKTOP-1\\olivier:(F)"],
+      ],
+    });
+    const file = path.join(dir, "secret");
+    writeSecretFile(file, "x");
+    const remove = calls.find((c) => c.includes("/remove")) as string[];
+    expect(remove.slice(2)).toEqual(["/remove", "NT AUTHORITY\\SYSTEM", "BUILTIN\\Administrators"]);
+  });
+
   it("grants folders to the SID with inheritance for what they will hold", () => {
-    const calls = fakeWindows({ "whoami user": WHOAMI });
+    const calls = fakeWindows();
     ensurePrivateDir(path.join(dir, "vault"));
     expect(calls[1]?.slice(2)).toEqual([
       "/inheritance:r",
@@ -105,51 +124,32 @@ describe("br-VAULT-000006-sJpO9KMY: owner-only on Windows, with icacls", () => {
   });
 
   it("fails, and leaves nothing behind, when icacls fails", () => {
-    fakeWindows({
-      "whoami user": WHOAMI,
-      "icacls set": { status: 5, stdout: "", stderr: "Access is denied." },
-    });
+    fakeWindows({ set: { status: 5, stdout: "", stderr: "Access is denied." } });
     expect(() => writeSecretFile(path.join(dir, "secret"), "x")).toThrow(SecretFileError);
     expect(readdirSync(dir)).toEqual([]);
   });
 
+  it("fails when another user's access cannot be removed", () => {
+    fakeWindows({ listings: [["Everyone:(R)", "DESKTOP-1\\olivier:(F)"]] });
+    expect(() => writeSecretFile(path.join(dir, "secret"), "x")).toThrow(/access for Everyone/);
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
   it("fails when the user's SID cannot be read", () => {
-    fakeWindows({ "whoami user": { status: 1, stdout: "", stderr: "nope" } });
+    fakeWindows({ user: { status: 1, stdout: "", stderr: "nope" } });
     expect(() => ensurePrivateDir(path.join(dir, "v"))).toThrow(/SID/);
   });
 
-  it("accepts a file only the current user can access", () => {
-    const target = "C:\\Users\\olivier\\vault\\a.key";
+  it("reports inherited entries and other users, and accepts the user alone", () => {
     fakeWindows({
-      "whoami user": WHOAMI,
-      "icacls show": {
-        status: 0,
-        stdout: `${target} DESKTOP-1\\olivier:(F)\r\n\r\nSuccessfully processed 1 files; Failed processing 0 files\r\n`,
-        stderr: "",
-      },
+      listings: [["NT AUTHORITY\\SYSTEM:(I)(F)", "BUILTIN\\Users:(RX)", "DESKTOP-1\\olivier:(F)"]],
     });
-    expect(ownerOnlyProblems(target)).toEqual([]);
-  });
-
-  it("reports inherited entries and other users", () => {
-    const target = "C:\\Users\\olivier\\AppData\\Roaming\\correlate app\\tokens.json";
-    fakeWindows({
-      "whoami user": WHOAMI,
-      "icacls show": {
-        status: 0,
-        stdout: [
-          `${target} NT AUTHORITY\\SYSTEM:(I)(F)`,
-          "        BUILTIN\\Users:(RX)",
-          "        DESKTOP-1\\olivier:(F)",
-          "",
-          "Successfully processed 1 files; Failed processing 0 files",
-        ].join("\r\n"),
-        stderr: "",
-      },
-    });
-    expect(ownerOnlyProblems(target)).toEqual([
+    expect(ownerOnlyProblems("C:\\Users\\olivier\\correlate app\\tokens.json")).toEqual([
       "inherited access for NT AUTHORITY\\SYSTEM",
       "access for BUILTIN\\Users",
     ]);
+    restore?.();
+    fakeWindows();
+    expect(ownerOnlyProblems("C:\\vault\\a.key")).toEqual([]);
   });
 });

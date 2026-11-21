@@ -91,12 +91,43 @@ export function restrictToOwner(target: string, kind: "file" | "dir"): void {
     chmodSync(target, kind === "dir" ? 0o700 : 0o600);
     return;
   }
-  const { sid } = currentWindowsUser();
-  const grant = `*${sid}:${kind === "dir" ? "(OI)(CI)(F)" : "(F)"}`;
-  const r = platform.run("icacls", [target, "/inheritance:r", "/grant:r", grant]);
-  if (r.status !== 0) {
-    throw new SecretFileError(`cannot restrict ${target}: ${r.stdout}${r.stderr}`.trim());
+  const user = currentWindowsUser();
+  const grant = `*${user.sid}:${kind === "dir" ? "(OI)(CI)(F)" : "(F)"}`;
+  icacls(target, ["/inheritance:r", "/grant:r", grant]);
+  // A new file can carry explicit entries of its own (SYSTEM and
+  // Administrators on some machines), which /grant:r leaves in place.
+  const others = [
+    ...new Set(
+      readAcl(target)
+        .map((entry) => entry.principal)
+        .filter((principal) => !isUser(principal, user)),
+    ),
+  ];
+  if (others.length > 0) icacls(target, ["/remove", ...others]);
+  const problems = ownerOnlyProblems(target);
+  if (problems.length > 0) {
+    throw new SecretFileError(`cannot restrict ${target}: ${problems.join("; ")}`);
   }
+}
+
+/** Run icacls on `target`; a failure is an error. */
+function icacls(target: string, args: string[]): string {
+  const r = platform.run("icacls", [target, ...args]);
+  if (r.status !== 0) {
+    throw new SecretFileError(`icacls failed on ${target}: ${r.stdout}${r.stderr}`.trim());
+  }
+  return r.stdout;
+}
+
+/** Whether `principal`, as icacls prints it, is the current user. */
+function isUser(principal: string, user: WindowsUser): boolean {
+  const who = principal.toLowerCase();
+  return who === user.name.toLowerCase() || who === user.sid.toLowerCase();
+}
+
+/** The access entries on `target`, as `icacls <target>` lists them. */
+function readAcl(target: string): { principal: string; rights: string }[] {
+  return aclEntries(target, icacls(target, []));
 }
 
 /** What makes `target` readable by someone other than its owner; empty when owner-only. */
@@ -113,17 +144,17 @@ export function ownerOnlyProblems(target: string): string[] {
     return problems;
   }
   const user = currentWindowsUser();
-  const r = platform.run("icacls", [target]);
-  if (r.status !== 0) return [`cannot read permissions: ${r.stdout}${r.stderr}`.trim()];
-  const entries = aclEntries(target, r.stdout);
+  let entries: { principal: string; rights: string }[];
+  try {
+    entries = readAcl(target);
+  } catch (error) {
+    return [(error as Error).message];
+  }
   if (entries.length === 0) return ["no access entries found"];
   const problems: string[] = [];
   for (const { principal, rights } of entries) {
-    const who = principal.toLowerCase();
     if (rights.includes("(I)")) problems.push(`inherited access for ${principal}`);
-    else if (who !== user.name.toLowerCase() && who !== user.sid.toLowerCase()) {
-      problems.push(`access for ${principal}`);
-    }
+    else if (!isUser(principal, user)) problems.push(`access for ${principal}`);
   }
   return problems;
 }
