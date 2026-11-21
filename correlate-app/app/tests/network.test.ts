@@ -144,6 +144,11 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       "plan",
       "provisionLocal",
       "provisionRemote",
+      "list",
+      "rename",
+      "replaceKey",
+      "switchTo",
+      "uninstall",
       "request",
     ]);
     await api.sump.active();

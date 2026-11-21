@@ -88,6 +88,9 @@ app.whenReady().then(() => {
     catalog,
     active: activeSumps,
     pending: new Map(),
+    resolve: sumps,
+    // Recordings plug in with Phase 8; until then none is ever live.
+    guard: { liveRecording: () => undefined },
   });
   // The passphrase's derived key lives only for the session.
   app.on("will-quit", () => {

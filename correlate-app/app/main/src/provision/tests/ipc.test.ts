@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import { Lifecycle } from "../../catalog/lifecycle.js";
 import { SessionTokens } from "../../sump/tokens.js";
 import {
+  LIST_CHANNEL,
   PLAN_CHANNEL,
   PROVISION_LOCAL_CHANNEL,
   PROVISION_REMOTE_CHANNEL,
+  RENAME_CHANNEL,
+  REPLACE_KEY_CHANNEL,
   registerProvisionIpc,
+  SWITCH_CHANNEL,
+  UNINSTALL_CHANNEL,
 } from "../ipc.js";
 import type { RemoteContext } from "../remote.js";
 
@@ -37,10 +42,33 @@ function setup(dockerUp: boolean) {
   return { handlers, call };
 }
 
+describe("REQ-000015-sJpO9KMY: managing Sumps over the bridge", () => {
+  it("answers each manage call with a result, never an exception", async () => {
+    const { call } = setup(true);
+    expect(await call(LIST_CHANNEL)).toEqual([]);
+    expect(await call(RENAME_CHANNEL, { id: "x", name: "y" })).toMatchObject({ ok: false });
+    expect(await call(REPLACE_KEY_CHANNEL, { id: "x" })).toMatchObject({
+      ok: false,
+      step: "check",
+    });
+    expect(await call(SWITCH_CHANNEL, { id: "x" })).toMatchObject({ ok: false });
+    expect(await call(UNINSTALL_CHANNEL, { id: "x" })).toMatchObject({ ok: false, step: "check" });
+  });
+});
+
 describe("REQ-000014-sJpO9KMY: provisioning over the bridge", () => {
   it("answers the three channels", () => {
     expect([...setup(true).handlers.keys()].sort()).toEqual(
-      [PLAN_CHANNEL, PROVISION_LOCAL_CHANNEL, PROVISION_REMOTE_CHANNEL].sort(),
+      [
+        PLAN_CHANNEL,
+        PROVISION_LOCAL_CHANNEL,
+        PROVISION_REMOTE_CHANNEL,
+        LIST_CHANNEL,
+        RENAME_CHANNEL,
+        REPLACE_KEY_CHANNEL,
+        SWITCH_CHANNEL,
+        UNINSTALL_CHANNEL,
+      ].sort(),
     );
   });
 
