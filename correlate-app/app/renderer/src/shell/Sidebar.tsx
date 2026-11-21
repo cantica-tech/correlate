@@ -72,7 +72,7 @@ export function Sidebar({
             title="Bring back into the main window"
             onClick={() => onChange({ dock: layout.lastDock })}
           >
-            <Icon name="bring-back" className="btn-flat-icon" />
+            <Icon name="bring-back" svgClassName="btn-flat-icon" />
             Bring Back
           </button>
         ) : (

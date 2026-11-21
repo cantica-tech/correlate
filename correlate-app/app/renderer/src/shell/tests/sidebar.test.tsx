@@ -87,7 +87,7 @@ describe("br-STYLE-000001-sJpO9KMY: the sidebar", () => {
   it("has Bring Back in place of the dock controls when detached", () => {
     const out = html({ ...base, dock: "detached" }, true);
     expect(out).toMatch(
-      /^<aside id="action-bar" class="detached"><div class="ab-dock-controls"><button type="button" id="ab-redock" class="btn-flat" title="Bring back into the main window"><span class="icon btn-flat-icon"/,
+      /^<aside id="action-bar" class="detached"><div class="ab-dock-controls"><button type="button" id="ab-redock" class="btn-flat" title="Bring back into the main window"><span class="icon" aria-hidden="true"><svg class="btn-flat-icon" /,
     );
     expect(out).not.toContain("ab-collapse-toggle");
   });

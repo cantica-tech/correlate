@@ -48,7 +48,7 @@ export function SegControl<T extends string>({
             title={option.title}
             onClick={() => onChange(option.value)}
           >
-            {option.icon ? <Icon name={option.icon} className="seg-icon" /> : null}
+            {option.icon ? <Icon name={option.icon} svgClassName="seg-icon" /> : null}
             {option.label}
           </button>
         );

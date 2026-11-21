@@ -5,7 +5,8 @@
  * process and every change goes back to it, so both windows show the same.
  */
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useState } from "react";
-import { Button, Dialog, SegControl } from "../components/index.js";
+import { Button, Dialog, SegControl, Switch } from "../components/index.js";
+import { StatusBar } from "../statusbar/StatusBar.js";
 import type { LayoutChange, ShellBridge, SidebarLayout, ThemeMode } from "./bridge.js";
 import { Sidebar } from "./Sidebar.js";
 import "./shell.css";
@@ -37,6 +38,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   const [layout, setLayout] = useState<SidebarLayout | null>(null);
   const [preferences, setPreferences] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("system");
+  const [statusBar, setStatusBar] = useState(true);
 
   useEffect(() => {
     let live = true;
@@ -56,6 +58,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
     return bridge.sidebar.onRun((name) => {
       if (name === "preferences") {
         void bridge.theme.get().then(setTheme);
+        void bridge.status.visible().then(setStatusBar);
         setPreferences(true);
       }
     });
@@ -101,38 +104,56 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   );
   if (detached) return sidebar;
   return (
-    <div id="app-body" data-dock={layout.dock}>
-      {sidebar}
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: cttc's splitter; the sidebar keeps its size without it. */}
-      <div id="action-bar-splitter" title="Drag to resize the sidebar" onMouseDown={drag} />
-      <div id="main-content" />
-      <Dialog
-        id="dlg-preferences-theme"
-        open={preferences}
-        onClose={() => setPreferences(false)}
-        title="Preferences"
-        actions={
-          <Button kind="primary" onClick={() => setPreferences(false)}>
-            Done
-          </Button>
-        }
-      >
-        <fieldset className="keys-box">
-          <legend>Mode</legend>
-          <p className="dlg-section-help muted">
-            Light, dark, or match this computer's system setting.
-          </p>
-          <SegControl
-            label="Mode"
-            options={THEMES}
-            value={theme}
-            onChange={(mode) => {
-              setTheme(mode);
-              void bridge.theme.set(mode);
-            }}
-          />
-        </fieldset>
-      </Dialog>
-    </div>
+    <>
+      <div id="app-body" data-dock={layout.dock}>
+        {sidebar}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: cttc's splitter; the sidebar keeps its size without it. */}
+        <div id="action-bar-splitter" title="Drag to resize the sidebar" onMouseDown={drag} />
+        <div id="main-content" />
+        <Dialog
+          id="dlg-preferences-theme"
+          open={preferences}
+          onClose={() => setPreferences(false)}
+          title="Preferences"
+          actions={
+            <Button kind="primary" onClick={() => setPreferences(false)}>
+              Done
+            </Button>
+          }
+        >
+          <fieldset className="keys-box">
+            <legend>Mode</legend>
+            <p className="dlg-section-help muted">
+              Light, dark, or match this computer's system setting.
+            </p>
+            <SegControl
+              label="Mode"
+              options={THEMES}
+              value={theme}
+              onChange={(mode) => {
+                setTheme(mode);
+                void bridge.theme.set(mode);
+              }}
+            />
+          </fieldset>
+          <fieldset className="keys-box">
+            <legend>Status bar</legend>
+            <p className="dlg-section-help muted">
+              A slim bar at the bottom of the window: the Sump's status, messages and their History.
+            </p>
+            <Switch
+              checked={statusBar}
+              onChange={(visible) => {
+                setStatusBar(visible);
+                void bridge.status.setVisible(visible);
+              }}
+            >
+              Show status bar
+            </Switch>
+          </fieldset>
+        </Dialog>
+      </div>
+      <StatusBar bridge={bridge} />
+    </>
   );
 }

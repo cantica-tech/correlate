@@ -36,7 +36,7 @@ export function Button({
   const classes = [CLASS[kind], className].filter(Boolean).join(" ") || undefined;
   return (
     <button type={type} className={classes} {...rest}>
-      {kind === "fetch" ? <Icon name="fetch" className="btn-fetch-icon" /> : null}
+      {kind === "fetch" ? <Icon name="fetch" svgClassName="btn-fetch-icon" /> : null}
       {children}
     </button>
   );

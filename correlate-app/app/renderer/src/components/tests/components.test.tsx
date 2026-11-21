@@ -31,7 +31,7 @@ describe("br-STYLE-000001-sJpO9KMY: Button", () => {
   it("fetch carries cttc's fetch icon before its label", () => {
     const out = html(<Button kind="fetch">Fetch</Button>);
     expect(out).toMatch(
-      /^<button type="button" class="btn-fetch"><span class="icon btn-fetch-icon"/,
+      /^<button type="button" class="btn-fetch"><span class="icon" aria-hidden="true"><svg class="btn-fetch-icon" /,
     );
     expect(out).toMatch(/<\/span>Fetch<\/button>$/);
   });
@@ -104,7 +104,7 @@ describe("br-STYLE-000001-sJpO9KMY: SegControl", () => {
         options={[{ value: "a", label: "A", icon: "track" }]}
       />,
     );
-    expect(out).toContain('<span class="icon seg-icon" aria-hidden="true">');
+    expect(out).toContain('<span class="icon" aria-hidden="true"><svg class="seg-icon" ');
   });
 });
 

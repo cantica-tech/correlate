@@ -44,7 +44,11 @@
   },
   "overrides": [
     {
-      "includes": ["renderer/src/components/components.css", "renderer/src/shell/shell.css"],
+      "includes": [
+        "renderer/src/components/components.css",
+        "renderer/src/shell/shell.css",
+        "renderer/src/statusbar/statusbar.css"
+      ],
       "linter": {
         "rules": {
           "complexity": {

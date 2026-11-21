@@ -1,0 +1,340 @@
+/*
+ * cttc's status bar (br-STYLE-000001-sJpO9KMY, REQ-000022-sJpO9KMY), rule
+ * for rule from cttc `app/renderer/style.css` at d8a444b: the Sump pill (its
+ * `.server-status`, switcher and Current Status), the bar, History, and the
+ * `.linklike` and `.activity-log` they use. Each block names the cttc lines
+ * it comes from; a test holds every block to
+ * `tests/parity/cttc/style.reference.css`.
+ */
+
+/* The Sump pill, its switcher and Current Status. */
+/* cttc style.css:179-297 */
+/* Shared by the View pill (top toolbar) and the Gateway/Docker Host pills
+   (relocated into the status bar, see .app-status-bar's own overrides
+   below) -- position: relative anchors each one's own dropdown/popup
+   wherever it lives. */
+.server-status {
+  position: relative;
+}
+.server-status-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+.server-status-btn:hover,
+.server-status.open .server-status-btn {
+  background: var(--surface-2);
+}
+.server-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: 0 0 auto;
+}
+.server-status[data-state="up"] .server-status-dot {
+  background: #2ecc71;
+}
+.server-status[data-state="checking"] .server-status-dot {
+  background: #f1c40f;
+}
+.server-status[data-state="down"] .server-status-dot {
+  background: var(--critical);
+}
+.server-status[data-state="down"] .server-status-btn {
+  color: var(--critical);
+}
+.server-status-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+.gateway-dropdown {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 260px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  z-index: 50;
+}
+.gateway-dropdown .gateway-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 9px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.gateway-dropdown .gateway-item:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.gateway-dropdown .gateway-item[data-active="true"] {
+  cursor: default;
+}
+.gateway-dropdown .gateway-item-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.gateway-dropdown .gateway-item-loc {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.gateway-dropdown .gateway-item:hover .gateway-item-loc {
+  color: inherit;
+}
+.gateway-dropdown .gateway-item[data-active="true"] .gateway-item-label::after {
+  content: "● active";
+  font-weight: 400;
+  font-size: 10px;
+  color: #2ecc71;
+}
+/* purely informational (see app.js's per-item checkGateway call) -- never
+   switches anything on its own, even for the active entry. Same specificity
+   as the "active" rule above; declared after it so an item that's both
+   active and unreachable (the gateway currently in use has gone down)
+   shows this instead, which is the more urgent thing to know. */
+.gateway-dropdown .gateway-item[data-reachable="false"] {
+  opacity: 0.6;
+}
+.gateway-dropdown .gateway-item[data-reachable="false"] .gateway-item-label::after {
+  content: "● unreachable";
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--critical);
+}
+.gateway-dropdown .gateway-empty {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.gateway-dropdown .gateway-item-sep {
+  border-top: 1px solid var(--border);
+  margin: 2px 4px;
+}
+
+/* Right-click the Gateway or Docker Host status pill, "Current Status":
+   read-only connection detail (Gateway: connection type + ssh details when
+   tunneled; Docker Host: SSH connection/key + which transforms are on) --
+   see app.js's showGatewayStatus/showDockerHostStatus. Same floating-card
+   look as .gateway-dropdown, but no buttons/hover state, since there's
+   nothing to click here. */
+.connection-info-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 220px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 8px 10px;
+  z-index: 50;
+  font-size: 12px;
+}
+.connection-info-popup .cip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.connection-info-popup .cip-label {
+  color: var(--muted);
+}
+.connection-info-popup .cip-val {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.connection-info-popup .cip-sep {
+  border-top: 1px solid var(--border);
+  margin: 2px 0;
+}
+
+/* Link-like buttons and log boxes. */
+/* cttc style.css:904-924 */
+.linklike {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 12px;
+}
+.activity-log {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+/* The bar and History. */
+/* cttc style.css:1902-2016 */
+/* Slim status bar (Appearance > Status bar) reporting when an event is
+   created or fires -- separate from #status in the toolbar (which is for
+   ordinary action feedback like "metrics saved"), since events can report
+   from a background poll with nobody having just clicked anything. Plain
+   flow, not fixed -- sits as the last item in body's flex column, below
+   #app-body, so it never overlaps #activity's own fixed overlay. */
+.app-status-bar {
+  position: relative; /* anchors .status-bar-history-popup, springing up from the History button */
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+}
+/* Frames the Gateway/Docker Host pills (relocated here from the top
+   toolbar) as their own distinct little unit just left of History --
+   single bar before, double bar after, so the boundary with the free-
+   form status text on one side and History on the other both read
+   clearly. */
+.status-bar-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+}
+.status-bar-divider-double {
+  width: 4px;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: none;
+}
+/* The pills' own :hover/.open background (--surface-2) matches this bar's
+   background exactly -- invisible without this override. Their dropdown/
+   popup default to opening *below* (top: 100%, the correct direction in
+   the top toolbar they used to live in); down here at the bottom of the
+   window that would run off-screen, so they spring *up* instead, same as
+   .status-bar-history-popup already does. */
+.app-status-bar .server-status-btn:hover,
+.app-status-bar .server-status.open .server-status-btn {
+  background: var(--surface-3);
+}
+.app-status-bar .gateway-dropdown,
+.app-status-bar .connection-info-popup {
+  top: auto;
+  bottom: 100%;
+  margin-bottom: 6px;
+}
+#app-status-bar-text {
+  flex: 1 1 auto;
+  min-width: 0; /* lets it actually shrink/ellipsize instead of pushing History off the row */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* "capture mode ✂️" while Capture metrics is armed -- see setSampleArmed. */
+.status-bar-blink {
+  animation: status-bar-blink 1s step-start infinite;
+}
+@keyframes status-bar-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* History button (right edge of the status bar) + its popup -- same icon
+   as the Logs section of Set/Update Docker Host (see .legend-icon), same
+   floating-card chrome as .connection-info-popup, but anchored to spring
+   up from the bottom-right (bottom: 100%) instead of dropping down, and
+   with an .activity-log-style scrollable body so it reads like the other
+   "logs windows" (Show activity, transforms doc, etc.) rather than a
+   one-off design. */
+.status-bar-history-btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.status-bar-history-btn:hover {
+  color: var(--text-primary);
+}
+.status-bar-history-btn svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+.status-bar-history-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: absolute;
+  bottom: 100%;
+  right: 12px;
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  z-index: 50;
+}
+.status-bar-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.status-bar-history-list {
+  margin: 0;
+  max-height: 45vh;
+}
+.status-bar-history-row {
+  display: flex;
+  gap: 8px;
+}
+.status-bar-history-row .sbh-ts {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.status-bar-history-empty {
+  color: var(--muted);
+}

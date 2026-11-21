@@ -11,13 +11,22 @@ export type { IconName };
 
 export interface IconProps {
   name: IconName;
+  /**
+   * A class for the `<svg>` itself, where cttc's rule sizes the svg
+   * (`.btn-fetch-icon`, `.seg-icon`, ...); `className` is the wrapper's, where
+   * cttc's rule sizes a wrapper or its `svg` (`.ab-icon`, `.ctxmenu-icon`).
+   */
+  svgClassName?: string;
   /** What the icon says, for screen readers; leave it out when the text next to it says it. */
   label?: string;
   className?: string;
 }
 
-export function Icon({ name, label, className }: IconProps) {
+export function Icon({ name, label, className, svgClassName }: IconProps) {
   const classes = className ? `icon ${className}` : "icon";
+  const svg = svgClassName
+    ? ICONS[name].replace("<svg ", `<svg class="${svgClassName}" `)
+    : ICONS[name];
   if (label) {
     return (
       <span
@@ -25,7 +34,7 @@ export function Icon({ name, label, className }: IconProps) {
         role="img"
         aria-label={label}
         // biome-ignore lint/security/noDangerouslySetInnerHtml: the markup is the app's own committed, cleaned icon files, held clean by icons.test.ts.
-        dangerouslySetInnerHTML={{ __html: ICONS[name].replace(' aria-hidden="true"', "") }}
+        dangerouslySetInnerHTML={{ __html: svg.replace(' aria-hidden="true"', "") }}
       />
     );
   }
@@ -34,7 +43,7 @@ export function Icon({ name, label, className }: IconProps) {
       className={classes}
       aria-hidden={true}
       // biome-ignore lint/security/noDangerouslySetInnerHtml: the markup is the app's own committed, cleaned icon files, held clean by icons.test.ts.
-      dangerouslySetInnerHTML={{ __html: ICONS[name] }}
+      dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
 }

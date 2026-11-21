@@ -25,8 +25,61 @@ export type LayoutChange = Partial<Omit<SidebarLayout, "expanded">> & {
 
 export type ThemeMode = "system" | "light" | "dark";
 
+/** A Sump's lifecycle state (br-SUMP-000011-sJpO9KMY). */
+export type SumpState = "provisioning" | "active" | "unreachable" | "retired";
+
+/** One Sump's state, as the main process keeps it. */
+export interface StateRecord {
+  id: string;
+  state: SumpState;
+  since: string;
+  reason: string;
+}
+
+/** One Sump of `sump.list()`. */
+export interface ListedSump {
+  id: string;
+  name: string;
+  kind: "local" | "remote";
+  sshTarget?: string;
+  sshPort?: number;
+  sumpPort: number;
+  forwardUrl?: string;
+  state: SumpState;
+  /** This window is on it. */
+  current: boolean;
+}
+
+/** What a switch answers: done, refused, or a confirmation needed first. */
+export type SwitchResult = { ok: true; id: string } | { ok: false; step: string; message: string };
+
+/** One notification. */
+export interface Notice {
+  at: string;
+  text: string;
+}
+
+/** What windows hear of the feed. */
+export type NoticeEvent = { type: "entry"; entry: Notice } | { type: "cleared" };
+
 /** The bridge, as far as the shell goes. */
 export interface ShellBridge {
+  sump: {
+    active(): Promise<{ id: string; name: string; kind: string } | null>;
+    states(): Promise<StateRecord[]>;
+    onState(listener: (record: StateRecord) => void): () => void;
+    list(): Promise<ListedSump[]>;
+    switchTo(target: { id: string; confirmed?: boolean }): Promise<SwitchResult>;
+  };
+  status: {
+    history(): Promise<Notice[]>;
+    add(text: string): Promise<{ ok: boolean; message?: string }>;
+    clear(): Promise<{ ok: boolean }>;
+    visible(): Promise<boolean>;
+    setVisible(visible: boolean): Promise<{ ok: boolean }>;
+    onNotice(listener: (event: NoticeEvent) => void): () => void;
+    onVisibility(listener: (visible: boolean) => void): () => void;
+  };
   theme: {
     get(): Promise<ThemeMode>;
     set(mode: ThemeMode): Promise<{ ok: boolean }>;

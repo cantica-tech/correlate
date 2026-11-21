@@ -6,6 +6,7 @@
 import "./components.css";
 
 export { Button, type ButtonKind, type ButtonProps } from "./Button.js";
+export { ContextMenu, type ContextMenuProps, type MenuEntry } from "./ContextMenu.js";
 export { Dialog, type DialogProps } from "./Dialog.js";
 export { Panel, type PanelProps } from "./Panel.js";
 export { SegControl, type SegControlProps, type SegOption } from "./SegControl.js";

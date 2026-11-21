@@ -287,3 +287,70 @@ dialog h2 {
 .btn-danger:hover {
   background: color-mix(in srgb, var(--critical) 85%, black);
 }
+
+/* The context menu. */
+/* cttc style.css:1130-1175 */
+#ctxmenu {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+#ctxmenu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+}
+#ctxmenu button:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+#ctxmenu button:disabled:hover {
+  background: none;
+}
+#ctxmenu button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  outline: none;
+}
+/* Mutually-exclusive choices (e.g. a sort direction) mark their active
+   entry via ctxMenu's optional 4th tuple element -- same "selected" look
+   as .seg-control button[data-active="true"]. */
+#ctxmenu button[data-active="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+#ctxmenu button[data-active="true"] .ctxmenu-icon {
+  color: #fff;
+}
+/* Divider between groups of entries (see ctxMenu's "separator" sentinel) --
+   same look as .gateway-dropdown's own .gateway-item-sep. */
+.ctxmenu-sep {
+  border-top: 1px solid var(--border);
+  margin: 2px 4px;
+}
+/* Entries that pass an icon (see ctxMenu's optional 3rd tuple element) --
+   either reuses whichever action-bar button's own .ab-icon markup it was
+   given, or a raw inline SVG for an entry with no button to clone from;
+   just sized down for a menu row instead of the sidebar. */
+.ctxmenu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+.ctxmenu-icon svg {
+  width: 14px;
+  height: 14px;
+}
