@@ -91,6 +91,16 @@ describe("br-SUMP-000011-sJpO9KMY: the transitions", () => {
     expect(heard).toEqual([]);
   });
 
+  it("lets a Sump retired before it ever connected be provisioned again", () => {
+    const l = inState("provisioning");
+    l.move("s", "retired", "provisioning failed");
+    expect(l.provision("s", "try again").state).toBe("provisioning");
+    const recorded = catalog.recordConnect({ kind: "remote", sumpPort: 1, sshTarget: "a" });
+    const withHistory = new Lifecycle(catalog, () => T0, quiet);
+    withHistory.move(recorded.id, "retired", "uninstalled");
+    expect(() => withHistory.provision(recorded.id)).toThrow(TransitionError);
+  });
+
   it("refuses to provision a Sump it knows, or to move one it does not", () => {
     const l = inState("active");
     expect(() => l.provision("s")).toThrow(TransitionError);

@@ -72,9 +72,9 @@ export class ProvisionError extends Error {
 
   constructor(
     readonly step: string,
-    message: string,
+    readonly reason: string,
   ) {
-    super(`${step}: ${message}`);
+    super(`${step}: ${reason}`);
   }
 }
 

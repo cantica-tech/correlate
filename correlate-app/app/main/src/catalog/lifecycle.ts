@@ -103,10 +103,16 @@ export class Lifecycle {
     return () => this.listeners.delete(listener);
   }
 
-  /** A new Sump starts being provisioned; refused for a Sump already known. */
+  /**
+   * A new Sump starts being provisioned. Refused for a Sump already known,
+   * except one retired before it ever connected: never recorded in the
+   * catalog, it left no history, and its id (such as `local`) may be tried
+   * again.
+   */
   provision(id: string, reason = "provisioning started"): StateRecord {
-    if (this.records.has(id))
-      throw new TransitionError(id, this.records.get(id)?.state, "provisioning");
+    const current = this.records.get(id);
+    const neverConnected = current?.state === "retired" && !this.catalog?.get(id);
+    if (current && !neverConnected) throw new TransitionError(id, current.state, "provisioning");
     return this.set(id, "provisioning", reason);
   }
 
