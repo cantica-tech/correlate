@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { bare, cssBlocks, cttcRules } from "../../testing/cttcCss.js";
 import { Button } from "../Button.js";
 import { Dialog } from "../Dialog.js";
 import { Panel } from "../Panel.js";
@@ -149,33 +150,22 @@ describe("br-STYLE-000001-sJpO9KMY: Panel", () => {
 
 describe("br-STYLE-000001-sJpO9KMY: components.css is cttc's", () => {
   const ours = readFileSync(path.join(here, "../components.css"), "utf8");
-  const cttc = readFileSync(
-    path.join(here, "../../../../tests/parity/cttc/style.reference.css"),
-    "utf8",
-  ).split("\n");
-  /** Comments out, all whitespace out: what is left is the rules themselves. */
-  const bare = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\s+/g, "");
-  const blocks = [
-    ...ours.matchAll(
-      /\/\* (cttc style\.css:(\d+)-(\d+)|ours:[\s\S]*?) \*\/([\s\S]*?)(?=\/\* (?:cttc style\.css:|ours:)|$)/g,
-    ),
-  ];
+  const blocks = cssBlocks(ours);
 
   it("is made of cttc blocks, and ours each with a reason", () => {
     expect(blocks.length).toBeGreaterThan(10);
-    expect(bare(blocks.map((b) => b[4]).join(""))).toBe(bare(ours.slice(ours.indexOf("*/") + 2)));
+    expect(bare(blocks.map((b) => b.body).join(""))).toBe(bare(ours.slice(ours.indexOf("*/") + 2)));
   });
 
-  it.each(
-    blocks
-      .filter((b) => b[2])
-      .map((b) => [`${b[2]}-${b[3]}`, Number(b[2]), Number(b[3]), b[4] ?? ""] as const),
-  )("block %s is cttc's lines, rule for rule", (_name, from, to, block) => {
-    expect(bare(block)).toBe(bare(cttc.slice(from - 1, to).join("\n")));
-  });
+  it.each(blocks.filter((b) => b.from).map((b) => [`${b.from}-${b.to}`, b] as const))(
+    "block %s is cttc's lines, rule for rule",
+    (_name, block) => {
+      expect(bare(block.body)).toBe(cttcRules(block.from as number, block.to as number));
+    },
+  );
 
   it("lists every block of ours with its reason", () => {
-    const own = blocks.filter((b) => !b[2]).map((b) => b[1]);
+    const own = blocks.filter((b) => !b.from).map((b) => b.head);
     expect(own).toHaveLength(1);
     expect(own[0]).toMatch(/ours: cttc placed a head's controls by panel id/);
   });

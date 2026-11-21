@@ -1,0 +1,482 @@
+/*
+ * cttc's sidebar and the app body around it (br-STYLE-000001-sJpO9KMY,
+ * REQ-000021-sJpO9KMY), rule for rule from cttc `app/renderer/style.css` at
+ * d8a444b. Each block names the cttc lines it comes from; a test holds every
+ * block to `tests/parity/cttc/style.reference.css`. A block of ours says so,
+ * and why.
+ */
+
+/* The app body, the sidebar and its splitter. */
+/* cttc style.css:361-745 */
+/* #app-body wraps #action-bar + #main-content (the pre-existing #toolbar +
+   #layout) below #menubar. data-dock controls the flex-direction, and since
+   #action-bar is always the first DOM child, row/row-reverse and
+   column/column-reverse alone are enough to put it on any of the four
+   edges without touching the DOM order or #main-content's own CSS at all. */
+#app-body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+#app-body[data-dock="top"] {
+  flex-direction: column;
+}
+#app-body[data-dock="bottom"] {
+  flex-direction: column-reverse;
+}
+#app-body[data-dock="left"] {
+  flex-direction: row;
+}
+#app-body[data-dock="right"] {
+  flex-direction: row-reverse;
+}
+/* detached: the bar lives in its own window (see action-bar.html) instead */
+#app-body[data-dock="detached"] {
+  flex-direction: row;
+}
+#app-body[data-dock="detached"] #action-bar {
+  display: none;
+}
+
+/* Drag to resize the sidebar -- a thin strip between #action-bar and
+   #main-content, positioned correctly for all four dock directions for
+   free: it's the DOM child right after #action-bar, and row/row-reverse/
+   column/column-reverse (the same trick #action-bar's own placement
+   already relies on) puts it on the correct edge without any extra
+   positioning logic. Negative margin lets it overlap #action-bar's own
+   border by a couple px so the drag target isn't razor-thin. */
+#action-bar-splitter {
+  flex: 0 0 auto;
+  background: transparent;
+  position: relative;
+  z-index: 1;
+}
+#action-bar-splitter:hover,
+#action-bar-splitter.dragging {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+#app-body[data-dock="left"] #action-bar-splitter,
+#app-body[data-dock="right"] #action-bar-splitter {
+  width: 6px;
+  margin: 0 -3px;
+  cursor: col-resize;
+}
+#app-body[data-dock="top"] #action-bar-splitter,
+#app-body[data-dock="bottom"] #action-bar-splitter {
+  height: 6px;
+  margin: -3px 0;
+  cursor: row-resize;
+}
+#app-body[data-dock="detached"] #action-bar-splitter,
+#action-bar[data-collapsed="true"] ~ #action-bar-splitter {
+  display: none;
+}
+
+#main-content {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Dashboard-sidebar + VS Code sidebar hybrid: flat borderless rows with a
+   rounded hover/active fill (no boxed buttons), grouped under small muted
+   uppercase section labels, generous row padding. Horizontal (top/bottom)
+   dock has no room for that list treatment, so rows become rounded pill
+   chips in a wrapping row instead -- section labels are dropped there
+   (the wrap-gap between groups already reads as separation on its own). */
+#action-bar {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  /* top padding matches #toolbar's (3px) so the dock-control row lines up
+     with the main toolbar's row instead of sitting visibly lower. */
+  padding: 3px 10px 10px;
+  background: var(--surface-2);
+  overflow: auto;
+}
+#app-body[data-dock="top"] #action-bar,
+#app-body[data-dock="bottom"] #action-bar {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+#app-body[data-dock="bottom"] #action-bar {
+  border-bottom: none;
+  border-top: 1px solid var(--border);
+}
+#app-body[data-dock="left"] #action-bar,
+#app-body[data-dock="right"] #action-bar {
+  flex-direction: column;
+  width: 210px;
+  border-right: 1px solid var(--border);
+}
+#app-body[data-dock="right"] #action-bar {
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+
+/* Collapsed: shrinks to a thin rail along the dock's own axis (width for
+   left/right, height for top/bottom) -- the cross axis (height/width) still
+   spans the full app-body automatically, same as expanded, since neither
+   state sets it explicitly and flex's default align-items:stretch already
+   does that. Only #ab-collapse-toggle stays visible; everything else
+   (.ab-group sections, the other dock buttons) is hidden outright rather
+   than just scrolled out of view, so there's nothing to accidentally tab
+   into while collapsed. */
+#action-bar[data-collapsed="true"] .ab-group,
+#action-bar[data-collapsed="true"] .ab-dock-btn[data-dock-to] {
+  display: none;
+}
+#action-bar[data-collapsed="true"] {
+  overflow: visible;
+  padding: 3px;
+}
+/* .ab-dock-controls normally bleeds past #action-bar's own side padding to
+   sit flush edge-to-edge (see its own comment) -- that negative-margin trick
+   assumes the wider expanded padding, so it has to be reset here or it'd
+   overshoot the much narrower collapsed rail. */
+#action-bar[data-collapsed="true"] .ab-dock-controls {
+  margin: 0;
+  padding: 0;
+  border-bottom: none;
+  background: none;
+  justify-content: center;
+}
+#app-body[data-dock="left"] #action-bar[data-collapsed="true"],
+#app-body[data-dock="right"] #action-bar[data-collapsed="true"] {
+  width: 28px;
+}
+#app-body[data-dock="top"] #action-bar[data-collapsed="true"],
+#app-body[data-dock="bottom"] #action-bar[data-collapsed="true"] {
+  width: 100%;
+  height: 28px;
+  flex-wrap: nowrap;
+}
+
+/* The row itself is the thing that shrinks (50% less padding around it) --
+   the icons inside stay the same size as icon buttons anywhere else in the
+   app (.icon-btn: 26px box, 17px glyph -- see the panel popout/close
+   buttons in the graph/log panels), so they don't look like a different,
+   miniaturized species of button next to everything else. */
+/* A slim ribbon, not a section: bleeds edge-to-edge past #action-bar's own
+   side/top padding (VS Code's title-bar strip above its file tree is the
+   reference -- a distinct strip, not just the first item in the list) with
+   its own background and a hairline divider, discreetly separating these
+   positioning controls from the actual navigation items below. */
+.ab-dock-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: -3px -10px 4px;
+  padding: 3px 10px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+#app-body[data-dock="left"] .ab-dock-controls,
+#app-body[data-dock="right"] .ab-dock-controls {
+  flex-wrap: wrap;
+}
+.ab-dock-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 17px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+.ab-dock-btn:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+.ab-dock-btn[data-current="true"] {
+  background: var(--surface-3);
+  color: var(--accent);
+}
+/* detach/"popout" into its own window is a different kind of action than
+   the four position toggles beside it -- set apart at the opposite end of
+   the row instead of grouped in with them. Same size as the rest (see
+   comment above); only its position is different, not its scale. */
+.ab-dock-popout {
+  margin-left: auto;
+}
+
+.ab-group {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+#app-body[data-dock="left"] .ab-group,
+#app-body[data-dock="right"] .ab-group,
+#action-bar.detached .ab-group {
+  flex-direction: column;
+  padding-top: 6px;
+}
+.ab-dock-controls + .ab-group {
+  padding-top: 0;
+}
+/* About/Quit pinned to the very bottom of the sidebar -- only meaningful in
+   the vertical (left/right/detached) layouts #action-bar itself is a
+   column in; a no-op in the horizontal top/bottom dock, where there's no
+   "bottom" to pin to. */
+.ab-group-bottom {
+  margin-top: auto;
+}
+
+/* Collapsible sections (Gateway/Sources/Metrics/Preferences): a header
+   button (icon + title + chevron) toggles its .ab-group-body -- collapsed
+   by default (see app.js's sidebar-section toggle), expanding in place
+   rather than as a flyout so the sidebar stays a single scrollable column.
+   Meaningless in the horizontal top/bottom dock (no room for a title,
+   and nothing to collapse into) -- there the header hides and the body's
+   buttons always show, flowing in a row like any other top-level button
+   (see the two overrides below), matching the flat About/Quit buttons'
+   own display there. */
+.ab-group-header {
+  width: 100%;
+  justify-content: flex-start;
+  height: 32px; /* matches the main content's panel heads (#chart-head etc) */
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.ab-group-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ab-group-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex: 0 0 auto;
+}
+/* the custom sidebar icons (Gateway/Sources/Metrics/Preferences) are
+   inlined <svg> with fill="currentColor" -- flat, single-color art rather
+   than the original multi-tone exports, so they pick up --muted normally
+   and invert for free under the :active rule below (no per-icon override
+   needed, unlike .ab-icon's emoji glyphs, which set their own color). */
+.ab-group-icon svg {
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+}
+.ab-chevron {
+  margin-left: auto;
+  font-size: 24.75px; /* 175% bigger than the original 9px */
+  color: var(--muted);
+  transition: transform 0.15s ease;
+  /* The ▾ glyph sits low in its own em box (most of the glyph's ink is in
+     the bottom half), which reads as "too low" next to the icon/title it's
+     lined up with -- nudge it up rather than fight the glyph's own metrics. */
+  position: relative;
+  top: -3px;
+}
+.ab-group[data-expanded="true"] .ab-chevron {
+  transform: rotate(180deg);
+}
+.ab-group-body {
+  display: flex;
+  flex-direction: column;
+}
+/* Sub-items read as nested under their section header: a markedly
+   different (recessed-panel) background from the sidebar's own
+   --surface-2, plus extra left padding shifting the icon+label right --
+   distinguishes them from both the header row above and the flat
+   About/Quit buttons, which get neither. */
+.ab-group-body button {
+  background: var(--surface-1);
+  padding-left: 102px; /* header's own 10px padding + three icon-widths (24px each) + its 8px gap to the label -- shifted one more full icon-step right than before */
+}
+#app-body[data-dock="top"] .ab-group-header,
+#app-body[data-dock="bottom"] .ab-group-header {
+  display: none;
+}
+#app-body[data-dock="top"] .ab-group-body,
+#app-body[data-dock="bottom"] .ab-group-body {
+  display: flex !important;
+  flex-direction: row;
+}
+/* thin, unobtrusive divider between related sub-items in a group body --
+   a hairline rather than a labeled section, so it reads as a soft grouping
+   hint rather than a hard boundary. */
+.ab-sep {
+  background: var(--border);
+  margin: 4px 10px;
+  height: 1px;
+}
+#app-body[data-dock="top"] .ab-sep,
+#app-body[data-dock="bottom"] .ab-sep {
+  width: 1px;
+  height: auto;
+  margin: 4px 0;
+}
+.ab-sep--dotted {
+  background: none;
+  border-top: 1px dotted var(--border);
+  height: 0;
+}
+#app-body[data-dock="top"] .ab-sep--dotted,
+#app-body[data-dock="bottom"] .ab-sep--dotted {
+  border-top: none;
+  border-left: 1px dotted var(--border);
+  width: 0;
+}
+/* the left-shift only reads as "nested under a header" in the vertical
+   sidebar layout -- in the horizontal dock every button sits in one flat
+   row already, so the indent (and the header it'd be relative to) has no
+   meaning there. */
+#app-body[data-dock="top"] .ab-group-body button,
+#app-body[data-dock="bottom"] .ab-group-body button {
+  padding-left: 10px;
+}
+.ab-group button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14.5px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+/* Sub-items (Set Docker Daemon, Remove Docker Daemon, etc.) can carry a
+   longer label than a section header or the flat About/Quit buttons ever
+   do -- those wrap onto a second line rather than clipping or forcing the
+   whole sidebar wider (widening it instead shrinks the chart area, which in
+   a narrow window can push a drag's pixel distance under the 6px
+   zoom-vs-click threshold in timelineUp()). Scoped to .ab-group-body button
+   alone so single-line buttons keep their icon vertically centered against
+   the label instead of top-aligned against a line that never wraps. */
+.ab-group-body button {
+  align-items: flex-start;
+  white-space: normal;
+  text-wrap: balance;
+}
+.ab-group-body button .ab-icon {
+  margin-top: 1px;
+} /* keeps the icon aligned with the label's first line now that this row start-aligns instead of center */
+.ab-group button:hover {
+  background: var(--surface-3);
+}
+/* Click feedback: reverse fg/bg instead of the usual accent-tinted hover --
+   applies uniformly to every sidebar button (section headers, their
+   sub-items, and the flat top-level About/Quit buttons alike), so About
+   presses the same way any other top-level item does. currentColor-based
+   children (.ab-group-icon svg, .ab-chevron) invert for free by inheriting
+   this element's color; .ab-icon's emoji glyphs set their own color and so
+   need the explicit override just below. */
+.ab-group button:active {
+  background: var(--text-primary);
+  color: var(--page);
+}
+.ab-group button:active .ab-icon,
+.ab-group button:active .ab-group-icon svg,
+.ab-group button:active .ab-chevron,
+.ab-group button:active .ab-group-title {
+  color: var(--page);
+}
+/* An open section's header stays reversed for as long as it's expanded
+   (not just the momentary :active flash above) -- same fg/bg swap, same
+   child-color overrides, so an open dropdown reads as "open" at a glance. */
+.ab-group[data-expanded="true"] .ab-group-header {
+  background: var(--text-primary);
+  color: var(--page);
+}
+.ab-group[data-expanded="true"] .ab-group-header .ab-icon,
+.ab-group[data-expanded="true"] .ab-group-header .ab-group-icon svg,
+.ab-group[data-expanded="true"] .ab-group-header .ab-chevron,
+.ab-group[data-expanded="true"] .ab-group-header .ab-group-title {
+  color: var(--page);
+}
+.ab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 22.5px;
+  font-variant-emoji: text;
+}
+.ab-icon svg {
+  width: 1em;
+  height: 1em;
+}
+#app-body[data-dock="left"] .ab-group button,
+#app-body[data-dock="right"] .ab-group button,
+#action-bar.detached .ab-group button {
+  text-align: left;
+  width: 100%;
+}
+
+/* action-bar.html (the detached window) -- no #app-body wrapper there, so
+   it's always laid out like the left/right docked style above. */
+#action-bar.detached {
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* The flat button (Bring Back). */
+/* cttc style.css:1486-1500 */
+.btn-flat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-flat:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+.btn-flat-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* Preferences: a fieldset and its help. */
+/* cttc style.css:1716-1716 */
+.dlg-section-help {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+}
+/* cttc style.css:1805-1805 */
+.keys-box {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin: 8px 0;
+}
+/* cttc style.css:1812-1812 */
+.keys-box legend {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 0 4px;
+}
+
+/* ours: cttc's body is the flex column (style.css:82-90); React mounts
+   inside #root, so #root carries the column on to #app-body. */
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}

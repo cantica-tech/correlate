@@ -9,7 +9,6 @@
 /* Hidden really hides. */
 /* cttc style.css:81-81 */
 [hidden] {
-  /* biome-ignore lint/complexity/noImportantStyles: cttc's own fix, so a rule setting display never shows a hidden element (style.css:72-80). */
   display: none !important;
 }
 
