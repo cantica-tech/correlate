@@ -137,7 +137,15 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       };
     };
     expect(Object.keys(api)).toEqual(["sump"]);
-    expect(Object.keys(api.sump)).toEqual(["active", "states", "onState", "request"]);
+    expect(Object.keys(api.sump)).toEqual([
+      "active",
+      "states",
+      "onState",
+      "plan",
+      "provisionLocal",
+      "provisionRemote",
+      "request",
+    ]);
     await api.sump.active();
     expect(invoked.shift()).toEqual(["sump:active"]);
     await api.sump.states();

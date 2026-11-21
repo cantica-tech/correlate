@@ -24,7 +24,9 @@ const {
   configuredSumps,
   openCatalog,
   openVault,
+  registerProvisionIpc,
   registerSumpIpc,
+  runCommand,
   reloginWith,
   SessionTokens,
 } = require("./main/dist/main.cjs");
@@ -75,6 +77,18 @@ app.whenReady().then(() => {
   registerSumpIpc(ipcMain, sumps, tokens, relogin, activeSumps, lifecycle);
   const probe = new HealthProbe(lifecycle, sumps);
   probe.start();
+  // Startup plan and provisioning, for the Add Sump screens (REQ-000014).
+  registerProvisionIpc(ipcMain, {
+    run: runCommand,
+    lifecycle,
+    tokens,
+    vault,
+    env: process.env,
+    appVersion: app.getVersion(),
+    catalog,
+    active: activeSumps,
+    pending: new Map(),
+  });
   // The passphrase's derived key lives only for the session.
   app.on("will-quit", () => {
     probe.stop();

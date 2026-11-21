@@ -24,6 +24,8 @@ import type { SafeStorageLike } from "./vault/cipher.js";
 import { Vault, type VaultLogger } from "./vault/vault.js";
 
 export { identityPublicKey, importIdentity, userName } from "./identity/identity.js";
+export { registerProvisionIpc } from "./provision/ipc.js";
+export { runCommand } from "./provision/runner.js";
 export { logout } from "./sump/client.js";
 export { registerSumpIpc, SUMP_STATE_EVENT } from "./sump/ipc.js";
 export { login } from "./sump/login.js";
