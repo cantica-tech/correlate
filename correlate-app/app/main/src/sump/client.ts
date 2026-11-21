@@ -10,7 +10,8 @@
  * - `stream`: an idle limit of 45 s, which the Sump's 15 s heartbeat keeps a
  *   quiet but healthy stream inside (br-CONN-000009-sJpO9KMY).
  * A call that runs past its limit is aborted and fails with
- * `SumpTimeoutError`. This replaces cttc's helpers, which other code
+ * `SumpTimeoutError`. Every call sends the Sump's session token, when there
+ * is one, as `Authorization: Bearer` (br-CONN-000004-sJpO9KMY); never in a URL. This replaces cttc's helpers, which other code
  * bypassed with no limit at all (cttc BUG-000020-uKKrzikI).
  */
 import {
@@ -89,6 +90,36 @@ export function sumpUrl(sump: Sump, path: string, query?: CallOptions["query"]):
     if (value !== undefined) url.searchParams.set(key, String(value));
   }
   return url;
+}
+
+/** The headers every call sends: the session token, when there is one. */
+function authHeaders(sump: Sump): Record<string, string> {
+  return sump.token ? { authorization: `Bearer ${sump.token}` } : {};
+}
+
+/**
+ * Ask the Sump to revoke the session token, then forget it however the Sump
+ * answers, even when it cannot be reached (br-CONN-000004-sJpO9KMY).
+ */
+export async function logout(
+  sump: Sump,
+  forget: () => void,
+  options: { timeoutMs?: number; logger?: Logger } = {},
+): Promise<void> {
+  try {
+    if (sump.token) {
+      await request(sump, "POST", "/session/logout", {
+        timeoutMs: options.timeoutMs ?? 5_000,
+        logger: options.logger,
+      });
+    }
+  } catch (error) {
+    (options.logger ?? console).warn(
+      `Sump "${sump.name}": logout not confirmed (${(error as Error).message}); token forgotten`,
+    );
+  } finally {
+    forget();
+  }
 }
 
 /**
@@ -176,10 +207,11 @@ export async function request<T = unknown>(
   const limitMs = checkedLimit(options.timeoutMs, REQUEST_TIMEOUT_MS, "timeoutMs");
   const url = sumpUrl(sump, path, options.query);
   const call = new Call(sump, method, path, "total", limitMs, options.logger ?? console);
-  const init: RequestInit = { method, signal: call.deadline.controller.signal };
+  const headers = authHeaders(sump);
+  const init: RequestInit = { method, signal: call.deadline.controller.signal, headers };
   if (options.body !== undefined) {
     init.body = JSON.stringify(options.body);
-    init.headers = { "content-type": "application/json" };
+    headers["content-type"] = "application/json";
   }
   call.deadline.arm();
   try {
@@ -258,7 +290,10 @@ async function readBody(
 ): Promise<void> {
   call.deadline.arm();
   try {
-    const response = await fetch(url, { signal: call.deadline.controller.signal });
+    const response = await fetch(url, {
+      signal: call.deadline.controller.signal,
+      headers: authHeaders(call.sump),
+    });
     await call.check(response);
     if (!response.body) return;
     const reader = response.body.getReader();

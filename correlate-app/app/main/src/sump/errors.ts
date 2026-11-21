@@ -9,6 +9,8 @@ export interface Sump {
   name: string;
   /** Where the Sump answers: a loopback port, or an SSH forward to one (D4). */
   baseUrl: string;
+  /** The session token to send, when logged in (br-CONN-000004-sJpO9KMY). */
+  token?: string;
 }
 
 /** Total time for a plain request, answer included, unless the call says otherwise. */

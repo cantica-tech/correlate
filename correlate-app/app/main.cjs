@@ -14,7 +14,12 @@
  */
 const { app, BrowserWindow, ipcMain, safeStorage } = require("electron");
 const path = require("node:path");
-const { configuredSumps, openVault, registerSumpIpc } = require("./main/dist/main.cjs");
+const {
+  configuredSumps,
+  openVault,
+  registerSumpIpc,
+  SessionTokens,
+} = require("./main/dist/main.cjs");
 
 /** Create the main window, sandboxed, with the preload bridge as its only link to Node. */
 function createWindow() {
@@ -33,7 +38,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  registerSumpIpc(ipcMain, configuredSumps(process.env));
+  // Session tokens live in memory only: quitting forgets them (br-CONN-000004).
+  const tokens = new SessionTokens();
+  registerSumpIpc(ipcMain, configuredSumps(process.env, tokens), tokens);
   const vault = openVault(app.getPath("userData"), safeStorage);
   // The passphrase's derived key lives only for the session.
   app.on("will-quit", () => vault?.lock());

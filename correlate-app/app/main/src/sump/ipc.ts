@@ -8,6 +8,7 @@
  */
 import { type Method, request } from "./client.js";
 import { type Sump, SumpCallError, SumpHttpError, SumpTimeoutError } from "./errors.js";
+import type { SessionTokens } from "./tokens.js";
 
 /** The IPC channel the main process answers. */
 export const SUMP_REQUEST_CHANNEL = "sump:request";
@@ -28,6 +29,7 @@ export interface SumpRequestMessage {
 export type SumpErrorInfo =
   | { kind: "timeout"; message: string; limit: "total" | "idle"; limitMs: number }
   | { kind: "http"; message: string; status: number; detail: unknown }
+  | { kind: "login-needed"; message: string }
   | { kind: "refused" | "network"; message: string };
 
 /** What the renderer receives. */
@@ -50,6 +52,9 @@ export function describeError(error: unknown): SumpErrorInfo {
       limit: error.limit,
       limitMs: error.limitMs,
     };
+  }
+  if (error instanceof SumpHttpError && error.status === 401) {
+    return { kind: "login-needed", message: error.message };
   }
   if (error instanceof SumpHttpError) {
     return { kind: "http", message: error.message, status: error.status, detail: error.detail };
@@ -75,10 +80,14 @@ function parse(message: unknown): SumpRequestMessage {
   return m as SumpRequestMessage;
 }
 
-/** Answer one renderer request; never throws. */
+/**
+ * Answer one renderer request; never throws. A Sump refusing the token (401)
+ * makes the main process forget it: the next call needs a new login.
+ */
 export async function handleSumpRequest(
   message: unknown,
   resolve: SumpResolver,
+  tokens?: SessionTokens,
 ): Promise<SumpReply> {
   try {
     const m = parse(message);
@@ -91,11 +100,18 @@ export async function handleSumpRequest(
     });
     return { ok: true, value };
   } catch (error) {
+    if (error instanceof SumpHttpError && error.status === 401) tokens?.forget(error.sump);
     return { ok: false, error: describeError(error) };
   }
 }
 
 /** Answer `sump:request` in the main process. */
-export function registerSumpIpc(ipcMain: IpcMainLike, resolve: SumpResolver): void {
-  ipcMain.handle(SUMP_REQUEST_CHANNEL, (_event, message) => handleSumpRequest(message, resolve));
+export function registerSumpIpc(
+  ipcMain: IpcMainLike,
+  resolve: SumpResolver,
+  tokens?: SessionTokens,
+): void {
+  ipcMain.handle(SUMP_REQUEST_CHANNEL, (_event, message) =>
+    handleSumpRequest(message, resolve, tokens),
+  );
 }

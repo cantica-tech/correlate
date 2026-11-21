@@ -12,19 +12,35 @@
 import path from "node:path";
 import type { Sump } from "./sump/errors.js";
 import type { SumpResolver } from "./sump/ipc.js";
+import { SessionTokens } from "./sump/tokens.js";
 import type { SafeStorageLike } from "./vault/cipher.js";
 import { Vault, type VaultLogger } from "./vault/vault.js";
 
+export { logout } from "./sump/client.js";
 export { registerSumpIpc } from "./sump/ipc.js";
+export { SessionTokens };
 
 /** The Sump's default address (server/src/correlate_sump/__main__.py). */
 export const DEFAULT_SUMP_URL = "http://127.0.0.1:8765";
 
-/** The Sumps the app knows, from the environment for now. */
-export function configuredSumps(env: Record<string, string | undefined>): SumpResolver {
+/**
+ * The Sumps the app knows, from the environment for now, each with its
+ * session token from `tokens` at the time of the call. Until the SSH-key
+ * login (Item 12), `CORRELATE_SUMP_TOKEN` gives the local Sump a token, for
+ * development; it stays in memory like any other.
+ */
+export function configuredSumps(
+  env: Record<string, string | undefined>,
+  tokens: SessionTokens = new SessionTokens(),
+): SumpResolver {
   const local: Sump = { name: "local", baseUrl: env.CORRELATE_SUMP_URL || DEFAULT_SUMP_URL };
   new URL(local.baseUrl); // An invalid URL stops the app at startup, not at the first call.
-  return (name) => (name === local.name ? local : undefined);
+  if (env.CORRELATE_SUMP_TOKEN) tokens.set(local.name, env.CORRELATE_SUMP_TOKEN);
+  return (name) => {
+    if (name !== local.name) return undefined;
+    const token = tokens.get(name);
+    return token ? { ...local, token } : { ...local };
+  };
 }
 
 /**
