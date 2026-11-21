@@ -1,0 +1,19 @@
+# The Sump for local runs: `task server:up`, `task server:down`, `task server:logs`.
+#
+# Every published port binds to 127.0.0.1 only, and Redis is not published at
+# all (br-SUMP-000009-sJpO9KMY); tests/test_compose.py fails otherwise.
+
+# Its own project name: compose otherwise names projects after their folder,
+# and correlator's compose file also lives in a folder called `server`.
+name: correlate-sump
+
+services:
+  sump:
+    build: .
+    image: correlate-sump:dev
+    ports:
+      - "127.0.0.1:${SUMP_PORT:-8765}:8765"
+      - "127.0.0.1:${SUMP_FLUENT_PORT:-5140}:5140"
+    environment:
+      SUMP_RECORD_MAXLEN: ${SUMP_RECORD_MAXLEN:-100000}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}

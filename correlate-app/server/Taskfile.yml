@@ -49,6 +49,28 @@ tasks:
       - task: typecheck
       - task: test
 
+  up:
+    desc: Build and start the Sump container (127.0.0.1:8765, Fluent Bit on 127.0.0.1:5140)
+    cmd: docker compose up -d --build
+
+  down:
+    desc: Stop the Sump container
+    cmd: docker compose down
+
+  logs:
+    desc: Follow the Sump container's logs
+    interactive: true
+    cmd: docker compose logs -f
+
+  smoke:
+    desc: Start the container, run the smoke test against it, then stop it (needs Docker)
+    cmds:
+      - task: up
+      - defer: docker compose down
+      - "{{.UV}} run pytest tests/smoke -v"
+    env:
+      SUMP_SMOKE: "1"
+
   clean:
     desc: Remove caches and the virtualenv (task install restores it)
     # Python rather than rm/find, so it works on Windows too.
