@@ -97,6 +97,8 @@ describe("main.cjs starts", () => {
       "status:visible",
       "status:setVisible",
       "menu:action",
+      "picker:lastStream",
+      "picker:setLastStream",
     ]) {
       expect(channels).toContain(channel);
     }

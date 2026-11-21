@@ -46,6 +46,7 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
   const [busy, setBusy] = useState(false);
   const [targets, setTargets] = useState<Targets | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [sumpId, setSumpId] = useState<string | null>(null);
 
   const fetchTargets = async (id: string) => {
     setBusy(true);
@@ -76,7 +77,14 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
       if (!list.ok) return setError(list.message);
       setStreams(list.value);
       if (key.ok) setPublicKey(key.value);
-      const first = mode === "edit" ? (list.value[0]?.id ?? NEW_STREAM) : NEW_STREAM;
+      // Edit opens on the stream last submitted on this Sump (REQ-000026-sJpO9KMY).
+      const sump = (await bridge.sump.active?.())?.id;
+      setSumpId(sump ?? null);
+      const last = sump ? await bridge.picker?.lastStream(sump) : null;
+      const first =
+        mode !== "edit"
+          ? NEW_STREAM
+          : (list.value.find((s) => s.id === last)?.id ?? list.value[0]?.id ?? NEW_STREAM);
       setChosen(first);
       if (first !== NEW_STREAM) await fetchTargets(first);
     })();
@@ -106,6 +114,7 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
     const r = await setFollowed(request, chosen, wanted);
     setBusy(false);
     if (!r.ok) return setError(r.message);
+    if (sumpId) void bridge.picker?.setLastStream({ sump: sumpId, stream: chosen });
     const label = streams.find((s) => s.id === chosen)?.label ?? chosen;
     const n = r.value.containers.length + r.value.services.length;
     void bridge.status.add(`Following ${n} on ${label}`);

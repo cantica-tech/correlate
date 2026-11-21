@@ -145,7 +145,16 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
         request: (m: unknown) => Promise<unknown>;
       };
     };
-    expect(Object.keys(api)).toEqual(["theme", "sump", "sidebar", "status", "menu"]);
+    expect(Object.keys(api)).toEqual(["theme", "sump", "sidebar", "status", "menu", "picker"]);
+    const picker = (exposed.correlate as { picker: Record<string, (m?: unknown) => unknown> })
+      .picker;
+    expect(Object.keys(picker)).toEqual(["lastStream", "setLastStream"]);
+    await picker.lastStream?.("local");
+    await picker.setLastStream?.({ sump: "local", stream: "self" });
+    expect(invoked.splice(0)).toEqual([
+      ["picker:lastStream", "local"],
+      ["picker:setLastStream", { sump: "local", stream: "self" }],
+    ]);
     const menu = (exposed.correlate as { menu: Record<string, (m?: unknown) => unknown> }).menu;
     expect(Object.keys(menu)).toEqual(["action"]);
     await menu.action?.("zoom-in");

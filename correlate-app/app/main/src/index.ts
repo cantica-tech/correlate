@@ -29,6 +29,7 @@ export { Auditor } from "./catalog/audit.js";
 export { identityPublicKey, importIdentity, userName } from "./identity/identity.js";
 export { fieldMenuTemplate, nativeMenuTemplate, registerMenuIpc } from "./menu.js";
 export { Notifications, notifyLifecycle, registerStatusIpc } from "./notify.js";
+export { registerPickerIpc } from "./picker.js";
 export { registerProvisionIpc } from "./provision/ipc.js";
 export { runCommand } from "./provision/runner.js";
 export { connectSsh } from "./provision/ssh.js";

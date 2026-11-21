@@ -3,8 +3,8 @@
 One regression test per cttc bug (rule `br-BUILD-000006-sJpO9KMY`), in
 Vitest, one file per domain (`<domain>.test.ts`).
 
-25 of cttc's 33 open bugs are owned by `app/`; the other
-8 are in `server/tests/regression/cttc/`. The bugs come from
+23 of cttc's 33 open bugs are owned by `app/`; the other
+10 are in `server/tests/regression/cttc/`. The bugs come from
 cttc's `ANALYSIS-000003-uKKrzikI` (IDs `BUG-000NNN-uKKrzikI`).
 
 A test moves through three statuses:
@@ -43,8 +43,6 @@ Rule IDs omit their `-sJpO9KMY` suffix; Roadmap gives the item numbers in
 | 20 | Raw fetches to the gateway have no timeout | High | `br-CONN-000005` | 8 | passing |
 | 21 | A failed log page fetch is cached forever | High | `br-LOGV-000001` | 30 | placeholder |
 | 26 | Event recording download is saved without a status check | High | `br-EVENT-000005` | 48 | placeholder |
-| 28 | Relaunch replays every historical Set request | High | `br-STREAM-000003` | 27 | placeholder |
 | 29 | New Gateway and pill switch change the active gateway with no recording check | High | `br-REC-000001` | 16, 40 | passing |
 | 30 | Removing an inactive but connected Docker host leaves it collecting | Medium | `br-STREAM-000004` | 28 | placeholder |
-| 31 | Container selection file ignores the ssh port | Medium | `br-STREAM-000005` | 27 | placeholder |
 | 33 | Ship Logs throws when the saved log folder is missing | Medium | `br-DIAG-000002` | 51 | placeholder |

@@ -21,6 +21,8 @@
  * notifications' History and shows or hides the status bar
  * (REQ-000022-sJpO9KMY). `window.correlate.menu.action()` runs a menu bar
  * entry by name on this window (REQ-000023-sJpO9KMY).
+ * `window.correlate.picker` remembers the data-stream picker's last stream
+ * per Sump (REQ-000026-sJpO9KMY).
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -58,6 +60,9 @@ const STATUS_NOTICE_EVENT = "status:notice";
 const STATUS_VISIBILITY_EVENT = "status:visibility";
 /** Must match the channel in `main/src/menu.ts`. */
 const MENU_ACTION_CHANNEL = "menu:action";
+/** Must match the channels in `main/src/picker.ts`. */
+const PICKER_LAST_CHANNEL = "picker:lastStream";
+const PICKER_SET_LAST_CHANNEL = "picker:setLastStream";
 
 /** Listen on `channel`; returns the function that stops listening. */
 function listen(channel, listener) {
@@ -136,5 +141,11 @@ contextBridge.exposeInMainWorld("correlate", {
   menu: {
     /** Run a menu bar entry by name ("reload", "zoom-in", "copy", ...) on this window. */
     action: (name) => ipcRenderer.invoke(MENU_ACTION_CHANNEL, name),
+  },
+  picker: {
+    /** The stream last submitted in the data-stream picker on Sump `sump`, or null. */
+    lastStream: (sump) => ipcRenderer.invoke(PICKER_LAST_CHANNEL, sump),
+    /** Remember `{ sump, stream }` as the last stream submitted on that Sump. */
+    setLastStream: (choice) => ipcRenderer.invoke(PICKER_SET_LAST_CHANNEL, choice),
   },
 });

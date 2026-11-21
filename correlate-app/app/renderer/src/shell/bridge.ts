@@ -82,6 +82,11 @@ export interface ShellBridge {
   menu: {
     action(name: string): Promise<{ ok: boolean; message?: string }>;
   };
+  /** The data-stream picker's last stream per Sump (REQ-000026-sJpO9KMY). */
+  picker?: {
+    lastStream(sump: string): Promise<string | null>;
+    setLastStream(choice: { sump: string; stream: string }): Promise<{ ok: boolean }>;
+  };
   sump: {
     active(): Promise<{ id: string; name: string; kind: string } | null>;
     states(): Promise<StateRecord[]>;

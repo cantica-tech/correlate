@@ -3,8 +3,8 @@
 One regression test per cttc bug (rule `br-BUILD-000006-sJpO9KMY`), in
 pytest, one file per domain (`test_<domain>.py`).
 
-8 of cttc's 33 open bugs are owned by `server/`; the other
-25 are in `app/tests/regression/cttc/`. The bugs come from
+10 of cttc's 33 open bugs are owned by `server/`; the other
+23 are in `app/tests/regression/cttc/`. The bugs come from
 cttc's `ANALYSIS-000003-uKKrzikI` (IDs `BUG-000NNN-uKKrzikI`).
 
 A test moves through three statuses:
@@ -31,3 +31,5 @@ Rule IDs omit their `-sJpO9KMY` suffix; Roadmap gives the item numbers in
 | 25 | Event tick overwrites concurrent event edits | High | `br-EVENT-000007` | 46 | placeholder |
 | 27 | Event artifact name allows path traversal | Critical | `br-EVENT-000005` | 47 | placeholder |
 | 32 | Pending session is polled forever | High | `br-EVENT-000006` | 47 | placeholder |
+| 28 | Relaunch replays every historical Set request | High | `br-STREAM-000003` | 27 | passing |
+| 31 | Container selection file ignores the ssh port | Medium | `br-STREAM-000005` | 27 | passing |

@@ -33,6 +33,7 @@ const {
   openCatalog,
   openVault,
   registerMenuIpc,
+  registerPickerIpc,
   registerProvisionIpc,
   registerSidebarIpc,
   registerStatusIpc,
@@ -133,6 +134,8 @@ app.whenReady().then(() => {
   const nativeMenu = nativeMenuTemplate(process.platform, app.name);
   Menu.setApplicationMenu(nativeMenu ? Menu.buildFromTemplate(nativeMenu) : null);
   registerMenuIpc(ipcMain, (event) => BrowserWindow.fromWebContents(event.sender), app);
+  // The data-stream picker opens on the stream last edited on each Sump (REQ-000026).
+  registerPickerIpc(ipcMain, settings);
   registerThemeIpc(ipcMain, settings, (mode) => {
     nativeTheme.themeSource = mode;
   });
