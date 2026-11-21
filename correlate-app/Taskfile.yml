@@ -32,6 +32,10 @@ tasks:
     # Run through uv, so the same Python 3.13 is used on every operating system.
     cmd: uv run --no-project --python 3.13 python scripts/check_layout.py
 
+  corpus:
+    desc: Check that each of cttc's 33 bugs has exactly one regression test (br-BUILD-000006)
+    cmd: uv run --no-project --python 3.13 python scripts/check_cttc_corpus.py
+
   lint:
     desc: Lint both parts (Biome, ruff)
     cmds:
@@ -51,9 +55,10 @@ tasks:
       - task: server:test
 
   check:
-    desc: Layout, lint, type-check and test both parts; must pass before code lands
+    desc: Layout, corpus, lint, type-check and test both parts; must pass before code lands
     cmds:
       - task: layout
+      - task: corpus
       - task: lint
       - task: typecheck
       - task: test
