@@ -28,12 +28,25 @@ afterEach(() => {
 });
 
 describe("br-VAULT-000006-sJpO9KMY: owner-only on this system, for real", () => {
-  it("writes a secret file atomically and owner-only", () => {
+  it("writes a secret file atomically and owner-only", async () => {
     const file = path.join(dir, "token.json");
     writeSecretFile(file, "first");
     writeSecretFile(file, "second");
     expect(readFileSync(file, "utf8")).toBe("second");
     expect(readdirSync(dir)).toEqual(["token.json"]);
+    if (WINDOWS) {
+      const { spawnSync } = await import("node:child_process");
+      for (const [cmd, args] of [
+        ["whoami", ["/user", "/fo", "csv", "/nh"]],
+        ["icacls", [file]],
+      ] as const) {
+        const r = spawnSync(cmd, [...args], { encoding: "utf8" });
+        console.log(`DIAG ${cmd}: ${JSON.stringify(r.stdout)} ${JSON.stringify(r.stderr)}`);
+      }
+      console.log(
+        `DIAG file: ${JSON.stringify(file)} problems: ${JSON.stringify(ownerOnlyProblems(file))}`,
+      );
+    }
     expect(ownerOnlyProblems(file)).toEqual([]);
   });
 
