@@ -139,7 +139,9 @@ async def test_conflicting_plugin_route_stops_startup(redis_client) -> None:
     manager = PluginManager()
     manager.register(ConflictingPlugin(), name="conflicting")
     app = make_app(redis_client, plugin_manager=manager)
-    with pytest.raises(ValueError, match="Plugin route conflict"):
+    with pytest.raises(
+        ValueError, match="route GET /health registered by both 'sump' and 'conflicting'"
+    ):
         async with app.router.lifespan_context(app):
             pass
 
@@ -169,3 +171,63 @@ async def test_ingest_adapter_runs_with_the_app(redis_client) -> None:
     assert [r["message"] for r in body["records"]] == ["tcp"]
     with pytest.raises(OSError):  # the adapter stopped with the app
         await asyncio.open_connection("127.0.0.1", port)
+
+
+# --- br-PLUGIN-000002 and br-PLUGIN-000003 through the app ---------------------------
+
+
+class InfoPlugin:
+    @hookimpl
+    def sump_plugin_info(self) -> dict:
+        return {"name": "info", "version": "2.0"}
+
+
+async def test_plugins_endpoint_lists_plugins(redis_client) -> None:
+    manager = PluginManager()
+    manager.register(InfoPlugin(), name="info")
+    async with running(make_app(redis_client, plugin_manager=manager)) as client:
+        response = await client.get("/plugins")
+    assert response.status_code == 200
+    assert response.json() == {
+        "plugins": [
+            {
+                "name": "info",
+                "state": "loaded",
+                "info": {"name": "info", "version": "2.0"},
+                "error": None,
+            }
+        ]
+    }
+
+
+class _EP:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.loaded = False
+
+    def load(self) -> object:
+        self.loaded = True
+        return InfoPlugin()
+
+
+@pytest.mark.parametrize(
+    ("env", "states"),
+    [
+        ({}, {"a": "loaded", "b": "loaded"}),
+        ({"SUMP_DISABLED_PLUGINS": " a , ,"}, {"a": "disabled", "b": "loaded"}),
+        ({"SUMP_DISABLE_PLUGIN_AUTOLOAD": "true"}, {"a": "disabled", "b": "disabled"}),
+        ({"SUMP_DISABLE_PLUGIN_AUTOLOAD": "0"}, {"a": "loaded", "b": "loaded"}),
+    ],
+)
+async def test_plugin_settings_reach_discovery(monkeypatch, redis_client, env, states) -> None:
+    eps = [_EP("a"), _EP("b")]
+    monkeypatch.setattr(
+        "correlate_sump.plugins._discover_entry_points", lambda group="sump.plugins": eps
+    )
+    app = create_app(redis_client=redis_client, env=env, start_ingest=False)
+    async with running(app) as client:
+        body = (await client.get("/plugins")).json()
+    assert {p["name"]: p["state"] for p in body["plugins"]} == states
+    assert {ep.name: ep.loaded for ep in eps} == {
+        name: state == "loaded" for name, state in states.items()
+    }
