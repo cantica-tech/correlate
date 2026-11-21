@@ -137,6 +137,30 @@ describe("br-SUMP-000008-sJpO9KMY: the SSH forward", () => {
   });
 });
 
+describe("br-SUMP-000008-sJpO9KMY: an SSH error after the handshake", () => {
+  it("is logged, never thrown, while up and after the forward stops", async () => {
+    const sump = await fakeSump();
+    const host = await sshHost();
+    const warnings: string[] = [];
+    const forward = new SumpForward(target(host.port, Number(new URL(sump.sump.baseUrl).port)), {
+      ...fast,
+      logger: { info: () => {}, warn: (m: string) => warnings.push(m) },
+    });
+    cleanups.push(() => forward.stop());
+    forward.start();
+    expect(await forward.waitUp(5_000)).toBe(true);
+    const client = (forward as unknown as { client: import("ssh2").Client }).client;
+    // ssh2 emits a bad packet as an error, possibly more than once.
+    expect(() => {
+      client.emit("error", new Error("Bad packet length"));
+      client.emit("error", new Error("Bad packet length"));
+    }).not.toThrow();
+    expect(warnings.filter((w) => w.includes("Bad packet length"))).toHaveLength(2);
+    forward.stop();
+    expect(() => client.emit("error", new Error("Bad packet length"))).not.toThrow();
+  });
+});
+
 describe("cttc BUG-000008 territory: the transport starts no process", () => {
   it("has no subprocess and no PID in it", () => {
     const here = path.dirname(fileURLToPath(import.meta.url));

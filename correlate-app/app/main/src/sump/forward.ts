@@ -142,9 +142,27 @@ export class SumpForward {
     return new Promise((resolve, reject) => {
       const client = new Client();
       let refused: string | undefined;
+      let settled = false;
       client
-        .once("ready", () => resolve(client))
-        .once("error", (error) => reject(refused ? new Error(refused) : error))
+        .once("ready", () => {
+          settled = true;
+          resolve(client);
+        })
+        // Kept for the client's whole life: ssh2 reports a bad packet as an
+        // `error` event, and one with no listener would throw in the main
+        // process (CI run 44926390277). After the handshake, `close` follows
+        // and the forward reconnects.
+        .on("error", (error) => {
+          if (!settled) {
+            settled = true;
+            reject(refused ? new Error(refused) : error);
+            return;
+          }
+          this.lastError = error.message;
+          (this.options.logger ?? console).warn(
+            `Sump ${this.target.id}: SSH connection error (${error.message})`,
+          );
+        })
         .connect({
           host: ssh.host,
           port: ssh.port,
