@@ -7,6 +7,7 @@
  * back as plain objects, since class instances do not survive IPC.
  */
 
+import type { Lifecycle } from "../catalog/lifecycle.js";
 import type { ActiveSumps } from "../catalog/windows.js";
 import { type Method, request } from "./client.js";
 import { type Sump, SumpCallError, SumpHttpError, SumpTimeoutError } from "./errors.js";
@@ -17,6 +18,29 @@ export const SUMP_REQUEST_CHANNEL = "sump:request";
 
 /** The IPC channel that says which Sump the calling window is on (br-SUMP-000010). */
 export const SUMP_ACTIVE_CHANNEL = "sump:active";
+
+/** The IPC channel that lists every Sump's lifecycle state (br-SUMP-000011). */
+export const SUMP_STATES_CHANNEL = "sump:states";
+
+/** The channel each lifecycle change is pushed to every window on. */
+export const SUMP_STATE_EVENT = "sump:state";
+
+/**
+ * Tell the lifecycle what a call's outcome says about the Sump
+ * (br-SUMP-000011): an answer, whatever its status, means it is there; a
+ * timeout or network error that it is not. A refused call says nothing.
+ */
+export function observeOutcome(lifecycle: Lifecycle, sump: string, error?: unknown): void {
+  if (error === undefined) lifecycle.reachable(sump, "answered a call");
+  else if (error instanceof SumpHttpError) lifecycle.reachable(sump, `answered ${error.status}`);
+  else if (error instanceof SumpTimeoutError) lifecycle.unreachable(sump, error.message);
+  else if (!(error instanceof SumpCallError)) {
+    lifecycle.unreachable(
+      sump,
+      `no answer: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
 
 const METHODS: readonly Method[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
@@ -112,6 +136,7 @@ export async function handleSumpRequest(
   tokens?: SessionTokens,
   relogin?: Relogin,
   defaultSump?: string,
+  lifecycle?: Lifecycle,
 ): Promise<SumpReply> {
   let m: SumpRequestMessage;
   try {
@@ -119,14 +144,21 @@ export async function handleSumpRequest(
   } catch (error) {
     return { ok: false, error: describeError(error) };
   }
-  const send = () => {
+  const send = async () => {
     const sump = resolve(m.sump);
     if (!sump) throw new SumpCallError(`no Sump named "${m.sump}"`);
-    return request(sump, m.method, m.path, {
-      body: m.body,
-      query: m.query,
-      timeoutMs: m.timeoutMs,
-    });
+    try {
+      const value = await request(sump, m.method, m.path, {
+        body: m.body,
+        query: m.query,
+        timeoutMs: m.timeoutMs,
+      });
+      if (lifecycle) observeOutcome(lifecycle, m.sump);
+      return value;
+    } catch (error) {
+      if (lifecycle) observeOutcome(lifecycle, m.sump, error);
+      throw error;
+    }
   };
   try {
     return { ok: true, value: await send() };
@@ -155,9 +187,10 @@ export async function handleSumpRequest(
 }
 
 /**
- * Answer `sump:request` in the main process, and `sump:active` when windows'
- * active Sumps are tracked (`active`): a request without `sump` goes to the
- * calling window's Sump.
+ * Answer `sump:request` in the main process, `sump:active` when windows'
+ * active Sumps are tracked (`active`: a request without `sump` goes to the
+ * calling window's Sump), and `sump:states` when the lifecycle is
+ * (`lifecycle`, which every call's outcome also updates).
  */
 export function registerSumpIpc(
   ipcMain: IpcMainLike,
@@ -165,12 +198,17 @@ export function registerSumpIpc(
   tokens?: SessionTokens,
   relogin?: Relogin,
   active?: ActiveSumps,
+  lifecycle?: Lifecycle,
 ): void {
   const windowOf = (event: IpcEventLike) => event?.sender?.id ?? -1;
   ipcMain.handle(SUMP_REQUEST_CHANNEL, (event, message) =>
-    handleSumpRequest(message, resolve, tokens, relogin, active?.get(windowOf(event))),
+    handleSumpRequest(message, resolve, tokens, relogin, active?.get(windowOf(event)), lifecycle),
   );
   if (active) {
     ipcMain.handle(SUMP_ACTIVE_CHANNEL, (event) => active.describe(windowOf(event)));
+  }
+  if (lifecycle) {
+    // Read-only: nothing on the bridge sets a state (br-SUMP-000011).
+    ipcMain.handle(SUMP_STATES_CHANNEL, () => lifecycle.states());
   }
 }

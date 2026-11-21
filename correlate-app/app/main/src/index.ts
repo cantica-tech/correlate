@@ -12,6 +12,8 @@
  */
 import path from "node:path";
 import { Catalog, defaultCatalogPath, LOCAL_ID } from "./catalog/catalog.js";
+import { Lifecycle } from "./catalog/lifecycle.js";
+import { HealthProbe } from "./catalog/probe.js";
 import { ActiveSumps } from "./catalog/windows.js";
 import { ensureIdentity, userName } from "./identity/identity.js";
 import type { Sump } from "./sump/errors.js";
@@ -23,9 +25,9 @@ import { Vault, type VaultLogger } from "./vault/vault.js";
 
 export { identityPublicKey, importIdentity, userName } from "./identity/identity.js";
 export { logout } from "./sump/client.js";
-export { registerSumpIpc } from "./sump/ipc.js";
+export { registerSumpIpc, SUMP_STATE_EVENT } from "./sump/ipc.js";
 export { login } from "./sump/login.js";
-export { ActiveSumps, SessionTokens };
+export { ActiveSumps, HealthProbe, Lifecycle, SessionTokens };
 
 /** The Sump's default address (server/src/correlate_sump/__main__.py). */
 export const DEFAULT_SUMP_URL = "http://127.0.0.1:8765";
@@ -107,6 +109,7 @@ export function reloginWith(
   tokens: SessionTokens,
   env: Record<string, string | undefined>,
   catalog?: Catalog,
+  lifecycle?: Lifecycle,
 ): Relogin {
   return async (name) => {
     const sump = resolve(name);
@@ -125,5 +128,6 @@ export function reloginWith(
           : { kind: "local", sumpPort: port, user: result.user },
       );
     }
+    lifecycle?.reachable(name, `logged in as ${result.user}`);
   };
 }

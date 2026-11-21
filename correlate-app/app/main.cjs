@@ -18,6 +18,9 @@ const { app, BrowserWindow, ipcMain, safeStorage } = require("electron");
 const path = require("node:path");
 const {
   ActiveSumps,
+  HealthProbe,
+  Lifecycle,
+  SUMP_STATE_EVENT,
   configuredSumps,
   openCatalog,
   openVault,
@@ -60,10 +63,21 @@ app.whenReady().then(() => {
   const catalog = openCatalog(process.env);
   activeSumps = new ActiveSumps(catalog);
   const sumps = configuredSumps(process.env, tokens, catalog);
-  const relogin = reloginWith(vault, sumps, tokens, process.env, catalog);
-  registerSumpIpc(ipcMain, sumps, tokens, relogin, activeSumps);
+  // Every Sump's lifecycle state, held here only; windows are told of each
+  // change and can only read it (br-SUMP-000011).
+  const lifecycle = new Lifecycle(catalog);
+  lifecycle.subscribe((record) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send(SUMP_STATE_EVENT, record);
+    }
+  });
+  const relogin = reloginWith(vault, sumps, tokens, process.env, catalog, lifecycle);
+  registerSumpIpc(ipcMain, sumps, tokens, relogin, activeSumps, lifecycle);
+  const probe = new HealthProbe(lifecycle, sumps);
+  probe.start();
   // The passphrase's derived key lives only for the session.
   app.on("will-quit", () => {
+    probe.stop();
     vault?.lock();
     catalog?.close();
   });

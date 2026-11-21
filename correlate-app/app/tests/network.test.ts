@@ -101,9 +101,10 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
     expect(csp.split(";").map((d) => d.trim())).toContain("connect-src 'none'");
   });
 
-  it("gets only sump.active and sump.request from the preload bridge", async () => {
+  it("gets only the Sump calls from the preload bridge, all read-only but request", async () => {
     const exposed: Record<string, unknown> = {};
     const invoked: unknown[][] = [];
+    const listeners = new Map<string, (event: unknown, record: unknown) => void>();
     const electron = {
       contextBridge: {
         exposeInMainWorld: (key: string, api: unknown) => {
@@ -115,6 +116,12 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
           invoked.push(args);
           return { ok: true, value: null };
         },
+        on: (channel: string, handler: (event: unknown, record: unknown) => void) => {
+          listeners.set(channel, handler);
+        },
+        removeListener: (channel: string) => {
+          listeners.delete(channel);
+        },
       },
     };
     const code = readFileSync(path.join(APP, "preload.cjs"), "utf8");
@@ -122,12 +129,25 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
 
     expect(Object.keys(exposed)).toEqual(["correlate"]);
     const api = exposed.correlate as {
-      sump: { active: () => Promise<unknown>; request: (m: unknown) => Promise<unknown> };
+      sump: {
+        active: () => Promise<unknown>;
+        states: () => Promise<unknown>;
+        onState: (listener: (record: unknown) => void) => () => void;
+        request: (m: unknown) => Promise<unknown>;
+      };
     };
     expect(Object.keys(api)).toEqual(["sump"]);
-    expect(Object.keys(api.sump)).toEqual(["active", "request"]);
+    expect(Object.keys(api.sump)).toEqual(["active", "states", "onState", "request"]);
     await api.sump.active();
     expect(invoked.shift()).toEqual(["sump:active"]);
+    await api.sump.states();
+    expect(invoked.shift()).toEqual(["sump:states"]);
+    const heard: unknown[] = [];
+    const stop = api.sump.onState((record) => heard.push(record));
+    listeners.get("sump:state")?.({}, { id: "local", state: "active" });
+    expect(heard).toEqual([{ id: "local", state: "active" }]);
+    stop();
+    expect(listeners.has("sump:state")).toBe(false);
     const message = { sump: "local", method: "GET", path: "/health" };
     await expect(api.sump.request(message)).resolves.toEqual({ ok: true, value: null });
     expect(invoked).toEqual([["sump:request", message]]);
