@@ -51,7 +51,8 @@
         "renderer/src/statusbar/statusbar.css",
         "renderer/src/menubar/menubar.css",
         "renderer/src/streams/streams.css",
-        "renderer/src/charts/charts.css"
+        "renderer/src/charts/charts.css",
+        "renderer/src/logs/logs.css"
       ],
       "linter": {
         "rules": {

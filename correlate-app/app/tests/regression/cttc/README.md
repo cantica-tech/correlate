@@ -41,7 +41,7 @@ Rule IDs omit their `-sJpO9KMY` suffix; Roadmap gives the item numbers in
 | 18 | Re-opening or switching files does not use the 75% framing | Low | `br-ANLYS-000004` | 35 | placeholder |
 | 19 | Open-file dedup keys on basename only | Medium | `br-ANLYS-000005` | 35 | placeholder |
 | 20 | Raw fetches to the gateway have no timeout | High | `br-CONN-000005` | 8 | passing |
-| 21 | A failed log page fetch is cached forever | High | `br-LOGV-000001` | 30 | placeholder |
+| 21 | A failed log page fetch is cached forever | High | `br-LOGV-000001` | 30 | passing |
 | 26 | Event recording download is saved without a status check | High | `br-EVENT-000005` | 48 | placeholder |
 | 29 | New Gateway and pill switch change the active gateway with no recording check | High | `br-REC-000001` | 16, 40 | passing |
 | 33 | Ship Logs throws when the saved log folder is missing | Medium | `br-DIAG-000002` | 51 | placeholder |

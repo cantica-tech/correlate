@@ -38,5 +38,8 @@
   "connect": "cttc app/renderer/action-bar.html (Connect Docker Host… )",
   "appearance-action": "cttc app/renderer/action-bar.html (Appearance… )",
   "settings-action": "cttc app/renderer/action-bar.html (Settings… )",
-  "current-status": "cttc app/renderer/src/shared/toolbar-pills/index.ts (CLIPBOARD_ICON_SVG)"
+  "current-status": "cttc app/renderer/src/shared/toolbar-pills/index.ts (CLIPBOARD_ICON_SVG)",
+  "menu": "cttc app/renderer/app.js (LOG_MENU_HAMBURGER_SVG)",
+  "sort-up": "cttc app/renderer/app.js (LOG_MENU_SORT_UP_SVG)",
+  "sort-down": "cttc app/renderer/app.js (LOG_MENU_SORT_DOWN_SVG)"
 }

@@ -14,7 +14,7 @@
  * `docs/roadmap/correlate-app-rewrite.md`. CommonJS, as in cttc and
  * correlator, because Electron's own module loads most reliably this way.
  */
-const { app, BrowserWindow, ipcMain, Menu, nativeTheme, safeStorage } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, safeStorage } = require("electron");
 const path = require("node:path");
 const {
   ActiveStreams,
@@ -23,6 +23,7 @@ const {
   connectSsh,
   defaultSettingsPath,
   fieldMenuTemplate,
+  handleSumpRequest,
   Forwards,
   HealthProbe,
   Lifecycle,
@@ -34,6 +35,7 @@ const {
   openCatalog,
   openVault,
   registerMenuIpc,
+  registerLogsIpc,
   registerPickerIpc,
   registerProvisionIpc,
   registerSidebarIpc,
@@ -192,6 +194,31 @@ app.whenReady().then(() => {
   registerSumpIpc(ipcMain, sumps, tokens, relogin, activeSumps, lifecycle);
   // Each window's active data stream, on its active Sump (REQ-000027).
   registerStreamIpc(ipcMain, activeStreams, activeSumps);
+  // The log panels' order and lanes, and Export .log: the save dialog
+  // first, then the rows through the window's Sump (REQ-000029).
+  registerLogsIpc(ipcMain, settings, {
+    ask: async (event, defaultName) => {
+      const window = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+      const options = {
+        title: "Export .log",
+        defaultPath: defaultName,
+        filters: [{ name: "Log", extensions: ["log"] }],
+      };
+      const r = window
+        ? await dialog.showSaveDialog(window, options)
+        : await dialog.showSaveDialog(options);
+      return r.canceled || !r.filePath ? null : r.filePath;
+    },
+    request: (event, message) =>
+      handleSumpRequest(
+        message,
+        sumps,
+        tokens,
+        relogin,
+        activeSumps.get(event.sender.id),
+        lifecycle,
+      ),
+  });
   // Notifications and their History, one feed for every window; a Sump a
   // window is on that is lost or comes back is notified (REQ-000022).
   const notifications = new Notifications();

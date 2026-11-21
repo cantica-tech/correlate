@@ -12,7 +12,15 @@ import { Icon, type IconName } from "../icons/Icon.js";
 
 /** One entry, or a separator. */
 export type MenuEntry =
-  | { label: string; onSelect: () => void; icon?: IconName; disabled?: boolean; title?: string }
+  | {
+      label: string;
+      onSelect: () => void;
+      icon?: IconName;
+      disabled?: boolean;
+      title?: string;
+      /** The current choice of several, marked as cttc's (`data-active`). */
+      active?: boolean;
+    }
   | "separator";
 
 /** The menu's props. */
@@ -85,6 +93,7 @@ export function ContextMenu({ x, y, entries, onClose, label }: ContextMenuProps)
             key={entry.label}
             disabled={entry.disabled}
             title={entry.title}
+            data-active={entry.active ? "true" : undefined}
             onClick={() => {
               onClose();
               entry.onSelect();

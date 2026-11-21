@@ -28,6 +28,7 @@ export const SOURCES = [
   "menubar/menubar.css",
   "streams/streams.css",
   "charts/charts.css",
+  "logs/logs.css",
 ];
 
 /** Where the merged stylesheet goes. */

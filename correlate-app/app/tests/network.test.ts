@@ -153,6 +153,18 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       "menu",
       "picker",
       "stream",
+      "logs",
+    ]);
+    // The log panels' choices and Export .log: only their own channels (REQ-000029-sJpO9KMY).
+    const logs = (exposed.correlate as { logs: Record<string, (m?: unknown) => unknown> }).logs;
+    expect(Object.keys(logs)).toEqual(["prefs", "setPrefs", "exportLog"]);
+    await logs.prefs?.();
+    await logs.setPrefs?.({ order: "oldest" });
+    await logs.exportLog?.({ source: "self/web" });
+    expect(invoked.splice(0)).toEqual([
+      ["logs:prefs"],
+      ["logs:setPrefs", { order: "oldest" }],
+      ["logs:export", { source: "self/web" }],
     ]);
     const stream = (exposed.correlate as { stream: Record<string, (m?: unknown) => unknown> })
       .stream;

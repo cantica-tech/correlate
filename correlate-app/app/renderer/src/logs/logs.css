@@ -1,0 +1,205 @@
+/*
+ * The log panels and lanes (REQ-000029-sJpO9KMY, br-STYLE-000001-sJpO9KMY):
+ * cttc's rules, verbatim, each block headed by its lines in cttc's style.css.
+ * cttc hides the lanes outright (style.css:1234-1239); the app shows them
+ * behind their toggle (REQ-000029-sJpO9KMY Requirement 3), so that rule is
+ * not ported.
+ */
+
+/* cttc style.css:1221-1233 */
+#lanes-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px; /* matches the sidebar's .ab-group-header */
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+#lanes {
+  padding-top: 2px;
+}
+
+/* cttc style.css:1378-1378 */
+.lane-canvas {
+  flex: 1 1 auto;
+  display: block;
+  cursor: crosshair;
+}
+
+/* cttc style.css:1380-1390 */
+#panels {
+  /* Fixed 30% share -- see #chart-block's own comment; the popout-log
+     override below still gives this the full height when #chart-block
+     itself is hidden entirely. */
+  flex: 0 0 30%;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  min-height: 0;
+  overflow-x: auto;
+}
+
+/* cttc style.css:1420-1426 */
+.panel-head-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0; /* lets the name ellipsis instead of forcing the center column wide */
+  max-width: 100%;
+}
+
+/* cttc style.css:1440-1485 */
+.panel-head-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.panel-head .name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sample-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border: 1px dashed var(--muted);
+  border-radius: 8px;
+  color: var(--muted);
+}
+.icon-btn,
+.panel-head .close {
+  border: none;
+  padding: 0;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 6px;
+  flex: 0 0 auto;
+}
+.icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.icon-btn:hover,
+.panel-head .close:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: transparent;
+}
+/* shared "flat" treatment for Bring Back (popback) and the detached
+   action bar's own Bring Back -- these navigate/dismiss, they aren't a
+   primary action, so no boxed button look (border/fill), just an icon+text
+   row like the sidebar's own list items. */
+
+/* cttc style.css:1501-1518 */
+.panel-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  background: var(--surface-1);
+  color: inherit;
+}
+.panel-search .search-status {
+  white-space: nowrap;
+  font-size: 11px;
+}
+.log-row.search-hit {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* cttc style.css:1526-1568 */
+.panel-spacer {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 1px;
+}
+.panel-empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 16px;
+  color: var(--critical);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+.log-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 22px;
+  line-height: 22px;
+  padding: 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.log-row:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.log-row.hl {
+  background: var(--hl);
+}
+/* Live tracking's own auto-click highlight (see setCursor's liveTrack
+   option) -- same shape as .hl above, but liveTrackColor instead of the
+   ordinary selection highlight color, so it reads as distinct. */
+.log-row.hl-live {
+  background: var(--live-track);
+}
+/* dotted boundary marking the top/bottom edge of a contiguous run of
+   highlighted log entries (see the .hl-top/.hl-bottom logic in app.js) */
+.log-row.hl-top {
+  border-top: 2px dashed var(--hl-color);
+}
+.log-row.hl-bottom {
+  border-bottom: 2px dashed var(--hl-color);
+}
+.log-row.hl-live.hl-top {
+  border-top: 2px dashed var(--live-track-color);
+}
+.log-row.hl-live.hl-bottom {
+  border-bottom: 2px dashed var(--live-track-color);
+}
+.log-row.cursor-row {
+  border-left-color: var(--accent);
+}
+.log-row.selected {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.log-row .ts {
+  color: var(--muted);
+  margin-right: 6px;
+}
+.log-row.lvl-error {
+  border-left-color: var(--critical);
+}
+.log-row.lvl-warn {
+  border-left-color: var(--warning);
+}

@@ -19,10 +19,12 @@ import { _electron, type ElectronApplication, type Page } from "playwright-core"
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COMPONENT_LIMIT, compare, type Mask, readPng, writePng } from "./compare.js";
 import { cttcChartBlock, cttcSwatchScript } from "./cttcCharts.js";
+import { cttcLanesHead, cttcPanels, cttcRowsScript } from "./cttcLogs.js";
 import { cttcMenuBar } from "./cttcMenuBar.js";
 import { cttcSidebar, cttcWidthScript } from "./cttcSidebar.js";
 import { cttcPillMenu, cttcStatusBar } from "./cttcStatusBar.js";
 import { cttcRemoveDialog, cttcStreamsDialog } from "./cttcStreams.js";
+import { LOG_ROWS } from "./logsData.js";
 import { SIDEBAR_CASES } from "./page/sidebar-cases.js";
 import { ARRIVING, HISTORY, STATUSBAR_CASES } from "./page/statusbar-data.js";
 
@@ -63,6 +65,7 @@ async function buildOurs(): Promise<void> {
       path.join(here, "page/ours-streams.tsx"),
       path.join(here, "page/ours-remove.tsx"),
       path.join(here, "page/ours-charts.tsx"),
+      path.join(here, "page/ours-logs.tsx"),
     ],
     outdir: path.join(here, "dist"),
     bundle: true,
@@ -311,6 +314,36 @@ async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer
   }
 }
 
+/**
+ * A log panel with rows, and the lanes' head (REQ-000029-sJpO9KMY Requirement
+ * 5): on cttc's page, cttc's markup with its rows placed by script; on ours,
+ * our Panels on the same rows and our folded Lanes.
+ */
+async function captureLogs(side: "cttc" | "ours", pictures: Map<string, Buffer>): Promise<void> {
+  for (const theme of THEMES) {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.goto(pathToFileURL(path.join(here, `page/${side}-logs.html`)).href);
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.getElementById("stage").innerHTML = '<div id="lanes-stage">' + ${JSON.stringify(cttcLanesHead())} + '</div>' + ${JSON.stringify(cttcPanels())}; ${cttcRowsScript()} })()`,
+      );
+    }
+    await page.waitForFunction(
+      (n) =>
+        (
+          globalThis as unknown as {
+            document: { querySelectorAll(s: string): { length: number } };
+          }
+        ).document.querySelectorAll(".panel .log-row").length === n,
+      LOG_ROWS.length,
+    );
+    await page.mouse.move(1, 1);
+    await page.evaluate("document.fonts.ready.then(() => true)");
+    pictures.set(`logs-panel-${theme}`, await shoot(".panel"));
+    pictures.set(`logs-lanes-head-${theme}`, await shoot("#lanes-head"));
+  }
+}
+
 let cttc: Map<string, Buffer>;
 let ours: Map<string, Buffer>;
 
@@ -342,6 +375,8 @@ describe.skipIf(process.platform !== "darwin")(
       await captureRemove("ours", ours);
       await captureCharts("cttc", cttc);
       await captureCharts("ours", ours);
+      await captureLogs("cttc", cttc);
+      await captureLogs("ours", ours);
     }, 120_000);
 
     afterAll(async () => {
@@ -359,6 +394,8 @@ describe.skipIf(process.platform !== "darwin")(
       "remove-dialog",
       "charts-head",
       "charts-legend",
+      "logs-panel",
+      "logs-lanes-head",
     ].flatMap((n) => THEMES.map((t) => `${n}-${t}`));
 
     it.each(names)("%s looks as in cttc", (name) => {

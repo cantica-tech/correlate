@@ -7,6 +7,8 @@
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useState } from "react";
 import { ChartBlock } from "../charts/ChartBlock.js";
 import { Button, Dialog, SegControl, Switch } from "../components/index.js";
+import { Lanes } from "../logs/Lanes.js";
+import { Panels, useLogPrefs } from "../logs/Panels.js";
 import { MenuBar } from "../menubar/MenuBar.js";
 import { StatusBar } from "../statusbar/StatusBar.js";
 import { pauseStream } from "../streams/api.js";
@@ -47,6 +49,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   const [removing, setRemoving] = useState(false);
   const [streamsVersion, setStreamsVersion] = useState(0);
   const streamsChanged = useCallback(() => setStreamsVersion((v) => v + 1), []);
+  const logs = useLogPrefs(bridge);
 
   useEffect(() => {
     let live = true;
@@ -133,7 +136,24 @@ export function Shell({ bridge, detached = false }: ShellProps) {
         {/* biome-ignore lint/a11y/noStaticElementInteractions: cttc's splitter; the sidebar keeps its size without it. */}
         <div id="action-bar-splitter" title="Drag to resize the sidebar" onMouseDown={drag} />
         <div id="main-content">
-          <ChartBlock bridge={bridge} version={streamsVersion} />
+          <ChartBlock
+            bridge={bridge}
+            version={streamsVersion}
+            lanes={(shown) => (
+              <Lanes
+                request={bridge.sump.request}
+                stream={shown.stream.id}
+                containers={shown.containers}
+                slots={shown.slots}
+                view={shown.view}
+                open={logs.lanesOpen}
+                onToggle={logs.setLanesOpen}
+              />
+            )}
+            panels={(shown) => (
+              <Panels bridge={bridge} shown={shown} order={logs.order} onOrder={logs.setOrder} />
+            )}
+          />
         </div>
         <Dialog
           id="dlg-preferences-theme"

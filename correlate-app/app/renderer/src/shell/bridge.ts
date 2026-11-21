@@ -88,6 +88,23 @@ export interface ShellBridge {
     active(): Promise<string | null>;
     setActive(stream: string): Promise<{ ok: boolean; message?: string }>;
   };
+  /** The log panels' choices and Export .log (REQ-000029-sJpO9KMY). */
+  logs?: {
+    prefs(): Promise<{ order: "newest" | "oldest"; lanesOpen: boolean }>;
+    setPrefs(change: {
+      order?: "newest" | "oldest";
+      lanesOpen?: boolean;
+    }): Promise<{ ok: boolean }>;
+    exportLog(request: {
+      source: string;
+      name: string;
+      from: string;
+      to: string;
+      order: "newest" | "oldest";
+    }): Promise<
+      { ok: true; path: string; rows: number } | { ok: false; cancelled?: true; message?: string }
+    >;
+  };
   /** The data-stream picker's last stream per Sump (REQ-000026-sJpO9KMY). */
   picker?: {
     lastStream(sump: string): Promise<string | null>;

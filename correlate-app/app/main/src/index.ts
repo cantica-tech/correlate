@@ -27,6 +27,7 @@ import { Vault, type VaultLogger } from "./vault/vault.js";
 
 export { Auditor } from "./catalog/audit.js";
 export { identityPublicKey, importIdentity, userName } from "./identity/identity.js";
+export { registerLogsIpc } from "./logs.js";
 export { fieldMenuTemplate, nativeMenuTemplate, registerMenuIpc } from "./menu.js";
 export { Notifications, notifyLifecycle, registerStatusIpc } from "./notify.js";
 export { registerPickerIpc } from "./picker.js";
@@ -41,7 +42,7 @@ export {
 } from "./sidebar.js";
 export { ActiveStreams, registerStreamIpc } from "./streams.js";
 export { logout } from "./sump/client.js";
-export { registerSumpIpc, SUMP_STATE_EVENT } from "./sump/ipc.js";
+export { handleSumpRequest, registerSumpIpc, SUMP_STATE_EVENT } from "./sump/ipc.js";
 export { login } from "./sump/login.js";
 export { defaultSettingsPath, registerThemeIpc, Settings } from "./theme.js";
 export { ActiveSumps, Forwards, HealthProbe, Lifecycle, SessionTokens };

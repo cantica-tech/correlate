@@ -8,7 +8,7 @@
  * width of maxima per series, read again every 5 s; drawing is the ported
  * `drawChartStrip`.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Viewport } from "../correlate/atoms.js";
 import { PLOT_MARGIN_LEFT, TIME_AXIS_HEIGHT } from "../correlate/axes.js";
 import { type ChartSeries, drawChartStrip } from "../correlate/chartDraw.js";
@@ -34,15 +34,31 @@ export function percentCeiling(series: readonly ChartSeries[]): number {
 /** What the charts show: per strip, per container, its points. */
 type Data = Record<string, Record<string, ChartSeries["points"]>>;
 
+/** What the charts show, for the lanes and log panels beside them (REQ-000029-sJpO9KMY). */
+export interface ChartsShown {
+  stream: Stream;
+  /** The followed containers shown (not hidden in the legend), in its order. */
+  containers: string[];
+  slots: SlotMap;
+  /** The time range of the last read; a new object on each read. */
+  view: Viewport;
+  /** Hide a container, as its legend entry does. */
+  hide: (name: string) => void;
+}
+
 /** The chart block's props. */
 export interface ChartBlockProps {
   bridge: ShellBridge;
   /** Changes when the data streams changed elsewhere. */
   version?: number;
+  /** Drawn in `#chart-block` under the charts: cttc's lanes. */
+  lanes?: (shown: ChartsShown) => ReactNode;
+  /** Drawn in `#layout` after `#chart-block`: cttc's `#panels`. */
+  panels?: (shown: ChartsShown) => ReactNode;
 }
 
 /** The charts. */
-export function ChartBlock({ bridge, version = 0 }: ChartBlockProps) {
+export function ChartBlock({ bridge, version = 0, lanes, panels }: ChartBlockProps) {
   const [stream, setStream] = useState<Stream | null>(null);
   const [containers, setContainers] = useState<string[]>([]);
   const [slots, setSlots] = useState<SlotMap>({});
@@ -159,6 +175,18 @@ export function ChartBlock({ bridge, version = 0 }: ChartBlockProps) {
     : containers.length === 0
       ? `Nothing followed on ${stream.label}: Edit Data Streams… picks containers.`
       : null;
+  const hide = useCallback(
+    (name: string) => setHidden((h) => (h.has(name) ? h : new Set([...h, name]))),
+    [],
+  );
+  // Kept the same between reads, so the lanes and panels read only on a new view.
+  const shown = useMemo<ChartsShown | null>(
+    () =>
+      stream
+        ? { stream, containers: containers.filter((n) => !hidden.has(n)), slots, view, hide }
+        : null,
+    [stream, containers, hidden, slots, view, hide],
+  );
   return (
     <main id="layout">
       <section id="chart-block">
@@ -217,7 +245,9 @@ export function ChartBlock({ bridge, version = 0 }: ChartBlockProps) {
             ))}
           </div>
         </div>
+        {shown && lanes ? lanes(shown) : null}
       </section>
+      {shown && panels ? panels(shown) : null}
     </main>
   );
 

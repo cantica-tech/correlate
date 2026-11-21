@@ -170,6 +170,27 @@ export function cttcClipboard() {
   return m?.[1];
 }
 
+/** Where cttc's log panel's menu icons live. */
+const LOG_MENU_WHERE = "cttc app/renderer/app.js";
+
+/** cttc's log panel's menu icons: `LOG_MENU_<constant>_SVG` → our name. */
+/** @type {Record<string, string>} */
+const LOG_MENU_NAMES = { HAMBURGER: "menu", SORT_UP: "sort-up", SORT_DOWN: "sort-down" };
+
+/** cttc's log panel's menu icons (`LOG_MENU_*_SVG`): name → markup, those found. */
+export function cttcLogMenu() {
+  const file = path.join(CTTC, "app.js");
+  if (!existsSync(file)) return {};
+  const js = readFileSync(file, "utf8");
+  /** @type {Record<string, string>} */
+  const found = {};
+  for (const [constant, name] of Object.entries(LOG_MENU_NAMES)) {
+    const m = js.match(new RegExp(`LOG_MENU_${constant}_SVG = '(<svg[\\s\\S]*?<\\/svg>)'`));
+    if (m?.[1]) found[name] = m[1];
+  }
+  return found;
+}
+
 /** @param {boolean} dryRun */
 function importAll(dryRun) {
   if (!existsSync(CTTC) || !existsSync(CORRELATOR)) {
@@ -212,6 +233,11 @@ function importAll(dryRun) {
   // The pills' "Current Status" entry: raw markup in cttc's code, not in a page.
   const clipboard = cttcClipboard();
   if (clipboard) write("current-status", clipboard, CLIPBOARD_WHERE);
+  // The log panel's menu (REQ-000029-sJpO9KMY): markup in cttc's code too.
+  for (const [name, svg] of Object.entries(cttcLogMenu())) {
+    const constant = Object.keys(LOG_MENU_NAMES).find((k) => LOG_MENU_NAMES[k] === name);
+    write(name, svg, `${LOG_MENU_WHERE} (LOG_MENU_${constant}_SVG)`);
+  }
   if (dryRun) {
     for (const [name, where] of Object.entries(sources)) console.log(`${name.padEnd(28)} ${where}`);
     return;
