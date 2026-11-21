@@ -29,6 +29,9 @@ export function defaultCatalogPath(): string {
 /** The id of the one local Sump. */
 export const LOCAL_ID = "local";
 
+/** The id an uninstalled local Sump is kept under, as history. */
+const ARCHIVED_LOCAL = /^local-retired-\d+$/;
+
 /** The catalog's schema version. */
 const SCHEMA_VERSION = "1";
 
@@ -44,6 +47,10 @@ export interface SumpEntry {
   sshPort?: number;
   /** The user name last logged in as. */
   user?: string;
+  /** Remote Sumps: the SSH host key pinned at provisioning (`SHA256:...`). */
+  hostKey?: string;
+  /** Remote Sumps: the vault id of the SSH key (`identity`, or `ssh:<id>`). */
+  sshKeyId?: string;
   addedAt: string;
   lastConnectedAt: string;
   /** Set when retired; the entry stays as history. */
@@ -59,6 +66,8 @@ export interface ConnectInput {
   sshTarget?: string;
   sshPort?: number;
   user?: string;
+  hostKey?: string;
+  sshKeyId?: string;
 }
 
 /** Why the catalog refused. */
@@ -98,6 +107,8 @@ export function entryProblem(doc: unknown): string | undefined {
     "sshTarget",
     "sshPort",
     "user",
+    "hostKey",
+    "sshKeyId",
     "addedAt",
     "lastConnectedAt",
     "retiredAt",
@@ -108,11 +119,25 @@ export function entryProblem(doc: unknown): string | undefined {
   if (!text(e.name)) return "name missing";
   if (e.kind !== "local" && e.kind !== "remote") return "kind must be local or remote";
   if (!port(e.sumpPort)) return "sumpPort must be 1-65535";
-  if (e.kind === "local" && e.id !== LOCAL_ID) return `the local Sump's id must be ${LOCAL_ID}`;
+  if (e.kind === "local" && e.id !== LOCAL_ID) {
+    // An uninstalled local Sump is kept as history under an archive id.
+    if (!(typeof e.id === "string" && ARCHIVED_LOCAL.test(e.id) && e.retiredAt !== undefined)) {
+      return `the local Sump's id must be ${LOCAL_ID}`;
+    }
+  }
   if (e.kind === "remote") {
     if (!text(e.sshTarget)) return "a remote Sump needs sshTarget";
     if (e.sshPort !== undefined && !port(e.sshPort)) return "sshPort must be 1-65535";
-  } else if (e.sshTarget !== undefined || e.sshPort !== undefined) {
+    if (e.hostKey !== undefined && !/^SHA256:[A-Za-z0-9+/]+$/.test(String(e.hostKey))) {
+      return "hostKey must be a SHA256 fingerprint";
+    }
+    if (e.sshKeyId !== undefined && !text(e.sshKeyId)) return "sshKeyId must be text";
+  } else if (
+    e.sshTarget !== undefined ||
+    e.sshPort !== undefined ||
+    e.hostKey !== undefined ||
+    e.sshKeyId !== undefined
+  ) {
     return "a local Sump has no SSH target";
   }
   if (e.user !== undefined && !text(e.user)) return "user must be text";
@@ -237,11 +262,47 @@ export class Catalog {
       if (input.kind === "remote") {
         entry.sshTarget = input.sshTarget;
         if (input.sshPort !== undefined) entry.sshPort = input.sshPort;
+        const hostKey = input.hostKey ?? existing?.hostKey;
+        if (hostKey !== undefined) entry.hostKey = hostKey;
+        const sshKeyId = input.sshKeyId ?? existing?.sshKeyId;
+        if (sshKeyId !== undefined) entry.sshKeyId = sshKeyId;
       }
       const user = input.user ?? existing?.user;
       if (user !== undefined) entry.user = user;
       this.write(entry);
       return entry;
+    });
+  }
+
+  /** Change a live Sump's name, or a remote Sump's pinned host key or SSH key id. */
+  amend(id: string, patch: { name?: string; hostKey?: string; sshKeyId?: string }): SumpEntry {
+    return this.transaction(() => {
+      const entry = this.get(id);
+      if (!entry || entry.retiredAt !== undefined) {
+        throw new CatalogError("not-found", `No live Sump ${id} in the catalog.`);
+      }
+      const next: SumpEntry = { ...entry };
+      if (patch.name !== undefined) next.name = patch.name.trim();
+      if (patch.hostKey !== undefined) next.hostKey = patch.hostKey;
+      if (patch.sshKeyId !== undefined) next.sshKeyId = patch.sshKeyId;
+      this.write(next);
+      return next;
+    });
+  }
+
+  /**
+   * Keep a retired local Sump as history under `local-retired-<time>`, so a
+   * new local Sump can be provisioned (br-SUMP-000002-sJpO9KMY). Returns the
+   * archive id, or `undefined` when there is no retired local Sump.
+   */
+  archiveRetiredLocal(now: Date = new Date()): string | undefined {
+    return this.transaction(() => {
+      const entry = this.get(LOCAL_ID);
+      if (!entry || entry.retiredAt === undefined) return undefined;
+      const id = `local-retired-${now.getTime()}`;
+      this.write({ ...entry, id });
+      this.db.prepare("DELETE FROM sumps WHERE id = ?").run(LOCAL_ID);
+      return id;
     });
   }
 

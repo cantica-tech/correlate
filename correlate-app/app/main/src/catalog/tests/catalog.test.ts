@@ -157,3 +157,26 @@ describe("br-SUMP-000001-sJpO9KMY: a corrupt catalog is refused and left alone",
     refusedUntouched();
   });
 });
+
+describe("br-SUMP-000002-sJpO9KMY: an uninstalled local Sump is kept as history", () => {
+  it("archives the retired local Sump so a new one can start", () => {
+    const c = catalog();
+    c.recordConnect({ kind: "local", sumpPort: 8765, user: "olivier" }, T1);
+    expect(c.archiveRetiredLocal(T2)).toBeUndefined();
+    c.retire(LOCAL_ID, T1);
+    const archive = c.archiveRetiredLocal(T2);
+    expect(archive).toBe(`local-retired-${T2.getTime()}`);
+    expect(c.get(LOCAL_ID)).toBeUndefined();
+    expect(c.get(archive as string)).toMatchObject({ kind: "local", user: "olivier" });
+    expect(c.recordConnect({ kind: "local", sumpPort: 8765 }, T2).addedAt).toBe(T2.toISOString());
+    expect(c.list({ retired: true })).toHaveLength(2);
+  });
+
+  it("keeps a remote Sump's host key and SSH key id", () => {
+    const c = catalog();
+    const a = c.recordConnect({ ...remote, hostKey: "SHA256:abc", sshKeyId: "identity" }, T1);
+    expect(c.recordConnect(remote, T2)).toMatchObject({ id: a.id, hostKey: "SHA256:abc" });
+    expect(c.amend(a.id, { sshKeyId: "ssh:x" }).sshKeyId).toBe("ssh:x");
+    expect(entryProblem({ ...a, hostKey: "MD5:aa" })).toContain("hostKey");
+  });
+});

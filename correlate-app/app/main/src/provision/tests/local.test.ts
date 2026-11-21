@@ -181,3 +181,19 @@ describe("br-SUMP-000007-sJpO9KMY: a failed provisioning cleans up", () => {
     expect(ctx.commands).toEqual([]);
   });
 });
+
+describe("br-SUMP-000002-sJpO9KMY: this machine's Sump can be added again", () => {
+  it("provisions a new local Sump once the old one is uninstalled, keeping its history", async () => {
+    const port = await fakeSump();
+    const ctx = context(async () => ok);
+    expect((await provisionLocal(ctx, { sumpPort: port })).ok).toBe(true);
+    ctx.lifecycle.move("local", "retired", "uninstalled");
+    const again = await provisionLocal(ctx, { sumpPort: port });
+    expect(again).toMatchObject({ ok: true, id: "local" });
+    expect(catalog.list({ retired: true }).map((e) => e.id.startsWith("local"))).toEqual([
+      true,
+      true,
+    ]);
+    expect(ctx.lifecycle.get("local")?.state).toBe("active");
+  });
+});

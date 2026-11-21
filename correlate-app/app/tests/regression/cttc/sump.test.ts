@@ -15,6 +15,8 @@ import { Catalog } from "../../../main/src/catalog/catalog.js";
 import { Lifecycle } from "../../../main/src/catalog/lifecycle.js";
 import { ActiveSumps } from "../../../main/src/catalog/windows.js";
 import { provisionLocal } from "../../../main/src/provision/local.js";
+import { checkRemoteDetails } from "../../../main/src/provision/plan.js";
+import { provisionRemote } from "../../../main/src/provision/remote.js";
 import { serve } from "../../../main/src/sump/tests/servers.js";
 import { SessionTokens } from "../../../main/src/sump/tokens.js";
 import { Vault } from "../../../main/src/vault/vault.js";
@@ -55,9 +57,53 @@ describe("br-SUMP-000001-sJpO9KMY", () => {
 });
 
 describe("br-SUMP-000002-sJpO9KMY", () => {
-  // BUG-000004-uKKrzikI, High: becomes a real test with roadmap Item 16
-  // (RM-000017-sJpO9KMY).
-  it.todo("cttc BUG-000004: Uninstalled gateway's host can never be re-added");
+  // BUG-000004-uKKrzikI, High (roadmap Item 16, RM-000017-sJpO9KMY): cttc's
+  // duplicate check matched retired gateways too, so an uninstalled host could
+  // never be added again. Now only a live Sump on the host refuses New; a
+  // retired one is kept as history and the host is provisioned afresh.
+  it("cttc BUG-000004: Uninstalled gateway's host can never be re-added", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cttc-readd-"));
+    try {
+      const catalog = Catalog.open(path.join(dir, "catalog.db"));
+      const old = catalog.recordConnect({ kind: "remote", sumpPort: 8765, sshTarget: "box" });
+      catalog.retire(old.id);
+      const vault = new Vault(path.join(dir, "vault"), undefined, {
+        scrypt: { N: 2 ** 10, r: 8, p: 1 },
+        logger: { info: () => {}, warn: () => {} },
+      });
+      vault.create("a passphrase", "a passphrase");
+      const result = await provisionRemote(
+        {
+          run: async () => ({ code: 0, stdout: "", stderr: "", timedOut: false }),
+          lifecycle: new Lifecycle(catalog, undefined, { info: () => {} }),
+          tokens: new SessionTokens(),
+          vault,
+          env: { CORRELATE_USER: "olivier" },
+          appVersion: "0.1.0",
+          catalog,
+          pending: new Map(),
+          pollMs: 10,
+          logger: { info: () => {}, warn: () => {} },
+          connect: async () => ({
+            hostKey: "SHA256:host",
+            exec: async (command: string) => ({
+              code: 0,
+              stdout: command.includes("python -c") ? "True\n" : "",
+              stderr: "",
+              timedOut: false,
+            }),
+            close: () => {},
+          }),
+        },
+        checkRemoteDetails({ sshTarget: "box" }),
+      );
+      expect(result.ok).toBe(true);
+      expect(catalog.list({ retired: true }).map((e) => e.id)).toEqual([old.id]);
+      catalog.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("br-SUMP-000003-sJpO9KMY", () => {

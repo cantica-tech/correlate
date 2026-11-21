@@ -130,15 +130,14 @@ export async function provisionLocal(
   const log = ctx.logger ?? console;
   const sumpPort = options.sumpPort ?? 8765;
   const known = ctx.lifecycle.get(LOCAL_ID);
-  if (known && !(known.state === "retired" && !ctx.catalog?.get(LOCAL_ID))) {
-    return {
-      ok: false,
-      step: "check",
-      message:
-        known.state === "retired"
-          ? "this machine's Sump was uninstalled; adding it again comes with Item 16"
-          : "this machine already has a Sump",
-    };
+  if (known && known.state !== "retired") {
+    return { ok: false, step: "check", message: "this machine already has a Sump; use Edit" };
+  }
+  if (known && ctx.catalog?.get(LOCAL_ID)) {
+    // An uninstalled local Sump stays as history; the new one starts afresh
+    // (br-SUMP-000002-sJpO9KMY).
+    const archive = ctx.catalog.archiveRetiredLocal();
+    if (archive) ctx.lifecycle.renameRetired(LOCAL_ID, archive);
   }
   if (!(await dockerAvailable(ctx.run))) {
     return { ok: false, step: "check Docker", message: "Docker is not available on this machine" };

@@ -60,6 +60,33 @@ export interface RemoteContext extends ProvisionContext {
   pollMs?: number;
 }
 
+/** A host, without its user, lowered: what "the same host" means for New. */
+function hostOf(target: string): string {
+  const at = target.lastIndexOf("@");
+  return (at === -1 ? target : target.slice(at + 1)).toLowerCase();
+}
+
+/**
+ * The name of a live Sump (in the catalog, or being provisioned) on the same
+ * host and Sump port; a retired one does not count, so an uninstalled host
+ * can be added again (br-SUMP-000002-sJpO9KMY, cttc BUG-000004-uKKrzikI).
+ */
+export function hostWithLiveSump(ctx: RemoteContext, details: RemoteDetails): string | undefined {
+  const host = hostOf(details.sshTarget);
+  const live = (ctx.catalog?.list() ?? []).find(
+    (e) =>
+      e.kind === "remote" && hostOf(e.sshTarget ?? "") === host && e.sumpPort === details.sumpPort,
+  );
+  if (live) return live.name;
+  const pending = [...ctx.pending.values()].find(
+    (p) =>
+      hostOf(p.details.sshTarget) === host &&
+      p.details.sumpPort === details.sumpPort &&
+      ctx.lifecycle.get(p.id)?.state === "provisioning",
+  );
+  return pending ? (pending.details.name ?? pending.details.sshTarget) : undefined;
+}
+
 /** The vault id of a key imported for one Sump. */
 export function sshKeyIdFor(sumpId: string): string {
   return `ssh:${sumpId}`;
@@ -98,6 +125,14 @@ export async function provisionRemote(
   options: { keyPem?: string } = {},
 ): Promise<ProvisionResult> {
   const log = ctx.logger ?? console;
+  const taken = hostWithLiveSump(ctx, details);
+  if (taken) {
+    return {
+      ok: false,
+      step: "check",
+      message: `${details.sshTarget} already has a Sump ("${taken}"); use Edit`,
+    };
+  }
   const id = randomUUID();
   const sshKeyId = options.keyPem ? sshKeyIdFor(id) : "identity";
   const at = details.sshTarget.lastIndexOf("@");

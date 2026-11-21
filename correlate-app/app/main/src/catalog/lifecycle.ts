@@ -131,6 +131,14 @@ export class Lifecycle {
     return this.set(id, to, reason);
   }
 
+  /** A retired Sump's record moves to another id (its catalog history was archived). */
+  renameRetired(from: string, to: string): void {
+    const record = this.records.get(from);
+    if (record?.state !== "retired") return;
+    this.records.delete(from);
+    this.records.set(to, { ...record, id: to });
+  }
+
   /** The Sump answered: `active`. A Sump not known yet is added first. */
   reachable(id: string, reason: string): StateRecord | undefined {
     return this.observed(id, "active", reason);
