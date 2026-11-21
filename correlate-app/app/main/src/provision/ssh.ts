@@ -56,7 +56,7 @@ export function hostKeyFingerprint(blob: Buffer): string {
 }
 
 /** Signs `ssh2`'s authentication with a key held in memory. */
-class KeyAgent extends BaseAgent<string> {
+export class KeyAgent extends BaseAgent<string> {
   constructor(private readonly key: KeyObject) {
     super();
   }
