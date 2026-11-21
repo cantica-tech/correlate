@@ -286,3 +286,15 @@ describe("br-VAULT-000004-sJpO9KMY: passphrase rules", () => {
     }
   });
 });
+
+describe("br-VAULT-000004-sJpO9KMY: never re-keyed", () => {
+  it("refuses a new vault beside key files whose vault.json is gone", () => {
+    const vault = open();
+    vault.create(PASS, PASS);
+    vault.put("a", newKey());
+    rmSync(path.join(dir, META_FILE));
+    expect(() => open().create(PASS, PASS)).toThrow(expect.objectContaining({ code: "exists" }));
+    expect(existsSync(path.join(dir, META_FILE))).toBe(false);
+    expect(readdirSync(dir).filter((f) => f.endsWith(".key"))).toHaveLength(1);
+  });
+});

@@ -15,7 +15,7 @@
  * that tells a wrong passphrase at unlock) and one `<hmac>.key` per secret.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import {
   deriveKey,
@@ -29,8 +29,9 @@ import {
   unseal,
 } from "./cipher.js";
 import { VaultError } from "./errors.js";
-import { ensurePrivateDir, withTemporaryKeyFile, writeAtomic } from "./files.js";
+import { withTemporaryKeyFile } from "./files.js";
 import { pemPrivateKey } from "./pem.js";
+import { ensurePrivateDir, writeSecretFile } from "./secure.js";
 
 /** How a vault encrypts, fixed when it is created. */
 export type VaultMode = "safe-storage" | "passphrase";
@@ -118,6 +119,14 @@ export class Vault {
     if (this.meta || existsSync(this.metaPath)) {
       throw new VaultError("exists", "A vault already exists here; it is never re-created.");
     }
+    if (this.keyFiles().length > 0) {
+      // A new vault here would be unable to open them, and would hide them.
+      throw new VaultError(
+        "exists",
+        `Key files are in ${this.dir} but its ${META_FILE} is missing; ` +
+          "they are left as is and no new vault is created over them.",
+      );
+    }
     const nameKey = randomBytes(32).toString("base64");
     let meta: VaultMeta;
     if (safeStorageUsable(this.safeStorage)) {
@@ -137,7 +146,7 @@ export class Vault {
       this.key = key;
     }
     ensurePrivateDir(this.dir);
-    writeAtomic(this.metaPath, `${JSON.stringify(meta, null, 2)}\n`);
+    writeSecretFile(this.metaPath, `${JSON.stringify(meta, null, 2)}\n`);
     this.meta = meta;
     this.logger.info(`vault created in ${this.dir} (${meta.mode})`);
   }
@@ -184,7 +193,7 @@ export class Vault {
     } else {
       envelope = { v: 1, alg: "aes-256-gcm", ...seal(this.requireKey(), Buffer.from(pem), id) };
     }
-    writeAtomic(this.fileFor(id), `${JSON.stringify(envelope)}\n`);
+    writeSecretFile(this.fileFor(id), `${JSON.stringify(envelope)}\n`);
   }
 
   /** Whether a key is stored under `id`. */
@@ -238,6 +247,12 @@ export class Vault {
    */
   withKeyFile<T>(id: string, use: (file: string) => T | Promise<T>): Promise<T> {
     return withTemporaryKeyFile(this.get(id), use);
+  }
+
+  /** The names of the key files in the vault folder. */
+  private keyFiles(): string[] {
+    if (!existsSync(this.dir)) return [];
+    return readdirSync(this.dir).filter((name) => name.endsWith(".key"));
   }
 
   private get metaPath(): string {
