@@ -41,13 +41,15 @@ DEFAULT_PORT = 5170
 
 
 class RedisLike(Protocol):
-    """The part of `redis.asyncio.Redis` the adapter uses."""
+    """The part of `redis.asyncio.Redis` the adapter uses.
 
-    def xadd(
-        self, name: str, fields: dict[Any, Any], maxlen: int | None = ..., approximate: bool = ...
-    ) -> Awaitable[Any]: ...
+    Parameters are loose (`Any`) so the real client, whose stubs type them
+    more broadly, and fakeredis both satisfy it.
+    """
 
-    def xlen(self, name: str) -> Awaitable[int]: ...
+    def xadd(self, name: Any, fields: Any, *args: Any, **kwargs: Any) -> Awaitable[Any]: ...
+
+    def xlen(self, name: Any) -> Awaitable[Any]: ...
 
 
 class StreamReaderLike(Protocol):

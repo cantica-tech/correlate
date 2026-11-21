@@ -16,6 +16,8 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http>=1.44.0",
     "opentelemetry-sdk>=1.44.0",
     "pluggy>=1.6.0",
+    "redis>=5.0",
+    "uvicorn>=0.32",
 ]
 
 [dependency-groups]
@@ -28,6 +30,10 @@ dev = [
     "ruff>=0.7",
     "ty>=0.0.71",
 ]
+
+[project.scripts]
+# Run the Sump (src/correlate_sump/__main__.py).
+correlate-sump = "correlate_sump.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

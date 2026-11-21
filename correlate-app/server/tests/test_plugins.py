@@ -295,8 +295,8 @@ def test_validate_plugin_routes_detects_conflict() -> None:
     "per-plugin fault isolation (roadmap Item 7, RM-000008-sJpO9KMY)"
 )
 async def test_isolated_background_task_catches_unhandled_exception() -> None:
-    from correlate_sump.app import (  # ty: ignore[import-not-found]  (module comes with Item 7)
-        _run_isolated_background_task,
+    from correlate_sump.app import (
+        _run_isolated_background_task,  # ty: ignore[missing-module-member]  (Item 7)
     )
 
     async def failing_factory():
