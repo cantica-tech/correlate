@@ -43,6 +43,7 @@ from correlate_sump.ingest import (
     maxlen_from_env,
     run_ingest_server,
 )
+from correlate_sump.logs import find_row, log_density, log_page
 from correlate_sump.otel import SumpMetrics
 from correlate_sump.plugins import PluginManager
 from correlate_sump.records import DEFAULT_LIMIT, QueryError, query_records
@@ -417,6 +418,62 @@ def create_app(
                 over=over,
                 mode=mode,
             )
+        except QueryError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/records/logs")
+    async def record_logs(
+        source: str,
+        start: Annotated[datetime, Query(alias="from")],
+        end: Annotated[datetime, Query(alias="to")],
+        offset: int = 0,
+        limit: int = 200,
+        order: str = "newest",
+    ) -> dict[str, Any]:
+        """`source`'s log rows by index, newest or oldest first, and their total
+        (REQ-000029-sJpO9KMY), for a log panel's pages."""
+        try:
+            return await log_page(
+                redis_client, source, start=start, end=end, offset=offset, limit=limit, order=order
+            )
+        except QueryError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/records/logs/find")
+    async def record_logs_find(
+        source: str,
+        start: Annotated[datetime, Query(alias="from")],
+        end: Annotated[datetime, Query(alias="to")],
+        q: str,
+        from_index: int = -1,
+        direction: str = "next",
+        order: str = "newest",
+    ) -> dict[str, Any]:
+        """The next or previous row whose text contains `q` (REQ-000029-sJpO9KMY)."""
+        try:
+            return await find_row(
+                redis_client,
+                source,
+                start=start,
+                end=end,
+                q=q,
+                from_index=from_index,
+                direction=direction,
+                order=order,
+            )
+        except QueryError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/records/density")
+    async def record_density(
+        source: str,
+        start: Annotated[datetime, Query(alias="from")],
+        end: Annotated[datetime, Query(alias="to")],
+        buckets: int = 500,
+    ) -> dict[str, Any]:
+        """How many log rows of `source` fall in each bucket (REQ-000029-sJpO9KMY)."""
+        try:
+            return await log_density(redis_client, source, start=start, end=end, buckets=buckets)
         except QueryError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
