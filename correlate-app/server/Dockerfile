@@ -25,7 +25,8 @@ RUN apt-get update \
     && apt-get purge -y curl gnupg \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --create-home --uid 10001 sump
+    && useradd --system --create-home --uid 10001 sump \
+    && install -d -o sump -g sump -m 0700 /var/lib/correlate-sump
 
 COPY --from=builder /opt/correlate-sump/.venv /opt/correlate-sump/.venv
 COPY container/fluent-bit.conf /etc/fluent-bit/fluent-bit.conf

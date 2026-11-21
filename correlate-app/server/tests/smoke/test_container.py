@@ -3,9 +3,10 @@
 Needs Docker and a running stack, so it is not part of `task check` or CI:
 run it with `task server:smoke`, which starts the stack, sets `SUMP_SMOKE=1`,
 runs this file and stops the stack. A record sent to the Fluent Bit port must
-come back from `GET /records`, and `/health` must report Redis up. Until the
-SSH-key login (Item 12), the session token comes from
-`python -m correlate_sump.sessions issue`, run inside the container.
+come back from `GET /records`, and `/health` must report Redis up. The test
+makes itself the Sump's owner with a fresh Ed25519 key (the owner command run
+inside the container, as provisioning will) and logs in with an `SSHSIG`
+signature (br-CONN-000007-sJpO9KMY).
 """
 
 import json
@@ -20,6 +21,9 @@ from datetime import UTC, datetime
 from functools import cache
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric import ed25519
+
+from correlate_sump.sshsig import LOGIN_NAMESPACE, public_key_of, sign
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("SUMP_SMOKE") != "1", reason="container smoke test: run `task server:smoke`"
@@ -29,13 +33,34 @@ API = f"http://127.0.0.1:{os.environ.get('SUMP_PORT', '8765')}"
 FLUENT_PORT = int(os.environ.get("SUMP_FLUENT_PORT", "5140"))
 
 
+KEY = ed25519.Ed25519PrivateKey.generate()
+
+
+def post(path: str, body: dict) -> dict:
+    request = urllib.request.Request(f"{API}{path}", data=json.dumps(body).encode(), method="POST")
+    request.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(request, timeout=5) as response:
+        return json.load(response)
+
+
 @cache
 def token() -> str:
-    """A session token issued inside the container (br-CONN-000004-sJpO9KMY)."""
+    """Become the owner, then log in with an SSHSIG signature (br-CONN-000007)."""
     command = ["docker", "compose", "exec", "-T", "sump"]
-    command += ["python", "-m", "correlate_sump.sessions"]
-    command += ["issue", "--user", "smoke"]
-    return subprocess.run(command, check=True, capture_output=True, text=True).stdout.strip()
+    command += ["python", "-m", "correlate_sump.users", "set-owner", "--user", "smoke"]
+    subprocess.run(
+        [*command, "--replace"],
+        input=public_key_of(KEY).line(),
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    challenge = post("/session/challenge", {"user": "smoke"})["challenge"]
+    signature = sign(KEY, challenge.encode(), LOGIN_NAMESPACE)
+    login = post(
+        "/session/login", {"user": "smoke", "challenge": challenge, "signature": signature}
+    )
+    return login["token"]
 
 
 def get(path: str, **params: str) -> dict:

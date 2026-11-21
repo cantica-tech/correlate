@@ -16,4 +16,12 @@ services:
       - "127.0.0.1:${SUMP_FLUENT_PORT:-5140}:5140"
     environment:
       SUMP_RECORD_MAXLEN: ${SUMP_RECORD_MAXLEN:-100000}
+      # Users and their public keys (br-CONN-000007-sJpO9KMY): kept on a
+      # volume, since Redis in the container is not saved to disk.
+      SUMP_DATA_DIR: /var/lib/correlate-sump
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    volumes:
+      - sump-data:/var/lib/correlate-sump
+
+volumes:
+  sump-data:

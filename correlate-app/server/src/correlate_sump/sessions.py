@@ -11,18 +11,15 @@ A record that is not what `issue` wrote raises `CorruptSessionStore`: the
 request is refused and the record left as it is. cttc treated a corrupt token
 file as empty and minted new tokens over it (cttc BUG-000011-uKKrzikI).
 
-Until Item 12, `python -m correlate_sump.sessions issue --user NAME`, run where
-the Sump runs, prints a token.
+Tokens are issued by the SSH-key login (br-CONN-000007-sJpO9KMY): the Sump
+hands out a single-use challenge, valid `CHALLENGE_SECONDS`, kept in Redis
+under `sump:challenge:<hash>` with the user it was asked for.
 """
 
 from __future__ import annotations
 
-import argparse
-import asyncio
 import hashlib
-import os
 import secrets
-import sys
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -35,8 +32,12 @@ KEY_PREFIX = "sump:session:"
 DEFAULT_IDLE_SECONDS = 12 * 60 * 60
 DEFAULT_MAX_SECONDS = 7 * 24 * 60 * 60
 
-#: Bytes of randomness in a token.
+#: Bytes of randomness in a token, and in a login challenge.
 TOKEN_BYTES = 32
+
+#: Where login challenges live, and for how long (br-CONN-000007).
+CHALLENGE_PREFIX = "sump:challenge:"
+CHALLENGE_SECONDS = 60
 
 
 class CorruptSessionStore(Exception):
@@ -50,6 +51,10 @@ class Session:
     user: str
     issued_at: int
     ends_at: int
+
+
+def _challenge_key(challenge: str) -> str:
+    return CHALLENGE_PREFIX + hashlib.sha256(challenge.encode()).hexdigest()
 
 
 def token_key(token: str) -> str:
@@ -137,6 +142,20 @@ class SessionStore:
         """Forget the token."""
         await self.redis.delete(token_key(token))
 
+    async def new_challenge(self, user: str) -> str:
+        """A fresh login challenge for `user`, valid `CHALLENGE_SECONDS`, once."""
+        challenge = secrets.token_urlsafe(TOKEN_BYTES)
+        await self.redis.set(_challenge_key(challenge), user, ex=CHALLENGE_SECONDS)
+        return challenge
+
+    async def take_challenge(self, challenge: str) -> str | None:
+        """The user a challenge was issued to, consuming it; `None` when it is
+        unknown, used or expired."""
+        user = await self.redis.getdel(_challenge_key(challenge))
+        if user is None:
+            return None
+        return user.decode() if isinstance(user, bytes) else str(user)
+
     @staticmethod
     def _parse(key: str, raw: Mapping[Any, Any]) -> Session:
         fields = {
@@ -156,32 +175,3 @@ class SessionStore:
         if not session.user or session.ends_at <= session.issued_at:
             raise CorruptSessionStore(f"{key} is not a session record: impossible values")
         return session
-
-
-def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    """`issue --user NAME`: print a token for NAME, from the Sump's Redis."""
-    import redis.asyncio as redis
-
-    from correlate_sump.app import DEFAULT_REDIS_URL
-
-    parser = argparse.ArgumentParser(prog="python -m correlate_sump.sessions")
-    sub = parser.add_subparsers(dest="command", required=True)
-    issue = sub.add_parser("issue", help="print a new session token (until the SSH-key login)")
-    issue.add_argument("--user", required=True)
-    args = parser.parse_args(argv)
-    env = os.environ if env is None else env
-
-    async def run() -> str:
-        client = redis.Redis.from_url(env.get("REDIS_URL", DEFAULT_REDIS_URL))
-        try:
-            idle, most = session_limits_from_env(env)
-            return await SessionStore(client, idle, most).issue(args.user)
-        finally:
-            await client.aclose()
-
-    print(asyncio.run(run()))
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

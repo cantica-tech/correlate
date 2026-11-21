@@ -5,8 +5,11 @@ Serves `GET /health`, `GET /records` (br-RECORD-000003-sJpO9KMY) and
 forwards records to (br-RECORD-000001-sJpO9KMY), and loads `sump.plugins`
 entry points, letting them add routes; `SUMP_DISABLED_PLUGINS` and
 `SUMP_DISABLE_PLUGIN_AUTOLOAD` turn plugins off (br-PLUGIN-000002-sJpO9KMY).
-Every route but `GET /health` needs a session token (`SessionGuard`,
-br-CONN-000004-sJpO9KMY); `POST /session/logout` revokes the caller's. The Sump
+Every route but `GET /health` and the login needs a session token
+(`SessionGuard`, br-CONN-000004-sJpO9KMY): a user logs in by signing a
+challenge with an SSH key (`POST /session/challenge`, `POST /session/login`,
+br-CONN-000007-sJpO9KMY), and `POST /session/logout` revokes the token. The
+owner manages users' keys under `/users`. The Sump
 also listens on 127.0.0.1 only (br-SUMP-000009-sJpO9KMY).
 
 Written fresh rather than ported: correlator's `app.py` also carried
@@ -26,7 +29,8 @@ from datetime import datetime
 from typing import Annotated, Any
 
 import redis.asyncio as redis
-from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from pydantic import BaseModel
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -42,7 +46,21 @@ from correlate_sump.otel import SumpMetrics
 from correlate_sump.plugins import PluginManager
 from correlate_sump.records import DEFAULT_LIMIT, QueryError, query_records
 from correlate_sump.runtime import PluginRuntime, health_interval_from_env
-from correlate_sump.sessions import CorruptSessionStore, SessionStore, session_limits_from_env
+from correlate_sump.sessions import (
+    CHALLENGE_SECONDS,
+    CorruptSessionStore,
+    Session,
+    SessionStore,
+    session_limits_from_env,
+)
+from correlate_sump.sshsig import LOGIN_NAMESPACE, SignatureError, verify
+from correlate_sump.users import (
+    CorruptKeyStore,
+    UserError,
+    UserStore,
+    check_user_name,
+    data_dir_from_env,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +79,38 @@ def plugin_settings(env: Mapping[str, str]) -> tuple[list[str], bool]:
     return [name for name in disabled if name], autoload_off
 
 
-#: Requests answered without a session token: the Sump's status, for probes.
-OPEN_ROUTES = frozenset({("GET", "/health"), ("HEAD", "/health")})
+#: Requests answered without a session token: the Sump's status, and the login.
+OPEN_ROUTES = frozenset(
+    {
+        ("GET", "/health"),
+        ("HEAD", "/health"),
+        ("POST", "/session/challenge"),
+        ("POST", "/session/login"),
+    }
+)
+
+#: The one answer to every failed login, whatever the reason (logged instead).
+LOGIN_REFUSED = HTTPException(status_code=401, detail="login refused")
+
+
+class ChallengeRequest(BaseModel):
+    """Who wants to log in."""
+
+    user: str
+
+
+class LoginRequest(BaseModel):
+    """A challenge and its `SSHSIG` signature."""
+
+    user: str
+    challenge: str
+    signature: str
+
+
+class KeyRequest(BaseModel):
+    """A public key, as an `authorized_keys` line."""
+
+    public_key: str
 
 
 def bearer_token(scope: Scope) -> str | None:
@@ -131,11 +179,13 @@ def create_app(
     adapter, `SUMP_PLUGIN_HEALTH_INTERVAL` for plugin health checks, and
     `SUMP_DISABLED_PLUGINS`/`SUMP_DISABLE_PLUGIN_AUTOLOAD` when no
     `plugin_manager` is given, `SUMP_SESSION_IDLE_SECONDS` and
-    `SUMP_SESSION_MAX_SECONDS` for session tokens (invalid values raise
-    `ValueError` here too). An invalid interval also raises `ValueError` here
-    (br-PLUGIN-000008-sJpO9KMY). An invalid `SUMP_RECORD_MAXLEN` raises `ValueError` here,
-    so the Sump refuses to start (br-RECORD-000004-sJpO9KMY). Tests pass their
-    own Redis client and `start_ingest=False`.
+    `SUMP_SESSION_MAX_SECONDS` for session tokens, and `SUMP_DATA_DIR` for
+    users and their keys.
+
+    An invalid interval (br-PLUGIN-000008-sJpO9KMY), `SUMP_RECORD_MAXLEN`
+    (br-RECORD-000004-sJpO9KMY) or session limit raises `ValueError` here, so
+    the Sump refuses to start. Tests pass their own Redis client and
+    `start_ingest=False`.
     """
     env = os.environ if env is None else env
     maxlen = maxlen_from_env(env)
@@ -178,10 +228,12 @@ def create_app(
             await runtime.stop()
 
     sessions = SessionStore(redis_client, idle_seconds, max_seconds)
+    users = UserStore(data_dir_from_env(env))
     app = FastAPI(title="correlate-sump", version=__version__, lifespan=lifespan)
     app.state.plugin_manager = plugin_manager
     app.state.adapter = adapter
     app.state.sessions = sessions
+    app.state.users = users
     app.add_middleware(SessionGuard, sessions=sessions)
 
     @app.get("/health")
@@ -192,6 +244,102 @@ def create_app(
         except Exception:  # any failure to reach Redis means "down", not an error page
             redis_up = False
         return {"status": "ok", "version": __version__, "redis": redis_up}
+
+    @app.post("/session/challenge")
+    async def challenge(body: ChallengeRequest) -> dict[str, Any]:
+        """A single-use challenge to sign (br-CONN-000007); given to any name,
+        so it says nothing about which users exist."""
+        try:
+            check_user_name(body.user)
+        except UserError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {
+            "challenge": await sessions.new_challenge(body.user),
+            "namespace": LOGIN_NAMESPACE,
+            "expires_in": CHALLENGE_SECONDS,
+        }
+
+    @app.post("/session/login")
+    async def login(body: LoginRequest) -> dict[str, Any]:
+        """A session token for a challenge signed with one of the user's keys."""
+        issued_to = await sessions.take_challenge(body.challenge)
+        if issued_to is None or issued_to != body.user:
+            logger.info("login refused for %s: unknown, used or expired challenge", body.user)
+            raise LOGIN_REFUSED
+        try:
+            keys = users.keys(body.user)
+        except CorruptKeyStore as exc:
+            logger.error("login refused for %s: corrupt key store: %s", body.user, exc)
+            raise HTTPException(status_code=503, detail="the key store is corrupt") from exc
+        try:
+            key = verify(body.signature, body.challenge.encode(), LOGIN_NAMESPACE, keys)
+        except SignatureError as exc:
+            logger.info("login refused for %s: %s", body.user, exc)
+            raise LOGIN_REFUSED from exc
+        token = await sessions.issue(body.user)
+        logger.info("login: %s with %s", body.user, key.fingerprint)
+        return {"token": token, "user": body.user, "owner": body.user == _owner()}
+
+    def _owner() -> str | None:
+        try:
+            return users.owner()
+        except CorruptKeyStore as exc:
+            logger.error("corrupt key store: %s", exc)
+            raise HTTPException(status_code=503, detail="the key store is corrupt") from exc
+
+    def owner_only(request: Request) -> Session:
+        """The caller's session, if the caller owns this Sump; 403 otherwise."""
+        session: Session = request.state.session
+        if session.user != _owner():
+            raise HTTPException(status_code=403, detail="only the Sump's owner can do this")
+        return session
+
+    def _key_info(key) -> dict[str, str]:
+        return {"type": key.type, "fingerprint": key.fingerprint, "comment": key.comment}
+
+    @app.get("/users")
+    async def list_users(owner: Session = Depends(owner_only)) -> dict[str, Any]:
+        """Every user and their keys' fingerprints (owner only)."""
+        try:
+            return {
+                "owner": users.owner(),
+                "users": [
+                    {"user": u, "keys": [_key_info(k) for k in users.keys(u)]}
+                    for u in users.users()
+                ],
+            }
+        except CorruptKeyStore as exc:
+            raise HTTPException(status_code=503, detail="the key store is corrupt") from exc
+
+    @app.post("/users/{user}/keys", status_code=201)
+    async def add_user_key(
+        user: str, body: KeyRequest, owner: Session = Depends(owner_only)
+    ) -> dict[str, str]:
+        """Authorize a public key for `user` (owner only)."""
+        try:
+            key = users.add_key(user, body.public_key)
+        except UserError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except CorruptKeyStore as exc:
+            raise HTTPException(status_code=503, detail="the key store is corrupt") from exc
+        logger.info("%s authorized %s for %s", owner.user, key.fingerprint, user)
+        return _key_info(key)
+
+    @app.delete("/users/{user}/keys/{fingerprint:path}", status_code=204)
+    async def remove_user_key(
+        user: str, fingerprint: str, owner: Session = Depends(owner_only)
+    ) -> Response:
+        """Remove one of `user`'s keys (owner only); the owner's last key stays."""
+        try:
+            users.remove_key(user, fingerprint)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except UserError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except CorruptKeyStore as exc:
+            raise HTTPException(status_code=503, detail="the key store is corrupt") from exc
+        logger.info("%s removed %s from %s", owner.user, fingerprint, user)
+        return Response(status_code=204)
 
     @app.post("/session/logout", status_code=204)
     async def logout(request: Request) -> Response:
