@@ -40,7 +40,7 @@ Rule IDs omit their `-sJpO9KMY` suffix; Roadmap gives the item numbers in
 | 17 | Multi-file load centres on the union, not the active file | Medium | `br-ANLYS-000004` | 35 | placeholder |
 | 18 | Re-opening or switching files does not use the 75% framing | Low | `br-ANLYS-000004` | 35 | placeholder |
 | 19 | Open-file dedup keys on basename only | Medium | `br-ANLYS-000005` | 35 | placeholder |
-| 20 | Raw fetches to the gateway have no timeout | High | `br-CONN-000005` | 8 | placeholder |
+| 20 | Raw fetches to the gateway have no timeout | High | `br-CONN-000005` | 8 | passing |
 | 21 | A failed log page fetch is cached forever | High | `br-LOGV-000001` | 30 | placeholder |
 | 26 | Event recording download is saved without a status check | High | `br-EVENT-000005` | 48 | placeholder |
 | 28 | Relaunch replays every historical Set request | High | `br-STREAM-000003` | 27 | placeholder |

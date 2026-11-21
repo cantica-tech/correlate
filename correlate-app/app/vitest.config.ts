@@ -7,6 +7,10 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["renderer/src/**/tests/*.test.ts", "tests/**/*.test.ts"],
+    include: [
+      "renderer/src/**/tests/*.test.ts",
+      "main/src/**/tests/*.test.ts",
+      "tests/**/*.test.ts",
+    ],
   },
 });

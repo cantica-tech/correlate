@@ -10,7 +10,7 @@
     "start": "electron .",
     "build:renderer": "node build/build-renderer.js",
     "watch:renderer": "node build/build-renderer.js --watch",
-    "typecheck": "tsc --noEmit -p renderer/src && tsc --noEmit -p build && tsc --noEmit -p tests",
+    "typecheck": "tsc --noEmit -p renderer/src && tsc --noEmit -p main/src && tsc --noEmit -p build && tsc --noEmit -p tests",
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run"

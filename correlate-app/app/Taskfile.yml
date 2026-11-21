@@ -48,7 +48,7 @@ tasks:
     cmd: npm run format
 
   typecheck:
-    desc: Type-check the renderer and the build scripts (strict TypeScript)
+    desc: Type-check the renderer, the main process and the build scripts (strict TypeScript)
     cmd: npm run typecheck
 
   test:
