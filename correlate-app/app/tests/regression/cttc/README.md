@@ -3,8 +3,8 @@
 One regression test per cttc bug (rule `br-BUILD-000006-sJpO9KMY`), in
 Vitest, one file per domain (`<domain>.test.ts`).
 
-23 of cttc's 33 open bugs are owned by `app/`; the other
-10 are in `server/tests/regression/cttc/`. The bugs come from
+22 of cttc's 33 open bugs are owned by `app/`; the other
+11 are in `server/tests/regression/cttc/`. The bugs come from
 cttc's `ANALYSIS-000003-uKKrzikI` (IDs `BUG-000NNN-uKKrzikI`).
 
 A test moves through three statuses:
@@ -44,5 +44,4 @@ Rule IDs omit their `-sJpO9KMY` suffix; Roadmap gives the item numbers in
 | 21 | A failed log page fetch is cached forever | High | `br-LOGV-000001` | 30 | placeholder |
 | 26 | Event recording download is saved without a status check | High | `br-EVENT-000005` | 48 | placeholder |
 | 29 | New Gateway and pill switch change the active gateway with no recording check | High | `br-REC-000001` | 16, 40 | passing |
-| 30 | Removing an inactive but connected Docker host leaves it collecting | Medium | `br-STREAM-000004` | 28 | placeholder |
 | 33 | Ship Logs throws when the saved log folder is missing | Medium | `br-DIAG-000002` | 51 | placeholder |

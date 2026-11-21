@@ -185,3 +185,14 @@ def test_paramiko_never_uses_an_agent_or_home_keys(identity: SumpIdentity, monke
     assert seen["allow_agent"] is False
     assert seen["look_for_keys"] is False
     assert isinstance(seen["pkey"], paramiko.Ed25519Key)
+
+
+async def test_a_forgotten_host_key_is_recorded_afresh(identity: SumpIdentity, ssh_server) -> None:
+    from sump_plugin_ssh.transport import forget_host_key
+
+    server = ssh_server(_docker({"uptime": (["ok"], [], 0)}))
+    transport = SSHTransport("127.0.0.1", "ops", port=server.port, identity=identity)
+    assert (await transport.run(["uptime"])).returncode == 0
+    assert forget_host_key(identity, "127.0.0.1", server.port) is True
+    assert f"[127.0.0.1]:{server.port}" not in identity.known_hosts.read_text()
+    assert forget_host_key(identity, "127.0.0.1", server.port) is False

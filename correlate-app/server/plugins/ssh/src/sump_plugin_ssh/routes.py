@@ -7,7 +7,11 @@ each behind the Sump's session like every route but `/health` and the login
   answers there with the Sump's key.
 - `GET /streams/{id}/targets`: what runs there, and what is followed.
 - `PUT /streams/{id}/followed`: make the followed set exactly the given one
-  (br-STREAM-000002-sJpO9KMY), collection following.
+  (br-STREAM-000002-sJpO9KMY), collection following; it resumes a paused
+  stream.
+- `DELETE /streams/{id}`: stop a stream's collection and forget it
+  (br-STREAM-000004-sJpO9KMY); `PUT /streams/{id}/paused`: Close Data
+  Streams (REQ-000027-sJpO9KMY).
 """
 
 from __future__ import annotations
@@ -36,13 +40,25 @@ class NewStream(BaseModel):
     port: int = 22
 
 
+class Paused(BaseModel):
+    paused: bool
+
+
 class FollowedSet(BaseModel):
     containers: list[str] = []
     services: list[str] = []
 
 
-def _stream_dict(stream: Any) -> dict[str, Any]:
+def _stream_dict(stream: Any, plugin: Any = None) -> dict[str, Any]:
+    extra: dict[str, Any] = {}
+    if plugin is not None:
+        followed = plugin.store().followed(stream.id)
+        extra = {
+            "paused": plugin.store().paused(stream.id),
+            "following": len(followed.containers) + len(followed.services),
+        }
     return {
+        **extra,
         "id": stream.id,
         "kind": stream.kind,
         "label": stream.label,
@@ -58,7 +74,7 @@ def add_stream_routes(app: Any, plugin: SumpPluginSSH) -> None:
     @app.get("/streams")
     async def streams() -> dict[str, Any]:
         """The data streams: "self" when detected, then those over SSH."""
-        return {"streams": [_stream_dict(s) for s in plugin.streams()]}
+        return {"streams": [_stream_dict(s, plugin) for s in plugin.streams()]}
 
     @app.post("/streams", status_code=201)
     async def add_stream(body: NewStream) -> dict[str, Any]:
@@ -136,6 +152,33 @@ def add_stream_routes(app: Any, plugin: SumpPluginSSH) -> None:
         except StreamError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         followed = plugin.store().set_followed(stream_id, wanted)
+        # A submit resumes a paused stream (FEAT-000028-sJpO9KMY).
+        plugin.store().set_paused(stream_id, False)
         if plugin.collection is not None:
             plugin.collection.apply(stream_id, followed)
         return {"containers": followed.containers, "services": followed.services}
+
+
+def add_removal_routes(app: Any, plugin: SumpPluginSSH) -> None:
+    """Remove and pause (REQ-000027-sJpO9KMY Requirements 1 and 2)."""
+
+    @app.delete("/streams/{stream_id}", status_code=204)
+    async def remove_stream(stream_id: str) -> None:
+        """Stop a stream's collection, then forget it (br-STREAM-000004-sJpO9KMY);
+        "self" is detected, not kept, so it cannot be removed."""
+        stream = plugin.stream(stream_id)
+        if stream is None:
+            raise HTTPException(status_code=404, detail=f"no data stream {stream_id}")
+        if stream.kind == "self":
+            raise HTTPException(
+                status_code=409, detail="the Sump's own host cannot be removed; close it"
+            )
+        plugin.remove_stream(stream_id)
+
+    @app.put("/streams/{stream_id}/paused")
+    async def pause_stream(stream_id: str, body: Paused) -> dict[str, bool]:
+        """Close Data Streams (`true`): collection stops, the followed set kept."""
+        if plugin.stream(stream_id) is None:
+            raise HTTPException(status_code=404, detail=f"no data stream {stream_id}")
+        plugin.pause_stream(stream_id, body.paused)
+        return {"paused": body.paused}

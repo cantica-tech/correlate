@@ -140,3 +140,40 @@ async def test_cttc_bug_000031_container_selection_file_ignores_the_ssh_port(
     assert again.store().followed(first.id) == Followed(["cache", "web"], [])
     assert again.store().followed(second.id) == Followed(["db"], ["api"])
     await stopped(task)
+
+
+async def test_cttc_bug_000030_removing_an_inactive_but_connected_docker_host_leaves_it_collecting(
+    tmp_path: Path,
+) -> None:
+    """cttc BUG-000030-uKKrzikI (Medium): Removing an inactive but connected Docker host
+    leaves it collecting.
+
+    Breaks br-STREAM-000004-sJpO9KMY (roadmap Item 28, RM-000029-sJpO9KMY).
+    cttc removed only the host the user was looking at from collection; an
+    inactive one kept collecting. Now the Sump stops a stream's collection
+    whether or not any window looks at it, then forgets it, and a restart
+    does not bring it back.
+    """
+    plugin, task = await started(tmp_path)
+    lab = plugin.store().add(parse_target("ops@lab", 22))
+    plugin.store().set_followed(lab.id, Followed(["web"], []))
+    plugin.store().set_followed("self", Followed(["db"], []))
+    assert plugin.collection is not None
+    plugin.collection.apply(lab.id, plugin.store().followed(lab.id))
+    plugin.collection.apply("self", plugin.store().followed("self"))
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert (lab.id, "container", "web") in plugin.collection.running()
+
+    plugin.remove_stream(lab.id)
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert [key for key in plugin.collection.running() if key[0] == lab.id] == []
+    assert ("self", "container", "db") in plugin.collection.running()
+    await stopped(task)
+
+    again, task = await started(tmp_path)
+    assert again.collection is not None
+    assert [key for key in again.collection.running() if key[0] == lab.id] == []
+    assert again.store().get(lab.id) is None
+    await stopped(task)

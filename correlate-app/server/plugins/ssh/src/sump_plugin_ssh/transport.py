@@ -97,6 +97,18 @@ SSH_CONNECT_TIMEOUT_S = 10
 _known_hosts_lock = threading.Lock()
 
 
+def forget_host_key(identity: SumpIdentity, host: str, port: int) -> bool:
+    """Drop the recorded key of `host:port` from the Sump's `known_hosts`; whether one was there."""
+    name = host if port == 22 else f"[{host}]:{port}"
+    with _known_hosts_lock:
+        keys = paramiko.HostKeys(str(identity.known_hosts))
+        if keys.lookup(name) is None:
+            return False
+        del keys[name]
+        keys.save(str(identity.known_hosts))
+    return True
+
+
 class HostKeyChanged(paramiko.SSHException):
     """A host answered with another key than the one recorded for it."""
 

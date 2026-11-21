@@ -67,6 +67,8 @@ def test_lists_self_then_the_ssh_streams(setup) -> None:
     assert client.get("/streams").json() == {
         "streams": [
             {
+                "paused": False,
+                "following": 0,
                 "id": "self",
                 "kind": "self",
                 "label": "This Sump's host",
@@ -148,3 +150,29 @@ async def test_the_sump_keeps_the_routes_behind_its_session(tmp_path: Path, monk
             ("PUT", "/streams/self/followed"),
         ]:
             assert client.request(method, path).status_code == 401, path
+
+
+def test_removes_a_stream_after_stopping_it_and_refuses_self(setup) -> None:
+    plugin, _docker, client = setup
+    client.post("/streams", json={"target": "ops@lab", "port": 22})
+    client.put("/streams/ssh:ops@lab:22/followed", json={"containers": ["web"]})
+    assert client.delete("/streams/ssh:ops@lab:22").status_code == 204
+    assert plugin.collection.applied[-1] == ("ssh:ops@lab:22", Followed())
+    assert plugin.store().get("ssh:ops@lab:22") is None
+    assert client.delete("/streams/ssh:ops@lab:22").status_code == 404
+    refused = client.delete("/streams/self")
+    assert refused.status_code == 409
+    assert "close it" in refused.json()["detail"]
+
+
+def test_pauses_and_a_submit_resumes(setup) -> None:
+    plugin, _docker, client = setup
+    client.put("/streams/self/followed", json={"containers": ["web", "db"]})
+    assert client.put("/streams/self/paused", json={"paused": True}).json() == {"paused": True}
+    assert plugin.collection.applied[-1] == ("self", Followed())
+    assert plugin.store().followed("self") == Followed(["db", "web"], [])
+    listed = client.get("/streams").json()["streams"][0]
+    assert (listed["paused"], listed["following"]) == (True, 2)
+    client.put("/streams/self/followed", json={"containers": ["web"]})
+    assert not plugin.store().paused("self")
+    assert plugin.collection.applied[-1] == ("self", Followed(["web"], []))

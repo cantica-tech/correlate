@@ -94,8 +94,11 @@ class StreamStore:
         self._lock = threading.Lock()
         self._streams: dict[str, StreamDef] = {}
         self._followed: dict[str, Followed] = {}
+        #: Streams paused by Close Data Streams: their set kept, not collected.
+        self._paused: set[str] = set()
         if path.exists():
             saved = json.loads(path.read_text(encoding="utf-8"))
+            self._paused = set(saved.get("paused", []))
             for s in saved.get("streams", []):
                 stream = StreamDef(**s)
                 self._streams[stream.id] = stream
@@ -116,13 +119,35 @@ class StreamStore:
             self._save()
         return self._streams[stream.id]
 
+    def remove(self, stream_id: str) -> StreamDef | None:
+        """Forget an SSH stream: its definition, followed set and paused mark."""
+        with self._lock:
+            stream = self._streams.pop(stream_id, None)
+            self._followed.pop(stream_id, None)
+            self._paused.discard(stream_id)
+            self._save()
+        return stream
+
+    def paused(self, stream_id: str) -> bool:
+        return stream_id in self._paused
+
+    def set_paused(self, stream_id: str, paused: bool) -> None:
+        """Pause (Close Data Streams) or resume a stream, its followed set kept."""
+        with self._lock:
+            if paused:
+                self._paused.add(stream_id)
+            else:
+                self._paused.discard(stream_id)
+            self._save()
+
     def followed(self, stream_id: str) -> Followed:
         """What is followed on `stream_id` (nothing, if never set)."""
         f = self._followed.get(stream_id)
         return Followed(list(f.containers), list(f.services)) if f else Followed()
 
     def all_followed(self) -> dict[str, Followed]:
-        return {sid: self.followed(sid) for sid in self._followed}
+        """Every stream's followed set, paused ones left out: what a start resumes."""
+        return {sid: self.followed(sid) for sid in self._followed if sid not in self._paused}
 
     def set_followed(self, stream_id: str, followed: Followed) -> Followed:
         """Make `stream_id`'s followed set exactly `followed`, saved before it returns."""
@@ -137,6 +162,7 @@ class StreamStore:
         data = {
             "streams": [asdict(s) for s in self._streams.values()],
             "followed": {sid: asdict(f) for sid, f in self._followed.items()},
+            "paused": sorted(self._paused),
         }
         tmp = self.path.with_suffix(".tmp")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

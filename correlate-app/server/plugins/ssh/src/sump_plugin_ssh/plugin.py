@@ -27,9 +27,9 @@ from sump_plugin_ssh import __version__
 from sump_plugin_ssh.collect import Collection
 from sump_plugin_ssh.datasource import DockerHostDataSource
 from sump_plugin_ssh.identity import SumpIdentity, ensure_identity
-from sump_plugin_ssh.routes import add_stream_routes
-from sump_plugin_ssh.streams import SELF_ID, StreamDef, StreamStore
-from sump_plugin_ssh.transport import LocalTransport, SSHTransport
+from sump_plugin_ssh.routes import add_removal_routes, add_stream_routes
+from sump_plugin_ssh.streams import SELF_ID, Followed, StreamDef, StreamStore
+from sump_plugin_ssh.transport import LocalTransport, SSHTransport, forget_host_key
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +93,26 @@ class SumpPluginSSH:
 
     def ssh_transport(self, stream: StreamDef) -> SSHTransport:
         return SSHTransport(stream.host, stream.user, port=stream.port, identity=self.identity())
+
+    def remove_stream(self, stream_id: str) -> StreamDef | None:
+        """Stop the stream's collection, then forget it and its host key
+        (br-STREAM-000004-sJpO9KMY); its records stay."""
+        if self.collection is not None:
+            self.collection.apply(stream_id, Followed())
+        stream = self.store().remove(stream_id)
+        self._ssh.pop(stream_id, None)
+        if stream is not None:
+            forget_host_key(self.identity(), stream.host, stream.port)
+            logger.info("streams: removed %s; its collection stopped", stream_id)
+        return stream
+
+    def pause_stream(self, stream_id: str, paused: bool) -> None:
+        """Close Data Streams: stop collecting, the followed set kept; or resume."""
+        self.store().set_paused(stream_id, paused)
+        if self.collection is not None:
+            followed = Followed() if paused else self.store().followed(stream_id)
+            self.collection.apply(stream_id, followed)
+        logger.info("streams: %s %s", stream_id, "paused" if paused else "resumed")
 
     def transport_for(self, stream_id: str) -> Any:
         """A stream's transport: "self"'s local one, or one SSH transport per stream."""
@@ -158,6 +178,7 @@ class SumpPluginSSH:
             return {"public_key": identity.public_key()}
 
         add_stream_routes(app, self)
+        add_removal_routes(app, self)
 
 
 #: The instance the `sump.plugins` entry point names.

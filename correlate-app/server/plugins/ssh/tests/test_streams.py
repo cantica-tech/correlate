@@ -66,3 +66,27 @@ def test_the_file_is_owner_only(tmp_path: Path) -> None:
     store = StreamStore(tmp_path / "streams.json")
     store.add(parse_target("ops@lab", 22))
     assert os.stat(store.path).st_mode & 0o077 == 0
+
+
+def test_a_removed_stream_is_forgotten_with_its_set_and_mark(tmp_path: Path) -> None:
+    store = StreamStore(tmp_path / "streams.json")
+    lab = store.add(parse_target("ops@lab", 22))
+    store.set_followed(lab.id, Followed(["web"], []))
+    store.set_paused(lab.id, True)
+    assert store.remove(lab.id) == lab
+    again = StreamStore(tmp_path / "streams.json")
+    assert again.streams() == []
+    assert again.followed(lab.id) == Followed()
+    assert not again.paused(lab.id)
+
+
+def test_a_paused_stream_keeps_its_set_and_is_not_resumed_at_start(tmp_path: Path) -> None:
+    store = StreamStore(tmp_path / "streams.json")
+    store.set_followed("self", Followed(["web"], []))
+    store.set_paused("self", True)
+    again = StreamStore(tmp_path / "streams.json")
+    assert again.paused("self")
+    assert again.followed("self") == Followed(["web"], [])
+    assert again.all_followed() == {}
+    again.set_paused("self", False)
+    assert again.all_followed() == {"self": Followed(["web"], [])}
