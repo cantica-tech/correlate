@@ -33,10 +33,10 @@ const bridge = {
   stream: { active: async () => "self", setActive: async () => ({ ok: true }) },
 } as unknown as ShellBridge;
 
-/** Recentres the view once, 55 min back (an hour back to 50 min back), as a double-click does. */
+/** Recentres the view once on 55 min back (an hour back to 50 min back, a sixth of the navigator to now), as a double-click does. */
 function RecentreOnce({ shown }: { shown: ChartsShown }) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: once, on the first answer.
-  useEffect(() => shown.recenterAt(Date.now() - 55 * 60_000 + 5_000), []);
+  useEffect(() => shown.recenterAt(Date.now() - 55 * 60_000), []);
   return null;
 }
 
