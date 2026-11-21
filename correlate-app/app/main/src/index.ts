@@ -39,6 +39,7 @@ export {
   SIDEBAR_RUN_EVENT,
   SidebarHost,
 } from "./sidebar.js";
+export { ActiveStreams, registerStreamIpc } from "./streams.js";
 export { logout } from "./sump/client.js";
 export { registerSumpIpc, SUMP_STATE_EVENT } from "./sump/ipc.js";
 export { login } from "./sump/login.js";

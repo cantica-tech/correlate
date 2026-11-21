@@ -17,6 +17,7 @@
 const { app, BrowserWindow, ipcMain, Menu, nativeTheme, safeStorage } = require("electron");
 const path = require("node:path");
 const {
+  ActiveStreams,
   ActiveSumps,
   Auditor,
   connectSsh,
@@ -36,6 +37,7 @@ const {
   registerPickerIpc,
   registerProvisionIpc,
   registerSidebarIpc,
+  registerStreamIpc,
   registerStatusIpc,
   registerSumpIpc,
   registerThemeIpc,
@@ -49,6 +51,8 @@ const {
 
 /** Each window's active Sump (br-SUMP-000010); set once the app is ready. */
 let activeSumps;
+/** Each window's active data stream (REQ-000027). */
+const activeStreams = new ActiveStreams();
 /** The main window, the one the sidebar's actions act on (REQ-000021). */
 let mainWindow = null;
 /** The sidebar's layout and detached window (REQ-000021); set once the app is ready. */
@@ -92,6 +96,7 @@ function createWindow() {
   activeSumps?.open(id);
   window.on("closed", () => {
     activeSumps?.close(id);
+    activeStreams.close(id);
     if (mainWindow === window) {
       mainWindow = null;
       // The detached sidebar goes with the main window, and stays detached.
@@ -185,6 +190,8 @@ app.whenReady().then(() => {
   const afterConnect = () => auditor?.soon();
   const relogin = reloginWith(vault, sumps, tokens, process.env, catalog, lifecycle, afterConnect);
   registerSumpIpc(ipcMain, sumps, tokens, relogin, activeSumps, lifecycle);
+  // Each window's active data stream, on its active Sump (REQ-000027).
+  registerStreamIpc(ipcMain, activeStreams, activeSumps);
   // Notifications and their History, one feed for every window; a Sump a
   // window is on that is lost or comes back is notified (REQ-000022).
   const notifications = new Notifications();

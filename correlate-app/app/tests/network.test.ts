@@ -145,7 +145,21 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
         request: (m: unknown) => Promise<unknown>;
       };
     };
-    expect(Object.keys(api)).toEqual(["theme", "sump", "sidebar", "status", "menu", "picker"]);
+    expect(Object.keys(api)).toEqual([
+      "theme",
+      "sump",
+      "sidebar",
+      "status",
+      "menu",
+      "picker",
+      "stream",
+    ]);
+    const stream = (exposed.correlate as { stream: Record<string, (m?: unknown) => unknown> })
+      .stream;
+    expect(Object.keys(stream)).toEqual(["active", "setActive"]);
+    await stream.active?.();
+    await stream.setActive?.("self");
+    expect(invoked.splice(0)).toEqual([["stream:active"], ["stream:setActive", "self"]]);
     const picker = (exposed.correlate as { picker: Record<string, (m?: unknown) => unknown> })
       .picker;
     expect(Object.keys(picker)).toEqual(["lastStream", "setLastStream"]);

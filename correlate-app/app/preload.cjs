@@ -22,7 +22,8 @@
  * (REQ-000022-sJpO9KMY). `window.correlate.menu.action()` runs a menu bar
  * entry by name on this window (REQ-000023-sJpO9KMY).
  * `window.correlate.picker` remembers the data-stream picker's last stream
- * per Sump (REQ-000026-sJpO9KMY).
+ * per Sump (REQ-000026-sJpO9KMY). `window.correlate.stream` reads and sets
+ * this window's active data stream (REQ-000027-sJpO9KMY).
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -63,6 +64,9 @@ const MENU_ACTION_CHANNEL = "menu:action";
 /** Must match the channels in `main/src/picker.ts`. */
 const PICKER_LAST_CHANNEL = "picker:lastStream";
 const PICKER_SET_LAST_CHANNEL = "picker:setLastStream";
+/** Must match the channels in `main/src/streams.ts`. */
+const STREAM_ACTIVE_CHANNEL = "stream:active";
+const STREAM_SET_ACTIVE_CHANNEL = "stream:setActive";
 
 /** Listen on `channel`; returns the function that stops listening. */
 function listen(channel, listener) {
@@ -147,5 +151,11 @@ contextBridge.exposeInMainWorld("correlate", {
     lastStream: (sump) => ipcRenderer.invoke(PICKER_LAST_CHANNEL, sump),
     /** Remember `{ sump, stream }` as the last stream submitted on that Sump. */
     setLastStream: (choice) => ipcRenderer.invoke(PICKER_SET_LAST_CHANNEL, choice),
+  },
+  stream: {
+    /** This window's active data stream on its Sump, or null. */
+    active: () => ipcRenderer.invoke(STREAM_ACTIVE_CHANNEL),
+    /** Make a stream this window's active one: `{ ok, stream }` or `{ ok: false, message }`. */
+    setActive: (stream) => ipcRenderer.invoke(STREAM_SET_ACTIVE_CHANNEL, stream),
   },
 });
