@@ -1,0 +1,10 @@
+/*
+ * The charts' parity pages' frame, the same on cttc's page and ours
+ * (REQ-000028-sJpO9KMY Requirement 4).
+ */
+#stage {
+  width: 800px;
+  height: 520px;
+  display: flex;
+  flex-direction: column;
+}

@@ -18,6 +18,7 @@ import { build } from "esbuild";
 import { _electron, type ElectronApplication, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COMPONENT_LIMIT, compare, type Mask, readPng, writePng } from "./compare.js";
+import { cttcChartBlock, cttcSwatchScript } from "./cttcCharts.js";
 import { cttcMenuBar } from "./cttcMenuBar.js";
 import { cttcSidebar, cttcWidthScript } from "./cttcSidebar.js";
 import { cttcPillMenu, cttcStatusBar } from "./cttcStatusBar.js";
@@ -61,6 +62,7 @@ async function buildOurs(): Promise<void> {
       path.join(here, "page/ours-menubar.tsx"),
       path.join(here, "page/ours-streams.tsx"),
       path.join(here, "page/ours-remove.tsx"),
+      path.join(here, "page/ours-charts.tsx"),
     ],
     outdir: path.join(here, "dist"),
     bundle: true,
@@ -286,6 +288,29 @@ async function captureRemove(side: "cttc" | "ours", pictures: Map<string, Buffer
   }
 }
 
+/**
+ * The charts' head and legend (REQ-000028-sJpO9KMY Requirement 4): on cttc's
+ * page, cttc's chart block with its swatches colored by script; on ours, our
+ * ChartBlock on fixed data. The strips' drawing is the ported
+ * `drawChartStrip`, tested on its own, so it is not compared here.
+ */
+async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer>): Promise<void> {
+  for (const theme of THEMES) {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.goto(pathToFileURL(path.join(here, `page/${side}-charts.html`)).href);
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.getElementById("stage").innerHTML = ${JSON.stringify(cttcChartBlock())}; ${cttcSwatchScript()} })()`,
+      );
+    }
+    await page.waitForSelector("#legend .legend-item:nth-child(2)");
+    await page.mouse.move(1, 1);
+    await page.evaluate("document.fonts.ready.then(() => true)");
+    pictures.set(`charts-head-${theme}`, await shoot("#chart-head"));
+    pictures.set(`charts-legend-${theme}`, await shoot("#legend"));
+  }
+}
+
 let cttc: Map<string, Buffer>;
 let ours: Map<string, Buffer>;
 
@@ -315,6 +340,8 @@ describe.skipIf(process.platform !== "darwin")(
       await captureStreams("ours", ours);
       await captureRemove("cttc", cttc);
       await captureRemove("ours", ours);
+      await captureCharts("cttc", cttc);
+      await captureCharts("ours", ours);
     }, 120_000);
 
     afterAll(async () => {
@@ -330,6 +357,8 @@ describe.skipIf(process.platform !== "darwin")(
       ...MENUBAR_CASES.map((c) => `menubar-${c}`),
       "streams-dialog",
       "remove-dialog",
+      "charts-head",
+      "charts-legend",
     ].flatMap((n) => THEMES.map((t) => `${n}-${t}`));
 
     it.each(names)("%s looks as in cttc", (name) => {

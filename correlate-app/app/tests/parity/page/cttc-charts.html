@@ -1,0 +1,18 @@
+<!doctype html>
+<!--
+  cttc's side of the charts' parity check (REQ-000028-sJpO9KMY Requirement
+  4): the test writes cttc's chart block (cttcCharts.ts) into #stage, under
+  cttc's own style.css.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'none'" />
+    <title>cttc charts</title>
+    <link rel="stylesheet" href="../cttc/style.reference.css" />
+    <link rel="stylesheet" href="charts.css" />
+  </head>
+  <body>
+    <div id="stage"></div>
+  </body>
+</html>
