@@ -18,6 +18,7 @@ import { build } from "esbuild";
 import { _electron, type ElectronApplication, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COMPONENT_LIMIT, compare, type Mask, readPng, writePng } from "./compare.js";
+import { cttcMenuBar } from "./cttcMenuBar.js";
 import { cttcSidebar, cttcWidthScript } from "./cttcSidebar.js";
 import { cttcPillMenu, cttcStatusBar } from "./cttcStatusBar.js";
 import { SIDEBAR_CASES } from "./page/sidebar-cases.js";
@@ -56,6 +57,7 @@ async function buildOurs(): Promise<void> {
       path.join(here, "page/ours.tsx"),
       path.join(here, "page/ours-sidebar.tsx"),
       path.join(here, "page/ours-statusbar.tsx"),
+      path.join(here, "page/ours-menubar.tsx"),
     ],
     outdir: path.join(here, "dist"),
     bundle: true,
@@ -204,6 +206,40 @@ async function captureStatusBar(
   }
 }
 
+/** The menu bar's cases: closed, then each menu open. */
+const MENUBAR_CASES = ["closed", "file", "edit", "view", "window", "help"] as const;
+
+/**
+ * The menu bar, closed and with each menu open (REQ-000023-sJpO9KMY
+ * Requirement 5): on cttc's page, cttc's markup with that menu `.open`; on
+ * ours, our bar, the menu opened by clicking its label. Shortcuts as on
+ * macOS, where this runs.
+ */
+async function captureMenuBar(side: "cttc" | "ours", pictures: Map<string, Buffer>): Promise<void> {
+  for (const theme of THEMES) {
+    await page.emulateMedia({ colorScheme: theme });
+    for (const name of MENUBAR_CASES) {
+      await page.goto(pathToFileURL(path.join(here, `page/${side}-menubar.html`)).href);
+      if (side === "cttc") {
+        const open = name === "closed" ? null : name;
+        await page.evaluate(
+          `document.getElementById("stage").innerHTML = ${JSON.stringify(cttcMenuBar(open, true))}`,
+        );
+      } else {
+        await page.waitForSelector("#menubar");
+        if (name !== "closed") {
+          await page.click(`[data-menu="${name}"] .menu-label`);
+          await page.waitForSelector(`[data-menu="${name}"].open`);
+        }
+        // Away from the bar, so no label is lit up by hover.
+        await page.mouse.move(590, 310);
+      }
+      await page.evaluate("document.fonts.ready.then(() => true)");
+      pictures.set(`menubar-${name}-${theme}`, await shoot("#stage"));
+    }
+  }
+}
+
 let cttc: Map<string, Buffer>;
 let ours: Map<string, Buffer>;
 
@@ -227,6 +263,8 @@ describe.skipIf(process.platform !== "darwin")(
       await captureSidebar("ours", ours);
       await captureStatusBar("cttc", cttc);
       await captureStatusBar("ours", ours);
+      await captureMenuBar("cttc", cttc);
+      await captureMenuBar("ours", ours);
     }, 120_000);
 
     afterAll(async () => {
@@ -239,6 +277,7 @@ describe.skipIf(process.platform !== "darwin")(
       "dialog-page",
       ...Object.keys(SIDEBAR_CASES).map((c) => `sidebar-${c}`),
       ...STATUSBAR_CASES.map((c) => `statusbar-${c}`),
+      ...MENUBAR_CASES.map((c) => `menubar-${c}`),
     ].flatMap((n) => THEMES.map((t) => `${n}-${t}`));
 
     it.each(names)("%s looks as in cttc", (name) => {

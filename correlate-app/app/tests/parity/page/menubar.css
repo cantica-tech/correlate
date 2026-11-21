@@ -1,0 +1,11 @@
+/*
+ * The menu bar parity pages' frame, the same on cttc's page and ours
+ * (REQ-000023-sJpO9KMY Requirement 5): the bar at the top of a stage with
+ * room for an open menu below it.
+ */
+#stage {
+  width: 600px;
+  height: 320px;
+  display: flex;
+  flex-direction: column;
+}
