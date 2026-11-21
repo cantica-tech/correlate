@@ -53,15 +53,15 @@ def is_own_sump_container(data: dict[str, str], own_id: str | None) -> bool:
     ).startswith(SUMP_COMPOSE_PROJECT_PREFIX)
 
 
-async def list_containers(
+async def running_containers(
     transport: TransportLike, *, include_self: bool = False, own_id: str | None = None
-) -> list[ContainerRef]:
-    """The running containers `transport` reaches, the Sump's own left out
-    unless `include_self`."""
+) -> list[dict[str, str]]:
+    """The running containers `transport` reaches, as `{id, name, image}`,
+    the Sump's own left out unless `include_self`."""
     result = await transport.run(["docker", "ps", "--format", "{{json .}}"])
     result.check()
     me = own_id if own_id is not None else own_container_id()
-    refs: list[ContainerRef] = []
+    rows: list[dict[str, str]] = []
     seen: set[str] = set()
     for line in result.stdout.splitlines():
         line = line.strip()
@@ -70,9 +70,17 @@ async def list_containers(
         data = json.loads(line)
         if not include_self and is_own_sump_container(data, me):
             continue
-        ref = ContainerRef(container_id=data["ID"], container_name=data["Names"])
-        if ref.container_id in seen:
+        if data["ID"] in seen:
             continue
-        seen.add(ref.container_id)
-        refs.append(ref)
-    return refs
+        seen.add(data["ID"])
+        rows.append({"id": data["ID"], "name": data["Names"], "image": data.get("Image", "")})
+    return rows
+
+
+async def list_containers(
+    transport: TransportLike, *, include_self: bool = False, own_id: str | None = None
+) -> list[ContainerRef]:
+    """The running containers `transport` reaches, the Sump's own left out
+    unless `include_self`."""
+    rows = await running_containers(transport, include_self=include_self, own_id=own_id)
+    return [ContainerRef(container_id=r["id"], container_name=r["name"]) for r in rows]

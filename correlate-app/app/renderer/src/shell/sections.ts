@@ -128,7 +128,13 @@ export const SECTIONS: readonly SidebarSection[] = [
 ];
 
 /** The entries that work so far; every other one is disabled. */
-export const AVAILABLE: ReadonlySet<string> = new Set(["preferences", "about", "quit"]);
+export const AVAILABLE: ReadonlySet<string> = new Set([
+  "new-data-stream",
+  "edit-data-streams",
+  "preferences",
+  "about",
+  "quit",
+]);
 
 /** The tooltip of an entry not built yet. */
 export const NOT_YET = "Not available yet";

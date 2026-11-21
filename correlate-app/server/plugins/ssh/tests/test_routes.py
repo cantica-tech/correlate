@@ -26,12 +26,12 @@ class Docker:
         if self.fail:
             return ExecResult(255, "", self.fail)
         if args[:2] == ["docker", "ps"]:
-            rows = [{"ID": "0123456789ab", "Names": "web", "Labels": ""}]
+            rows = [{"ID": "0123456789ab", "Names": "web", "Image": "nginx:alpine", "Labels": ""}]
             return ExecResult(0, "\n".join(json.dumps(r) for r in rows), "")
         if args[:2] == ["docker", "info"]:
             return ExecResult(0, "true\n" if self.swarm else "false\n", "")
         if args[:3] == ["docker", "service", "ls"]:
-            return ExecResult(0, json.dumps({"Name": "api"}) + "\n", "")
+            return ExecResult(0, json.dumps({"Name": "api", "Replicas": "2/2"}) + "\n", "")
         return ExecResult(0, "29.0\n", "")
 
 
@@ -99,12 +99,14 @@ def test_lists_targets_with_services_only_on_a_swarm_manager(setup) -> None:
     plugin, docker, client = setup
     body = client.get("/streams/self/targets").json()
     assert body == {
-        "containers": [{"id": "0123456789ab", "name": "web"}],
+        "containers": [{"id": "0123456789ab", "name": "web", "image": "nginx:alpine"}],
         "services": None,
         "followed": {"containers": [], "services": []},
     }
     docker["self"].swarm = True
-    assert client.get("/streams/self/targets").json()["services"] == ["api"]
+    assert client.get("/streams/self/targets").json()["services"] == [
+        {"name": "api", "replicas": "2/2"}
+    ]
     assert client.get("/streams/ssh:nobody@gone:22/targets").status_code == 404
 
 

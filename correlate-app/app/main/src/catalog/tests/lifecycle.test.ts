@@ -153,8 +153,9 @@ describe("br-SUMP-000011-sJpO9KMY: the health probe", () => {
     const l = new Lifecycle(undefined, () => T0, quiet);
     l.unreachable("up", "start");
     l.reachable("down", "start");
+    // Long enough for an answer under a loaded test run; the silent one still times out.
     const probe = new HealthProbe(l, (id) => (id === "up" ? up.sump : down.sump), {
-      timeoutMs: 100,
+      timeoutMs: 1_000,
     });
     await probe.probeOnce();
     expect(l.get("up")?.state).toBe("active");

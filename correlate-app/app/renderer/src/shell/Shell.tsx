@@ -8,6 +8,7 @@ import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useState } 
 import { Button, Dialog, SegControl, Switch } from "../components/index.js";
 import { MenuBar } from "../menubar/MenuBar.js";
 import { StatusBar } from "../statusbar/StatusBar.js";
+import { StreamsDialog } from "../streams/StreamsDialog.js";
 import type { LayoutChange, ShellBridge, SidebarLayout, ThemeMode } from "./bridge.js";
 import { Sidebar } from "./Sidebar.js";
 import "./shell.css";
@@ -40,6 +41,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   const [preferences, setPreferences] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("system");
   const [statusBar, setStatusBar] = useState(true);
+  const [streams, setStreams] = useState<"new" | "edit" | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -57,6 +59,8 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   useEffect(() => {
     if (detached) return;
     return bridge.sidebar.onRun((name) => {
+      if (name === "new-data-stream") setStreams("new");
+      if (name === "edit-data-streams") setStreams("edit");
       if (name === "preferences") {
         void bridge.theme.get().then(setTheme);
         void bridge.status.visible().then(setStatusBar);
@@ -156,6 +160,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
           </fieldset>
         </Dialog>
       </div>
+      <StreamsDialog bridge={bridge} mode={streams} onClose={() => setStreams(null)} />
       <StatusBar bridge={bridge} />
     </>
   );

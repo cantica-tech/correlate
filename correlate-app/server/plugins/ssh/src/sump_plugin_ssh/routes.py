@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 from fastapi import HTTPException
 from pydantic import BaseModel
 
-from sump_plugin_ssh.containers import list_containers
+from sump_plugin_ssh.containers import running_containers
 from sump_plugin_ssh.streams import Followed, StreamError, check_names, parse_target
 
 if TYPE_CHECKING:
@@ -84,8 +84,9 @@ def add_stream_routes(app: Any, plugin: SumpPluginSSH) -> None:
 
     @app.get("/streams/{stream_id}/targets")
     async def targets(stream_id: str) -> dict[str, Any]:
-        """What runs on a stream (the Sump's own container left out), the
-        Swarm services when it is a Swarm manager, and what is followed."""
+        """What runs on a stream (`{id, name, image}`, the Sump's own container
+        left out), the Swarm services (`{name, replicas}`) when it is a Swarm
+        manager, and what is followed."""
         if plugin.stream(stream_id) is None:
             raise HTTPException(status_code=404, detail=f"no data stream {stream_id}")
         transport = plugin.transport_for(stream_id)
@@ -95,20 +96,20 @@ def add_stream_routes(app: Any, plugin: SumpPluginSSH) -> None:
             )
         try:
             async with asyncio.timeout(LIST_TIMEOUT_S):
-                containers = await list_containers(transport)
+                containers = await running_containers(transport)
                 swarm = await transport.run(
                     ["docker", "info", "--format", "{{.Swarm.ControlAvailable}}"]
                 )
-                services: list[str] | None = None
+                services: list[dict[str, str]] | None = None
                 if swarm.returncode == 0 and swarm.stdout.strip() == "true":
                     listed = await transport.run(
                         ["docker", "service", "ls", "--format", "{{json .}}"]
                     )
                     listed.check()
+                    rows = [json.loads(line) for line in listed.stdout.splitlines() if line.strip()]
                     services = sorted(
-                        json.loads(line)["Name"]
-                        for line in listed.stdout.splitlines()
-                        if line.strip()
+                        ({"name": r["Name"], "replicas": r.get("Replicas", "")} for r in rows),
+                        key=lambda r: r["name"],
                     )
         except TimeoutError:
             raise HTTPException(
@@ -118,7 +119,7 @@ def add_stream_routes(app: Any, plugin: SumpPluginSSH) -> None:
             raise HTTPException(status_code=502, detail=str(exc)[:300]) from exc
         followed = plugin.store().followed(stream_id)
         return {
-            "containers": [{"id": c.container_id, "name": c.container_name} for c in containers],
+            "containers": containers,
             "services": services,
             "followed": {"containers": followed.containers, "services": followed.services},
         }

@@ -48,7 +48,8 @@
         "renderer/src/components/components.css",
         "renderer/src/shell/shell.css",
         "renderer/src/statusbar/statusbar.css",
-        "renderer/src/menubar/menubar.css"
+        "renderer/src/menubar/menubar.css",
+        "renderer/src/streams/streams.css"
       ],
       "linter": {
         "rules": {

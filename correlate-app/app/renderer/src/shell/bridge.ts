@@ -62,6 +62,21 @@ export interface Notice {
 /** What windows hear of the feed. */
 export type NoticeEvent = { type: "entry"; entry: Notice } | { type: "cleared" };
 
+/** A failure of a call to a Sump, as the bridge gives it. */
+export type SumpErrorInfo =
+  | { kind: "timeout"; message: string; limit: "total" | "idle"; limitMs: number }
+  | { kind: "http"; message: string; status: number; detail: unknown }
+  | { kind: "login-needed"; message: string }
+  | { kind: "refused" | "network"; message: string };
+
+/** One call to the window's Sump: a method and a path, never a URL. */
+export type SumpRequester = (message: {
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+  body?: unknown;
+  timeoutMs?: number;
+}) => Promise<{ ok: true; value: unknown } | { ok: false; error: SumpErrorInfo }>;
+
 /** The bridge, as far as the shell goes. */
 export interface ShellBridge {
   menu: {
@@ -73,6 +88,7 @@ export interface ShellBridge {
     onState(listener: (record: StateRecord) => void): () => void;
     list(): Promise<ListedSump[]>;
     switchTo(target: { id: string; confirmed?: boolean }): Promise<SwitchResult>;
+    request: SumpRequester;
   };
   status: {
     history(): Promise<Notice[]>;

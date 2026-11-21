@@ -1,0 +1,100 @@
+/*
+ * cttc's Set Sources dialog (br-STYLE-000001-sJpO9KMY, REQ-000025-sJpO9KMY),
+ * rule for rule from cttc `app/renderer/style.css` at d8a444b. Each block
+ * names the cttc lines it comes from; a test holds every block to
+ * `tests/parity/cttc/style.reference.css`.
+ */
+
+/* A labelled row: the key row, its hint, the fetch row, a number field. */
+/* cttc style.css:927-940 */
+/* SSH key's own row/button plus its "(optional...)" hint, stacked tightly
+   underneath the label instead of .ctl.block's default side-by-side
+   row -- keeps the hint visually anchored to the exact controls it's
+   about, not floating as a separate paragraph below everything. */
+.ssh-key-row {
+  flex-wrap: wrap;
+  row-gap: 3px;
+}
+/* flex-basis: 100% wraps this onto its own line below the label/input/
+   button row above (still the same flex container) instead of sitting
+   beside them, without needing a separate column layout that would also
+   push "SSH key" itself off that row. */
+.ssh-key-hint {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 11px;
+}
+/* Fetch/Refresh Sources + Show activity -- a bit more breathing room before
+   the status/error/activity-log area right below. */
+.fetch-row {
+  margin-top: 8px;
+  margin-bottom: 10px;
+}
+.ctl input[type="number"] {
+  width: 56px;
+}
+/* cttc style.css:945-945 */
+.ctl input[type="text"] {
+  flex: 1;
+  min-width: 240px;
+}
+
+/* The checklist. */
+/* cttc style.css:1702-1709 */
+#docker-targets {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+#docker-targets label {
+  display: block;
+  padding: 1px 0;
+}
+#docker-targets label.unavailable {
+  opacity: 0.75;
+}
+#docker-targets label.unavailable .tdoc {
+  color: var(--critical);
+}
+#docker-targets .mark {
+  display: inline-block;
+  width: 1.4em;
+  text-align: center;
+}
+.tdoc {
+  color: var(--muted);
+}
+#docker-targets .group {
+  font-weight: 600;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+#docker-targets .group:hover {
+  color: var(--text-primary);
+}
+
+/* Section icons and sections. */
+/* cttc style.css:1712-1712 */
+.legend-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+/* cttc style.css:1714-1715 */
+.dlg-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin: 10px 0;
+  padding-bottom: 2px;
+}
+.dlg-section legend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 0 4px;
+}

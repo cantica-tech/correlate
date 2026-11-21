@@ -21,7 +21,11 @@ const NETWORK: [RegExp, string][] = [
   [/\bXMLHttpRequest\b/, "XMLHttpRequest"],
   [/\bEventSource\b/, "EventSource"],
   [/\bWebSocket\b/, "WebSocket"],
-  [/["'](node:)?(http|https|http2|net|tls|dgram)["']/, "a Node network module"],
+  // Imported or required, not any string that happens to read "http".
+  [
+    /(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(\s*)["'](node:)?(http|https|http2|net|tls|dgram)["']/,
+    "a Node network module",
+  ],
   [/\bnet\.request\b|\bClientRequest\b/, "Electron's net module"],
 ];
 
@@ -79,8 +83,13 @@ describe("br-CONN-000008-sJpO9KMY: only the Sump client talks to a Sump", () => 
     ["new EventSource('/live')", "EventSource"],
     ['import http from "node:http";', "a Node network module"],
     ['const net = require("net");', "a Node network module"],
+    ['const tls = await import("node:tls");', "a Node network module"],
   ])("catches %s", (line, use) => {
     expect(networkUses(line)).toContain(use);
+  });
+
+  it("ignores a string that only reads like a module name", () => {
+    expect(networkUses('const kind = "http"; type K = { kind: "net" };')).toEqual([]);
   });
 
   it("ignores comments", () => {
