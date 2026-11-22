@@ -1,0 +1,159 @@
+"""An event: what it watches, its conditions, and its state (REQ-000043-sJpO9KMY).
+
+Ported from cttc's gateway engine (`server-logsump/.../server/events.py`):
+metric conditions (cpu, mem or net compared with a number) and log
+conditions (a regex), matched on any or all of them. An event is checked
+when it is made, so a Sump never keeps one it cannot evaluate: the threshold
+must be a number and the regex must compile (br-EVENT-000004-sJpO9KMY).
+
+What an event watches is one data stream of the Sump: all its containers
+(those it starts following later included) or only named ones, and its host
+when asked (decided in FEAT-000045-sJpO9KMY).
+"""
+
+from __future__ import annotations
+
+import math
+import re
+from dataclasses import asdict, dataclass, field
+from typing import Any, Literal
+
+#: The comparisons a metric condition may use.
+OPS = (">", "<", ">=", "<=", "=")
+#: The metrics a metric condition may watch.
+METRICS = ("cpu", "mem", "net")
+#: A data stream or container name: printable, at most 200 characters.
+_NAME = re.compile(r"^[\x21-\x7e]{1,200}$")
+
+
+class InvalidEvent(ValueError):
+    """An event the Sump refuses, with the reason."""
+
+
+@dataclass
+class MetricCondition:
+    """A metric of every watched series compared with a threshold."""
+
+    metric: Literal["cpu", "mem", "net"]
+    op: Literal[">", "<", ">=", "<=", "="]
+    threshold: float
+    type: Literal["metric"] = "metric"
+
+
+@dataclass
+class LogCondition:
+    """A regex searched in every new log line of the watched containers."""
+
+    pattern: str
+    type: Literal["log"] = "log"
+
+
+Condition = MetricCondition | LogCondition
+
+
+@dataclass
+class Event:
+    """An event, its definition and the engine's state for it."""
+
+    id: str
+    name: str
+    #: The data stream watched (its id, as `/streams` names it).
+    stream: str
+    conditions: list[Condition]
+    #: `any` condition met is enough, or `all` at once.
+    match: Literal["any", "all"] = "any"
+    #: The containers watched; empty, all of the stream's.
+    containers: list[str] = field(default_factory=list)
+    #: The stream's host is watched by its metric conditions too.
+    host: bool = False
+    enabled: bool = True
+    #: When it was made (epoch ms); log positions start there.
+    created_at: int = 0
+    #: `armed` (watching) or `triggered` (met, until it clears or is reset).
+    status: Literal["armed", "triggered"] = "armed"
+    #: The edge latch: the conditions were not met at the last check.
+    armed: bool = True
+    triggered_at: int | None = None
+    trigger_count: int = 0
+    trigger_detail: str | None = None
+    #: Per log condition (its index), per source: the last stream id read.
+    positions: dict[str, dict[str, str]] = field(default_factory=dict)
+
+    def to_json(self) -> dict[str, Any]:
+        """The event as stored and as the API will answer it."""
+        return asdict(self)
+
+    @staticmethod
+    def from_json(data: dict[str, Any]) -> Event:
+        """An event as stored; its definition checked again."""
+        triggered_at = data.get("triggered_at")
+        event = Event(
+            id=str(data["id"]),
+            name=str(data.get("name", "")),
+            stream=str(data.get("stream", "")),
+            conditions=[parse_condition(c) for c in data.get("conditions", [])],
+            match="all" if data.get("match") == "all" else "any",
+            containers=[str(c) for c in data.get("containers", [])],
+            host=data.get("host") is True,
+            enabled=data.get("enabled") is not False,
+            created_at=int(data.get("created_at", 0)),
+            status="triggered" if data.get("status") == "triggered" else "armed",
+            armed=data.get("armed") is not False,
+            triggered_at=int(triggered_at) if triggered_at is not None else None,
+            trigger_count=int(data.get("trigger_count", 0)),
+            trigger_detail=data.get("trigger_detail"),
+            positions={
+                str(index): {str(s): str(p) for s, p in by_source.items()}
+                for index, by_source in (data.get("positions") or {}).items()
+            },
+        )
+        validate(event)
+        return event
+
+
+def parse_condition(raw: Any) -> Condition:
+    """A condition from its JSON, or why it is refused."""
+    if not isinstance(raw, dict):
+        raise InvalidEvent("a condition is an object")
+    kind = raw.get("type")
+    if kind == "metric":
+        threshold = raw.get("threshold")
+        if isinstance(threshold, bool) or not isinstance(threshold, int | float):
+            raise InvalidEvent("a metric condition's threshold must be a number")
+        if not math.isfinite(threshold):
+            raise InvalidEvent("a metric condition's threshold must be finite")
+        return MetricCondition(
+            metric=raw.get("metric"), op=raw.get("op"), threshold=float(threshold)
+        )
+    if kind == "log":
+        pattern = raw.get("pattern")
+        if not isinstance(pattern, str):
+            raise InvalidEvent("a log condition's pattern must be text")
+        return LogCondition(pattern=pattern)
+    raise InvalidEvent(f"unknown condition type: {kind!r}")
+
+
+def validate(event: Event) -> None:
+    """Refuse an event the engine could not evaluate."""
+    if not event.name.strip() or len(event.name) > 200:
+        raise InvalidEvent("an event needs a name of at most 200 characters")
+    if not _NAME.match(event.stream):
+        raise InvalidEvent("an event watches one data stream")
+    for name in event.containers:
+        if not isinstance(name, str) or not _NAME.match(name):
+            raise InvalidEvent(f"not a container name: {name!r}")
+    if not event.conditions:
+        raise InvalidEvent("an event needs at least one condition")
+    if event.match not in ("any", "all"):
+        raise InvalidEvent(f"match must be 'any' or 'all', got {event.match!r}")
+    for condition in event.conditions:
+        if isinstance(condition, MetricCondition):
+            if condition.metric not in METRICS:
+                raise InvalidEvent(f"unknown metric: {condition.metric!r}")
+            if condition.op not in OPS:
+                raise InvalidEvent(f"unknown operator: {condition.op!r}")
+        else:
+            try:
+                re.compile(condition.pattern)
+            except re.error as error:
+                raise InvalidEvent(f"invalid regex {condition.pattern!r}: {error}") from error

@@ -5,6 +5,7 @@ requires-python = ">=3.13"
 [manifest]
 members = [
     "correlate-sump",
+    "correlate-sump-plugin-events",
     "correlate-sump-plugin-ssh",
 ]
 
@@ -337,6 +338,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "correlate-sump-plugin-events" },
     { name = "correlate-sump-plugin-ssh" },
     { name = "fakeredis" },
     { name = "httpx" },
@@ -361,6 +363,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "correlate-sump-plugin-events", editable = "plugins/events" },
     { name = "correlate-sump-plugin-ssh", editable = "plugins/ssh" },
     { name = "fakeredis", specifier = ">=2.26" },
     { name = "httpx", specifier = ">=0.27" },
@@ -369,6 +372,21 @@ dev = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", specifier = ">=0.7" },
     { name = "ty", specifier = ">=0.0.71" },
+]
+
+[[package]]
+name = "correlate-sump-plugin-events"
+version = "0.1.0"
+source = { editable = "plugins/events" }
+dependencies = [
+    { name = "correlate-sump" },
+    { name = "redis" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "correlate-sump", editable = "." },
+    { name = "redis", specifier = ">=5.0" },
 ]
 
 [[package]]

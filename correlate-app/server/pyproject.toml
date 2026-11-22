@@ -27,6 +27,8 @@ dev = [
     # The SSH plugin (plugins/ssh/), so tests and `uv run` load it as the
     # image does (REQ-000024-sJpO9KMY).
     "correlate-sump-plugin-ssh",
+    # The event engine (plugins/events/, REQ-000043-sJpO9KMY).
+    "correlate-sump-plugin-events",
     "fakeredis>=2.26",
     "httpx>=0.27",
     "pytest>=8.3",
@@ -43,11 +45,13 @@ correlate-sump = "correlate_sump.__main__:main"
 [tool.uv.workspace]
 # The Sump's plugins, each its own package found through `sump.plugins`
 # (br-PLUGIN-000001-sJpO9KMY).
-members = ["plugins/ssh"]
+members = ["plugins/ssh", "plugins/events"]
 
 [tool.uv.sources]
 # The SSH plugin from this workspace, not a registry.
 correlate-sump-plugin-ssh = { workspace = true }
+# The event engine from this workspace, not a registry.
+correlate-sump-plugin-events = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -72,7 +76,7 @@ extend-immutable-calls = ["fastapi.Depends"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-testpaths = ["tests", "plugins/ssh/tests"]
+testpaths = ["tests", "plugins/ssh/tests", "plugins/events/tests"]
 addopts = ["--import-mode=importlib"]
 
 [tool.ty.environment]

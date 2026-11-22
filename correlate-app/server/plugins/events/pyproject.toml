@@ -1,0 +1,29 @@
+# The Sump's event engine (REQ-000043-sJpO9KMY, decision D7): events run in the
+# Sump only, evaluated on its live Redis streams by a supervised background
+# task, found through the `sump.plugins` entry point (br-PLUGIN-000001-sJpO9KMY).
+# A member of the server's uv workspace; ported from cttc's gateway engine.
+
+[project]
+name = "correlate-sump-plugin-events"
+version = "0.1.0"
+description = "correlate-app Sump plugin: events evaluated on the Sump's live streams"
+readme = "README.md"
+requires-python = ">=3.13"
+# The Sump's plugin core and its Redis client.
+dependencies = ["correlate-sump", "redis>=5.0"]
+
+# How the Sump finds this plugin.
+[project.entry-points."sump.plugins"]
+events = "sump_plugin_events.plugin:plugin"
+
+[tool.uv.sources]
+# The Sump from this workspace, not a registry.
+correlate-sump = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# The one import package this plugin ships.
+packages = ["src/sump_plugin_events"]
