@@ -151,18 +151,20 @@ describe("br-CONN-000009-sJpO9KMY: stream", () => {
     server = await serve((_req, res) => {
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.write('event: log\nid: 1\ndata: {"a":1}\n\n');
+      // 8 beats 100 ms apart outlast the 500 ms idle limit, so only the
+      // heartbeats keep the stream open; the 5x margin absorbs a slow CI runner.
       let beats = 0;
       const timer = setInterval(() => {
         res.write(": keep-alive\n\n");
         beats += 1;
-        if (beats === 6) {
+        if (beats === 8) {
           clearInterval(timer);
           res.end("data: last\n\n");
         }
-      }, 40);
+      }, 100);
     });
     const events: SumpEvent[] = [];
-    const open = stream(server.sump, "/live", (e) => events.push(e), { idleMs: 150 });
+    const open = stream(server.sump, "/live", (e) => events.push(e), { idleMs: 500 });
     await open.done;
     expect(events).toEqual([
       { event: "log", id: "1", data: '{"a":1}' },
