@@ -294,12 +294,12 @@ describe("REQ-000034-sJpO9KMY: a window's open files", () => {
   it("switches, removes falling back to the last opened left, then live; live keeps the files", () => {
     const files = new OpenFiles();
     for (const name of ["a", "b", "c"]) {
-      files.set(1, readCttcArchive(archive(), `/d/${name}.cttc-record`));
+      files.set(1, readCttcArchive(archive(), resolved(`/d/${name}.cttc-record`)));
     }
     expect(files.switchTo(1, resolved("/d/a.cttc-record"))).toBe(true);
     expect(files.switchTo(1, resolved("/d/zzz.cttc-record"))).toBe(false);
     files.remove(1, resolved("/d/a.cttc-record"));
-    expect(files.list(1).active).toBe("/d/c.cttc-record");
+    expect(files.list(1).active).toBe(resolved("/d/c.cttc-record"));
     files.leave(1);
     expect(files.list(1)).toMatchObject({ active: null });
     expect(files.list(1).files).toHaveLength(2);
