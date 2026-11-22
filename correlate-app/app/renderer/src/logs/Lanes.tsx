@@ -13,8 +13,10 @@ import { timeAt, xAt } from "../charts/ChartBlock.js";
 import { drawCursorMark, drawNowMark } from "../charts/marks.js";
 import type { Viewport } from "../correlate/atoms.js";
 import { PLOT_MARGIN_LEFT } from "../correlate/axes.js";
+import { drawBands } from "../correlate/chartDraw.js";
 import { colorForSlot, resolveColor, type SlotMap } from "../correlate/colorSlots.js";
 import { isClick } from "../correlate/zoom.js";
+import { RECORDING_BAND_COLOR } from "../recording/bands.js";
 import type { SumpRequester } from "../shell/bridge.js";
 import { density } from "./api.js";
 
@@ -81,7 +83,12 @@ export interface LanesProps {
   onRecenter?: (t: number) => void;
   /** A drag zooms to its range. */
   onZoom?: (ta: number, tb: number) => void;
+  /** What the recording has captured, banded behind the ticks (REQ-000040-sJpO9KMY). */
+  bands?: readonly { t0: number; t1: number }[];
 }
+
+/** No recording band. */
+const NO_BANDS: readonly { t0: number; t1: number }[] = [];
 
 /** The lanes. */
 export function Lanes({
@@ -99,6 +106,7 @@ export function Lanes({
   onCursor,
   onRecenter,
   onZoom,
+  bands = NO_BANDS,
 }: LanesProps) {
   const drawn = shownView ?? view;
   const downX = useRef<number | null>(null);
@@ -147,6 +155,11 @@ export function Lanes({
       canvas.style.height = `${LANE_HEIGHT}px`;
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.clearRect(0, 0, width, LANE_HEIGHT);
+      // cttc's drawHighlightBands: the recording's band first, behind; no sprocket holes on lanes.
+      if (bands.length > 0) {
+        const area = { left: PLOT_MARGIN_LEFT, width: Math.max(1, width - PLOT_MARGIN_LEFT) };
+        drawBands(ctx, bands, drawn, { ...area, height: LANE_HEIGHT }, RECORDING_BAND_COLOR);
+      }
       ctx.fillStyle = resolveColor(colorForSlot(slots[name] ?? 0, dark), (v) =>
         style.getPropertyValue(v).trim(),
       );
@@ -163,7 +176,7 @@ export function Lanes({
       }
       if (nowT !== null && inView(nowT)) drawNowMark(ctx, xAt(nowT, drawn, width), LANE_HEIGHT);
     }
-  }, [open, width, counts, containers, slots, cursorT, cursorLive, nowT, view, drawn]);
+  }, [open, width, counts, containers, slots, cursorT, cursorLive, nowT, view, drawn, bands]);
 
   return (
     <>

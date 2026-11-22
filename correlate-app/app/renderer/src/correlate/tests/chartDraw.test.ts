@@ -318,9 +318,9 @@ describe("cor-CORE.CORRELATE-000012: recording band", () => {
     expect(ctx.calls).toEqual(["clearRect(0,0,500,100)"]);
   });
 
-  it("punches sprocket holes along the asked edges, every 22 px, and frame lines every third", () => {
+  it("punches sprocket holes along the asked edges, every 22 px, and frame lines every third, as cttc (rounded, on the half pixel)", () => {
     const ctx = fakeCtx();
-    // 0..20 s = 0..100 px: holes at 3.5, 25.5, 47.5, 69.5 (the next would overrun).
+    // 0..20 s = 0..100 px: holes from 7 px in, while one ends 7 px before the band's end (78).
     drawChartStrip(ctx, {
       ...base,
       bands: [{ t0: 0, t1: 20_000 }],
@@ -328,13 +328,16 @@ describe("cor-CORE.CORRELATE-000012: recording band", () => {
     });
     const holes = ctx.calls.filter((c) => c.startsWith("roundRect"));
     expect(holes).toEqual([
-      "roundRect(3.5,2.5,15,9,3)",
-      "roundRect(25.5,2.5,15,9,3)",
-      "roundRect(47.5,2.5,15,9,3)",
-      "roundRect(69.5,2.5,15,9,3)",
+      "roundRect(7,7,15,9,3)",
+      "roundRect(29,7,15,9,3)",
+      "roundRect(51,7,15,9,3)",
+      "roundRect(73,7,15,9,3)",
     ]);
-    // One frame line, in the gap after the third hole.
-    expect(ctx.calls.filter((c) => c.startsWith("moveTo"))).toEqual(["moveTo(66,0)"]);
+    // Frame lines in the gaps after the first and the fourth holes (cttc's i % 3 === 0).
+    expect(ctx.calls.filter((c) => c.startsWith("moveTo"))).toEqual([
+      "moveTo(26.5,0)",
+      "moveTo(92.5,0)",
+    ]);
   });
 
   it("puts holes on the bottom edge of a group's last strip, and none without sprockets", () => {
@@ -344,10 +347,8 @@ describe("cor-CORE.CORRELATE-000012: recording band", () => {
       bands: [{ t0: 0, t1: 10_000 }],
       sprockets: { top: false, bottom: true },
     });
-    expect(ctx.calls.filter((c) => c.startsWith("roundRect"))).toEqual([
-      "roundRect(3.5,88.5,15,9,3)",
-      "roundRect(25.5,88.5,15,9,3)",
-    ]);
+    // 0..50 px: one hole at 7 (the next, at 29, would pass 50 - 7 - 15); 7 px above the bottom.
+    expect(ctx.calls.filter((c) => c.startsWith("roundRect"))).toEqual(["roundRect(7,84,15,9,3)"]);
     const bare = fakeCtx();
     drawChartStrip(bare, { ...base, bands: [{ t0: 0, t1: 10_000 }] });
     expect(bare.calls.some((c) => c.startsWith("roundRect"))).toBe(false);

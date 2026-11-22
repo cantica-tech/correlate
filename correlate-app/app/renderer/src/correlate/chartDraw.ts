@@ -102,7 +102,12 @@ const HOLE_SPACING = 22;
 const HOLE_INSET = 7;
 const FRAME_ALPHA = 0.25;
 
-/** Shade each band; with `sprockets`, punch holes and draw frame lines. */
+/**
+ * Shade each band; with `sprockets`, punch holes and draw frame lines, at
+ * cttc's positions (`drawHighlightBands`, `app.js:723`; REQ-000040-sJpO9KMY):
+ * holes from 7 px inside the band every 22 px, 7 px from the edge; a 1 px
+ * frame line in the gap after every third hole, from the first.
+ */
 export function drawBands(
   ctx: CanvasLike,
   bands: readonly { t0: number; t1: number }[],
@@ -127,13 +132,12 @@ export function drawBands(
     ctx.fillRect(x0, 0, x1 - x0, area.height);
     if (!sprockets) continue;
     const holes: number[] = [];
-    for (let x = x0 + (HOLE_SPACING - HOLE_W) / 2; x + HOLE_W <= x1; x += HOLE_SPACING)
-      holes.push(x);
+    for (let x = x0 + HOLE_INSET; x <= x1 - HOLE_INSET - HOLE_W; x += HOLE_SPACING) holes.push(x);
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "destination-out";
     const rows = [
-      ...(sprockets.top ? [HOLE_INSET - HOLE_H / 2] : []),
-      ...(sprockets.bottom ? [area.height - HOLE_INSET - HOLE_H / 2] : []),
+      ...(sprockets.top ? [HOLE_INSET] : []),
+      ...(sprockets.bottom ? [area.height - HOLE_INSET - HOLE_H] : []),
     ];
     for (const y of rows) {
       for (const x of holes) {
@@ -144,13 +148,16 @@ export function drawBands(
     }
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = FRAME_ALPHA;
-    for (let i = 2; i < holes.length - 1; i += 3) {
-      const x = holes[i] + HOLE_W + (HOLE_SPACING - HOLE_W) / 2;
+    const baseWidth = ctx.lineWidth;
+    ctx.lineWidth = 1;
+    for (let i = 0; i < holes.length; i += 3) {
+      const x = Math.round(holes[i] + HOLE_W + (HOLE_SPACING - HOLE_W) / 2) + 0.5;
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, area.height);
       ctx.stroke();
     }
+    ctx.lineWidth = baseWidth;
   }
   ctx.globalAlpha = baseAlpha;
   ctx.fillStyle = baseFill;

@@ -33,6 +33,7 @@ import { PLOT_MARGIN_LEFT } from "../correlate/axes.js";
 import { assignSlots, colorForSlot, type SlotMap } from "../correlate/colorSlots.js";
 import { rangeView } from "../correlate/zoom.js";
 import { Icon } from "../icons/Icon.js";
+import { bandsAt, type Recorded } from "../recording/bands.js";
 import type { LiveSettings, ShellBridge } from "../shell/bridge.js";
 import { listStreams, type Stream } from "../streams/api.js";
 import { type Arranged, arrange, DRAG_TYPE, moveBy, moveTo } from "./arrange.js";
@@ -129,6 +130,8 @@ export interface ChartBlockProps {
    * containers, and whether its host is read.
    */
   transport?: (target: { stream: string; containers: string[]; host: boolean } | null) => ReactNode;
+  /** What the recording has captured, banded on the live view (REQ-000040-sJpO9KMY). */
+  recorded?: Recorded | null;
   /** A legend entry's right-click: the track's menu (REQ-000035-sJpO9KMY). */
   onLegendMenu?: (name: string, x: number, y: number) => void;
   /** The live view to start from (the one saved when a file was opened). */
@@ -179,6 +182,7 @@ export function ChartBlock({
   onBackToLive,
   onLegendMenu,
   transport,
+  recorded = null,
   initialView = null,
   onViewState,
 }: ChartBlockProps) {
@@ -413,6 +417,7 @@ export function ChartBlock({
     currentView,
     cursor,
     nowT: shownNow,
+    bands: analysis ? [] : bandsAt(recorded, stream?.id, nowT),
     onCursor: setCursor,
     onZoom: zoomTo,
     onRecenter: recenterAt,

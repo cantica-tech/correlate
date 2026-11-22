@@ -19,6 +19,7 @@ import { Lanes } from "../logs/Lanes.js";
 import { Panels, useLogPrefs } from "../logs/Panels.js";
 import { MenuBar } from "../menubar/MenuBar.js";
 import { AbandonProvider, useConfirmAbandon } from "../recording/Abandon.js";
+import { bandsAt, type Recorded, recordedOf } from "../recording/bands.js";
 import { RecoveryDialog } from "../recording/RecoveryDialog.js";
 import { Transport } from "../recording/Transport.js";
 import { StatusBar } from "../statusbar/StatusBar.js";
@@ -100,6 +101,8 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
   const [delaying, setDelaying] = useState<{ name: string; secs: number } | null>(null);
   // The recording session (REQ-000037-sJpO9KMY), and what Start would record.
   const [recording, setRecording] = useState<RecordingState["status"]>("idle");
+  // What it has captured, banded on the live view (REQ-000040-sJpO9KMY).
+  const [recorded, setRecorded] = useState<Recorded | null>(null);
   // A crash's interrupted recording, offered to resume until chosen or put off (REQ-000038-sJpO9KMY).
   const [interrupted, setInterrupted] = useState<{ sumpGone: boolean } | null>(null);
   const recordTarget = useRef<{ stream: string; containers: string[]; host: boolean } | null>(null);
@@ -292,10 +295,12 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
     };
     void bridge.recording.get().then((r) => {
       setRecording(r.status);
+      setRecorded(recordedOf(r));
       offer(r);
     });
     return bridge.recording.onChanged((r) => {
       offer(r);
+      setRecorded(recordedOf(r));
       setRecording((before) => {
         if (before === "stopped" && r.status === "idle")
           void bridge.project?.get().then((p) => take(p));
@@ -495,6 +500,7 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
                 />
               );
             }}
+            recorded={recorded}
             onLegendMenu={analysis ? (name, x, y) => setTrackMenu({ name, x, y }) : undefined}
             analysis={analysis}
             onBackToLive={backToLive}
@@ -514,6 +520,11 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
                 onToggle={logs.setLanesOpen}
                 shownView={shown.shownView}
                 nowT={shown.nowT}
+                bands={
+                  analysis
+                    ? undefined
+                    : bandsAt(recorded, shown.stream.id, shown.nowT ?? Date.now())
+                }
                 cursorT={shown.cursorT}
                 cursorLive={shown.cursorLive}
                 onCursor={shown.setCursor}

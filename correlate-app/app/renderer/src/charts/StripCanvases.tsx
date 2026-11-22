@@ -13,8 +13,12 @@ import { type ChartSeries, drawChartStrip } from "../correlate/chartDraw.js";
 import { colorForSlot, resolveColor } from "../correlate/colorSlots.js";
 import { tToX, xToT } from "../correlate/timeMapping.js";
 import { isClick } from "../correlate/zoom.js";
+import { RECORDING_BAND_COLOR } from "../recording/bands.js";
 import { drawCursorMark, drawNowMark } from "./marks.js";
 import { STRIPS } from "./strips.js";
+
+/** No recording band. */
+const NO_BANDS: readonly { t0: number; t1: number }[] = [];
 
 /** A strip is never shorter than cttc's 44 px. */
 const STRIP_MIN_H = 44;
@@ -65,6 +69,8 @@ export interface StripCanvasesProps {
   currentView: () => Viewport;
   cursor: Cursor | null;
   nowT: number;
+  /** What the recording has captured (REQ-000040-sJpO9KMY). */
+  bands?: readonly { t0: number; t1: number }[];
   /** The strips are not drawn (nothing to show); `children` say why. */
   empty?: boolean;
   hidden?: boolean;
@@ -79,6 +85,7 @@ export interface StripCanvasesProps {
 /** A group of strips. */
 export function StripCanvases(props: StripCanvasesProps) {
   const { id, lines, data, view, cursor, nowT, empty = false, hidden = false } = props;
+  const bands = props.bands ?? NO_BANDS;
   const [size, setSize] = useState({ width: 0, height: 0 });
   const boxRef = useRef<HTMLDivElement>(null);
   const canvases = useRef<(HTMLCanvasElement | null)[]>([]);
@@ -123,6 +130,10 @@ export function StripCanvases(props: StripCanvasesProps) {
       drawChartStrip(ctx, {
         view,
         series,
+        // The film strip bookends the group: holes on top of the first, below the last.
+        bands,
+        bandColor: RECORDING_BAND_COLOR,
+        sprockets: { top: i === 0, bottom: last },
         cursorT: null,
         plotWidth: size.width,
         height,
@@ -148,7 +159,7 @@ export function StripCanvases(props: StripCanvasesProps) {
       ctx.textBaseline = "top";
       ctx.fillText(strip.title, PLOT_MARGIN_LEFT + 6, 4);
     });
-  }, [size, data, lines, view, cursor, nowT, hidden]);
+  }, [size, data, lines, view, cursor, nowT, hidden, bands]);
 
   return (
     <div id={id} ref={boxRef} hidden={hidden}>
