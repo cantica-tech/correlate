@@ -6,7 +6,14 @@ import sys
 from pathlib import Path
 
 import pytest
-from sump_plugin_ssh.streams import Followed, StreamError, StreamStore, check_names, parse_target
+from sump_plugin_ssh.streams import (
+    Followed,
+    StreamDef,
+    StreamError,
+    StreamStore,
+    check_names,
+    parse_target,
+)
 
 
 def test_a_streams_identity_includes_its_ssh_user_host_and_port() -> None:
@@ -90,3 +97,22 @@ def test_a_paused_stream_keeps_its_set_and_is_not_resumed_at_start(tmp_path: Pat
     assert again.all_followed() == {}
     again.set_paused("self", False)
     assert again.all_followed() == {"self": Followed(["web"], [])}
+
+
+def test_creators_and_private_are_kept_and_an_old_store_loads(tmp_path: Path) -> None:
+    """br-STREAM-000006/-000007-sJpO9KMY: kept across restarts; a store from
+    before has no creators (the owner's) and nothing private."""
+    path = tmp_path / "streams.json"
+    path.write_text(
+        '{"streams": [{"id": "ssh:ops@old:22", "kind": "ssh", "user": "ops",'
+        ' "host": "old", "port": 22}], "followed": {}}'
+    )
+    store = StreamStore(path)
+    assert store.creator("ssh:ops@old:22") is None and not store.private("ssh:ops@old:22")
+    store.add(StreamDef("ssh:ops@lab:22", "ssh", "ops", "lab", 22), created_by="bob", private=True)
+    store.add(StreamDef("ssh:ops@lab:22", "ssh", "ops", "lab", 22), created_by="carol")
+    again = StreamStore(path)
+    assert (again.creator("ssh:ops@lab:22"), again.private("ssh:ops@lab:22")) == ("bob", True)
+    again.set_private("ssh:ops@lab:22", False)
+    again.remove("ssh:ops@lab:22")
+    assert StreamStore(path).creator("ssh:ops@lab:22") is None

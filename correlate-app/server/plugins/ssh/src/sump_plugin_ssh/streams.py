@@ -99,10 +99,16 @@ class StreamStore:
         self._paused: set[str] = set()
         #: Promoted streams' secondaries (br-FED-000002): collected there, not here.
         self._secondaries: dict[str, dict[str, Any]] = {}
+        #: Who added each stream (br-STREAM-000006); none kept: the owner's.
+        self._creators: dict[str, str] = {}
+        #: Private streams (br-STREAM-000007): seen by their creator and the owner.
+        self._private: set[str] = set()
         if path.exists():
             saved = json.loads(path.read_text(encoding="utf-8"))
             self._paused = set(saved.get("paused", []))
             self._secondaries = dict(saved.get("secondaries", {}))
+            self._creators = {str(k): str(v) for k, v in saved.get("creators", {}).items()}
+            self._private = set(saved.get("private", []))
             for s in saved.get("streams", []):
                 stream = StreamDef(**s)
                 self._streams[stream.id] = stream
@@ -116,10 +122,18 @@ class StreamStore:
     def get(self, stream_id: str) -> StreamDef | None:
         return self._streams.get(stream_id)
 
-    def add(self, stream: StreamDef) -> StreamDef:
-        """Keep an SSH stream; adding one already kept keeps the first."""
+    def add(
+        self, stream: StreamDef, created_by: str | None = None, private: bool = False
+    ) -> StreamDef:
+        """Keep an SSH stream, and who added it; adding one already kept keeps
+        the first, its creator and privacy."""
         with self._lock:
-            self._streams.setdefault(stream.id, stream)
+            if stream.id not in self._streams:
+                self._streams[stream.id] = stream
+                if created_by:
+                    self._creators[stream.id] = created_by
+                if private:
+                    self._private.add(stream.id)
             self._save()
         return self._streams[stream.id]
 
@@ -129,8 +143,26 @@ class StreamStore:
             stream = self._streams.pop(stream_id, None)
             self._followed.pop(stream_id, None)
             self._paused.discard(stream_id)
+            self._creators.pop(stream_id, None)
+            self._private.discard(stream_id)
             self._save()
         return stream
+
+    def creator(self, stream_id: str) -> str | None:
+        """Who added the stream; None for "self" and streams from before (the owner's)."""
+        return self._creators.get(stream_id)
+
+    def private(self, stream_id: str) -> bool:
+        return stream_id in self._private
+
+    def set_private(self, stream_id: str, private: bool) -> None:
+        """Make a stream private (its creator and the owner only) or shared."""
+        with self._lock:
+            if private:
+                self._private.add(stream_id)
+            else:
+                self._private.discard(stream_id)
+            self._save()
 
     def paused(self, stream_id: str) -> bool:
         return stream_id in self._paused
@@ -183,6 +215,8 @@ class StreamStore:
             "followed": {sid: asdict(f) for sid, f in self._followed.items()},
             "paused": sorted(self._paused),
             "secondaries": self._secondaries,
+            "creators": self._creators,
+            "private": sorted(self._private),
         }
         tmp = self.path.with_suffix(".tmp")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

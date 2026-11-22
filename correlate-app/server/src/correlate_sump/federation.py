@@ -18,11 +18,16 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+#: The user of the request being answered, set by the session guard: the
+#: record queries hide what that user may not see (br-STREAM-000007).
+CURRENT_USER: ContextVar[str | None] = ContextVar("CURRENT_USER", default=None)
 
 #: The prefix of every record stream's key (`ingest.stream_key`).
 KEY_PREFIX = "sump:records:"
@@ -64,9 +69,21 @@ def _ts(fields: Any) -> datetime | None:
 class FederatedRedis:
     """The Redis client, with federated sources' streams joined at their cut."""
 
-    def __init__(self, redis_client: Any, lookup: Callable[[str], Federated | None]) -> None:
+    def __init__(
+        self,
+        redis_client: Any,
+        lookup: Callable[[str], Federated | None],
+        hidden: Callable[[str, str | None], bool] | None = None,
+    ) -> None:
         self._redis = redis_client
         self._lookup = lookup
+        #: Whether a source is hidden from a user (br-STREAM-000007): its
+        #: streams then answer as empty, as for a source that does not exist.
+        self._hidden = hidden
+
+    def _is_hidden(self, name: Any) -> bool:
+        parsed = parse_key(name)
+        return bool(parsed and self._hidden and self._hidden(parsed[0], CURRENT_USER.get()))
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._redis, name)
@@ -106,6 +123,8 @@ class FederatedRedis:
         count: int | None = None,
     ) -> Any:
         """`xrange` as Redis's; a federated source's whole stream joined at its cut."""
+        if self._is_hidden(name):
+            return []
         joined = await self._joined(name)
         if joined is None:
             return await self._redis.xrange(name, min=min, max=max, count=count)
@@ -119,6 +138,8 @@ class FederatedRedis:
         count: int | None = None,
     ) -> Any:
         """`xrevrange` as Redis's; a federated source's whole stream joined at its cut."""
+        if self._is_hidden(name):
+            return []
         joined = await self._joined(name)
         if joined is None:
             return await self._redis.xrevrange(name, max=max, min=min, count=count)

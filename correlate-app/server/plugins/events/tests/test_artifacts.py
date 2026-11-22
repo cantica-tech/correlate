@@ -228,3 +228,22 @@ async def test_the_routes_list_download_only_complete_and_keep(sump: Sump) -> No
     assert (
         await sump.call("POST", f"/artifacts/{artifact}/keep", json={"days": 31})
     ).status_code == 422
+
+
+async def test_an_artifact_leaves_out_what_is_hidden_from_its_owner(sump: Sump) -> None:
+    """br-STREAM-000007-sJpO9KMY: a source hidden from the event's owner is
+    not in its snapshot, nor the host when that is hidden too."""
+    sump.artifacts.hidden = lambda source, user: user == "ann" and source != "self/web"
+    await sump.event({"kind": "snapshot", "minutes": 5}, host=True)
+    await sump.metric("self/db", 40, ago_ms=1 * MIN)
+    await sump.metric("self/__host__", 30, ago_ms=1 * MIN)
+    await sump.metric("self/web", 99)
+    [firing] = await sump.engine.tick()
+    record = await sump.artifacts.get(firing["artifact"])
+    assert record is not None and record["status"] == "complete"
+    manifest, archive = read(sump.folder / f"{record['id']}.recording")
+    files = {s["name"]: s["file"] for s in manifest["segments"][0]["sources"]}
+    assert "host@self" not in files
+    assert all("db" not in n for n in files)
+    series = json.loads(archive.read(files["stats@self"]))["series"]
+    assert list(series) == ["web"]

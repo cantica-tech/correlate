@@ -59,17 +59,28 @@ class SumpPluginEvents:
     @hookimpl
     def register_background_task(self, manager: Any) -> None:
         adapter = manager.ingest_adapter
+
+        def hidden(source: str, user: str) -> bool:
+            # The stream plugins say what is hidden from whom (br-STREAM-000007).
+            try:
+                return bool(manager.hook.source_hidden(source=source, user=user))
+            except Exception:
+                logger.exception("events: source_hidden(%s) failed", source)
+                return False
+
         if adapter is not None:
             self.store = EventStore(adapter.redis)
             # Artifacts in the Sump's data folder, never named by a request.
             folder = data_dir_from_env(self.env) / "artifacts"
-            self.artifacts = Artifacts(adapter.redis, folder, getattr(adapter, "maxlen", None))
+            self.artifacts = Artifacts(
+                adapter.redis, folder, getattr(adapter, "maxlen", None), hidden=hidden
+            )
 
         async def evaluate() -> None:
             if self.store is None:
                 logger.warning("no ingest adapter: events are not evaluated")
                 return
-            await run(Engine(self.store.redis, self.store, artifacts=self.artifacts))
+            await run(Engine(self.store.redis, self.store, artifacts=self.artifacts, hidden=hidden))
 
         manager.add_background_task("evaluation", evaluate)
 

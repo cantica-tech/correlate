@@ -178,6 +178,22 @@ class SumpPluginSSH:
         logger.info("streams: %s promoted; its secondary collects it", stream_id)
         return secondary
 
+    def creator(self, stream_id: str) -> str | None:
+        """Who added the stream; the Sump's owner for "self" and streams from
+        before (br-STREAM-000006-sJpO9KMY)."""
+        return self.store().creator(stream_id) or self.sump_owner()
+
+    def may_see(self, stream_id: str, user: str | None) -> bool:
+        """A shared stream, or the caller its creator or the Sump's owner
+        (br-STREAM-000007-sJpO9KMY)."""
+        if not self.store().private(stream_id):
+            return True
+        return user is not None and user in (self.creator(stream_id), self.sump_owner())
+
+    def may_change(self, stream_id: str, user: str | None) -> bool:
+        """The caller is the stream's creator or the Sump's owner (br-STREAM-000008)."""
+        return user is not None and user in (self.creator(stream_id), self.sump_owner())
+
     def secondary_client(self, stream_id: str) -> SecondaryClient | None:
         """The parent's client of a promoted stream's secondary (br-FED-000002,
         REQ-000052-sJpO9KMY): through its own SSH forward, as `parent_user`."""
@@ -303,6 +319,15 @@ class SumpPluginSSH:
                 await collection.stop()
 
         manager.add_background_task("collection", collect)
+
+    @hookimpl
+    def source_hidden(self, source: str, user: str | None) -> bool | None:
+        """A source of a stream hidden from `user` (br-STREAM-000007-sJpO9KMY);
+        None for a source that is not a stream's here."""
+        stream_id, sep, _name = source.partition("/")
+        if not sep or self.stream(stream_id) is None:
+            return None
+        return not self.may_see(stream_id, user)
 
     @hookimpl
     def federated_source(self, source: str) -> Federated | None:

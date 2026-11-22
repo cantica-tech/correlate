@@ -43,6 +43,10 @@ class FakeCollection:
         self.applied.append((stream_id, followed))
 
 
+#: Who the requests come from: the tests switch users (the Sump's owner is alice).
+CALLER: dict[str, str] = {"user": "alice"}
+
+
 @pytest.fixture
 def setup(tmp_path: Path, monkeypatch):
     plugin = SumpPluginSSH({"SUMP_DATA_DIR": str(tmp_path)})
@@ -57,7 +61,16 @@ def setup(tmp_path: Path, monkeypatch):
         ),
     )
     plugin.collection = cast(Collection, FakeCollection())
+    CALLER["user"] = "alice"
+    monkeypatch.setattr(plugin, "sump_owner", lambda: "alice")
     app = FastAPI()
+
+    @app.middleware("http")
+    async def session(request, call_next):
+        # The Sump's guard puts the caller's session on the request.
+        request.state.session = type("S", (), {"user": CALLER["user"]})()
+        return await call_next(request)
+
     plugin.contribute_routes(app)
     return plugin, docker, TestClient(app)
 
@@ -70,6 +83,8 @@ def test_lists_self_then_the_ssh_streams(setup) -> None:
                 "paused": False,
                 "following": 0,
                 "followed": {"containers": [], "services": []},
+                "created_by": "alice",
+                "private": False,
                 "id": "self",
                 "kind": "self",
                 "label": "This Sump's host",
@@ -243,3 +258,78 @@ def test_promotes_an_ssh_stream_for_the_owner_only(setup, monkeypatch) -> None:
         "reachable": False,
         "error": "the secondary is unreachable: refused",
     }
+
+
+def test_a_stream_records_who_added_it_and_whether_it_is_private(setup) -> None:
+    """br-STREAM-000006-sJpO9KMY: the caller is its creator; private if asked."""
+    plugin, _docker, client = setup
+    CALLER["user"] = "bob"
+    added = client.post("/streams", json={"target": "ops@lab", "port": 22, "private": True})
+    assert added.status_code == 201
+    assert (added.json()["created_by"], added.json()["private"]) == ("bob", True)
+    assert plugin.store().creator("ssh:ops@lab:22") == "bob"
+    # "self" and streams from before are the owner's.
+    listed = {s["id"]: s for s in client.get("/streams").json()["streams"]}
+    assert listed["self"]["created_by"] == "alice"
+
+
+def test_a_private_stream_is_hidden_from_other_users(setup) -> None:
+    """br-STREAM-000007-sJpO9KMY: for carol, bob's private stream does not exist."""
+    plugin, _docker, client = setup
+    CALLER["user"] = "bob"
+    client.post("/streams", json={"target": "ops@lab", "port": 22, "private": True})
+    sid = "ssh:ops@lab:22"
+    CALLER["user"] = "carol"
+    assert [s["id"] for s in client.get("/streams").json()["streams"]] == ["self"]
+    for method, path, body in [
+        ("GET", f"/streams/{sid}/targets", None),
+        ("PUT", f"/streams/{sid}/followed", {"containers": ["web"]}),
+        ("PUT", f"/streams/{sid}/paused", {"paused": True}),
+        ("PUT", f"/streams/{sid}/private", {"private": False}),
+        ("DELETE", f"/streams/{sid}", None),
+        ("GET", f"/streams/{sid}/secondary", None),
+    ]:
+        answer = client.request(method, path, json=body)
+        assert answer.status_code == 404, (method, path)
+        assert answer.json()["detail"] == f"no data stream {sid}" or "not promoted" in str(
+            answer.json()
+        )
+    assert client.post("/streams", json={"target": "ops@lab", "port": 22}).status_code == 409
+    assert plugin.source_hidden(f"{sid}/web", "carol") is True
+    assert plugin.source_hidden(f"{sid}/web", "bob") is False
+    assert plugin.source_hidden(f"{sid}/web", "alice") is False
+    assert plugin.source_hidden("ssh:nobody@gone:22/web", "carol") is None
+    # The owner sees it; shared again, carol does too.
+    CALLER["user"] = "alice"
+    assert sid in [s["id"] for s in client.get("/streams").json()["streams"]]
+    assert client.put(f"/streams/{sid}/private", json={"private": False}).status_code == 200
+    CALLER["user"] = "carol"
+    assert sid in [s["id"] for s in client.get("/streams").json()["streams"]]
+    assert plugin.source_hidden(f"{sid}/web", "carol") is False
+
+
+def test_only_its_creator_and_the_owner_change_a_stream(setup) -> None:
+    """br-STREAM-000008-sJpO9KMY: carol sees and lists bob's shared stream,
+    and changes nothing."""
+    plugin, _docker, client = setup
+    CALLER["user"] = "bob"
+    client.post("/streams", json={"target": "ops@lab", "port": 22})
+    sid = "ssh:ops@lab:22"
+    CALLER["user"] = "carol"
+    assert client.get(f"/streams/{sid}/targets").status_code == 200
+    for method, path, body in [
+        ("PUT", f"/streams/{sid}/followed", {"containers": ["web"]}),
+        ("PUT", f"/streams/{sid}/paused", {"paused": True}),
+        ("PUT", f"/streams/{sid}/private", {"private": True}),
+        ("DELETE", f"/streams/{sid}", None),
+        ("POST", f"/streams/{sid}/promote", {"owner_key": "ssh-ed25519 AAAA"}),
+        ("PUT", "/streams/self/followed", {"containers": ["web"]}),
+    ]:
+        assert client.request(method, path, json=body).status_code == 403, (method, path)
+    assert plugin.store().followed(sid).containers == []
+    assert not plugin.store().paused(sid) and not plugin.store().private(sid)
+    CALLER["user"] = "bob"
+    assert client.put(f"/streams/{sid}/followed", json={"containers": ["web"]}).status_code == 200
+    CALLER["user"] = "alice"
+    assert client.put(f"/streams/{sid}/paused", json={"paused": True}).status_code == 200
+    assert client.delete(f"/streams/{sid}").status_code == 204

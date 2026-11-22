@@ -357,16 +357,24 @@ class Engine:
         store: EventStore | None = None,
         now: Callable[[], float] = lambda: time.time() * 1000,
         artifacts: Artifacts | None = None,
+        hidden: Callable[[str, str], bool] | None = None,
     ) -> None:
         self.redis = redis
         self.store = store or EventStore(redis)
         self.now = now
+        #: Whether a source is hidden from a user (br-STREAM-000007-sJpO9KMY):
+        #: an event sees no data from a source hidden from its owner.
+        self.hidden = hidden
         #: Where a firing's action makes its artifact (Item 47); none, no action.
         self.artifacts = artifacts
 
     async def sources(self, event: Event, kind: str) -> list[str]:
-        """The watched sources of `kind` that have a stream: `<stream>/<container>`."""
-        return await watched_sources(self.redis, event.stream, event.containers, event.host, kind)
+        """The watched sources of `kind` that have a stream: `<stream>/<container>`,
+        those hidden from the event's owner left out (br-STREAM-000007-sJpO9KMY)."""
+        found = await watched_sources(self.redis, event.stream, event.containers, event.host, kind)
+        if self.hidden is None:
+            return found
+        return [s for s in found if not self.hidden(s, event.owner)]
 
     async def tick(self) -> list[dict[str, Any]]:
         """Evaluate every enabled event once; the firings made."""
@@ -500,6 +508,17 @@ class Engine:
         regex = re.compile(cond.pattern)
         positions = event.positions.setdefault(str(index), {})
         hit = None
+        # A source hidden from the owner moves its position to its tail unread:
+        # made shared again, its lines from the private time are not matched.
+        if self.hidden is not None:
+            every = await watched_sources(
+                self.redis, event.stream, event.containers, event.host, "log"
+            )
+            for source in every:
+                if self.hidden(source, event.owner):
+                    last = await self.redis.xrevrange(stream_key(source, "log"), count=1)
+                    if last:
+                        positions[source] = _text(last[0][0])
         for source in await self.sources(event, "log"):
             position = positions.get(source, f"{event.created_at}-0")
             key = stream_key(source, "log")

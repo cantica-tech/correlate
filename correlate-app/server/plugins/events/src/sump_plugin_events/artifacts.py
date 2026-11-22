@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import secrets
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -58,8 +59,16 @@ class ArtifactRefused(Exception):
 class Artifacts:
     """The Sump's artifacts: records in Redis, files in `folder`."""
 
-    def __init__(self, redis: Any, folder: Path, maxlen: int | None = None) -> None:
+    def __init__(
+        self,
+        redis: Any,
+        folder: Path,
+        maxlen: int | None = None,
+        hidden: Callable[[str, str], bool] | None = None,
+    ) -> None:
         self.redis = redis
+        #: An artifact leaves out what is hidden from its owner (br-STREAM-000007).
+        self.hidden = hidden
         self.folder = folder
         #: The streams' cap: a full stream whose oldest record is later than a
         #: recording's start no longer holds it.
@@ -175,6 +184,11 @@ class Artifacts:
                 | set(await watched_sources(self.redis, stream, containers, False, "log"))
             )
             host_source = f"{stream}/{HOST_NAME}" if host else None
+            if self.hidden is not None:
+                owner = str(record.get("owner", ""))
+                names = [n for n in names if not self.hidden(n, owner)]
+                if host_source and self.hidden(host_source, owner):
+                    host_source = None
             if await self._lost_start(
                 [*names, *([host_source] if host_source else [])], record["from"]
             ):

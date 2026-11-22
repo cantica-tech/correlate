@@ -105,6 +105,12 @@ class SumpHookSpecs:
         """A `federation.Federated` when `source` is collected elsewhere from
         some time on (a promoted stream, br-FED-000002-sJpO9KMY), else None."""
 
+    @hookspec(firstresult=True)
+    def source_hidden(self, source: str, user: str | None) -> bool | None:
+        """True when `source` is hidden from `user` (a private stream of
+        someone else, br-STREAM-000007-sJpO9KMY); None when it is not this
+        plugin's to say."""
+
     @hookspec
     def on_health_check(self) -> bool | None:
         """Report this plugin's health. `None` means "not applicable"."""

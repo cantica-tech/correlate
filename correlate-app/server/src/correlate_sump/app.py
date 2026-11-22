@@ -37,7 +37,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from correlate_sump import __version__
 from correlate_sump.buckets import query_buckets
-from correlate_sump.federation import Federated, FederatedRedis
+from correlate_sump.federation import CURRENT_USER, Federated, FederatedRedis
 from correlate_sump.ingest import (
     DEFAULT_HOST,
     DEFAULT_PORT,
@@ -171,7 +171,12 @@ class SessionGuard:
             await response(scope, receive, send)
             return
         scope.setdefault("state", {})["session"] = session
-        await self.app(scope, receive, send)
+        # The record queries hide by this user (br-STREAM-000007-sJpO9KMY).
+        reset = CURRENT_USER.set(session.user)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            CURRENT_USER.reset(reset)
 
 
 def create_app(
@@ -381,8 +386,16 @@ def create_app(
             logger.exception("federation: federated_source(%s) failed", source)
             return None
 
-    #: The query routes' Redis: promoted streams joined at their cut (br-FED-000002).
-    queries = FederatedRedis(redis_client, _federated)
+    def _hidden(source: str, user: str | None) -> bool:
+        try:
+            return bool(plugin_manager.hook.source_hidden(source=source, user=user))
+        except Exception:  # a plugin's failure hides nothing it did not say
+            logger.exception("access: source_hidden(%s) failed", source)
+            return False
+
+    #: The query routes' Redis: promoted streams joined at their cut
+    #: (br-FED-000002), and sources hidden from the caller left out (br-STREAM-000007).
+    queries = FederatedRedis(redis_client, _federated, _hidden)
 
     @app.get("/records")
     async def records(

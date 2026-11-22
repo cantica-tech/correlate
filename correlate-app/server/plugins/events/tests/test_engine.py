@@ -225,3 +225,21 @@ async def test_the_plugin_runs_the_engine_as_a_supervised_background_task(sump: 
     await sump.metric("self/web", cpu_percent=99)
     await run(sump.engine, every=0, ticks=2)
     assert len(await sump.firings()) == 1
+
+
+async def test_an_event_sees_no_data_from_a_source_hidden_from_its_owner(sump: Sump) -> None:
+    """br-STREAM-000007-sJpO9KMY: someone else's private stream feeds no
+    event of ann's, and its lines from the private time never match later."""
+    hidden = {"on": True}
+    sump.engine.hidden = lambda source, user: hidden["on"] and user == "ann"
+    event = await sump.event(
+        conditions=[CPU_OVER_50, {"type": "log", "pattern": "ERROR"}], match="any"
+    )
+    await sump.metric("self/web", cpu_percent=90)
+    await sump.log("self/web", "ERROR while private")
+    assert await sump.engine.tick() == []
+    hidden["on"] = False
+    assert [f["detail"] for f in await sump.engine.tick()] == ["web cpu 90.0 > 50"]
+    stored = await sump.stored(event.id)
+    tail: Any = await sump.redis.xrevrange(stream_key("self/web", "log"), count=1)
+    assert stored.positions["1"] == {"self/web": tail[0][0].decode()}
