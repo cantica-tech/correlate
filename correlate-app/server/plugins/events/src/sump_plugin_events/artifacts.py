@@ -131,6 +131,7 @@ class Artifacts:
             "keep_ms": int(action.keep_days * 24 * 3600 * 1000) or TTL_MS,
             "size": None,
             "reason": None,
+            "note": None,
         }
         await self._save(record)
         if action.kind == "snapshot":
@@ -177,7 +178,10 @@ class Artifacts:
             if await self._lost_start(
                 [*names, *([host_source] if host_source else [])], record["from"]
             ):
-                raise ValueError("the streams no longer hold the start of this recording")
+                if record["kind"] == "recording":
+                    raise ValueError("the streams no longer hold the start of this recording")
+                # A snapshot keeps what the streams still hold, and says so (Item 49).
+                record["note"] = "shorter than asked: a stream no longer held its start"
             if not names and not host_source:
                 raise ValueError("the stream has no data")
             data = await segment(
@@ -231,3 +235,39 @@ class Artifacts:
         await self.complete_due(now)
         if now - self.last_sweep >= SWEEP_EVERY_MS:
             await self.sweep(now)
+
+
+async def window_warnings(redis: Any, event: Event, maxlen: int | None) -> list[str]:
+    """For a snapshot event: the watched streams whose cap, at their current
+    rate, holds less than the event's window (Item 49, instead of a buffer)."""
+    if not maxlen or event.action.kind != "snapshot":
+        return []
+    window_ms = event.action.minutes * 60_000
+    sources = sorted(
+        set(await watched_sources(redis, event.stream, event.containers, event.host, "metric"))
+        | set(await watched_sources(redis, event.stream, event.containers, False, "log"))
+    )
+    warnings = []
+    for source in sources:
+        for kind in ("metric", "log"):
+            key = stream_key(source, kind)
+            count = await redis.xlen(key)
+            if count < 2:
+                continue
+            first = await redis.xrange(key, count=1)
+            last = await redis.xrevrange(key, count=1)
+            span = _id_ms(last[0][0]) - _id_ms(first[0][0])
+            if span <= 0:
+                continue
+            held_ms = maxlen * span / (count - 1)
+            if held_ms < window_ms:
+                warnings.append(
+                    f"{source} {kind}s: about {held_ms / 60_000:.1f} of the "
+                    f"{event.action.minutes:g} minutes are kept at the current rate"
+                )
+    return warnings
+
+
+def _id_ms(entry_id: Any) -> int:
+    """A stream entry id's time (ms)."""
+    return int(_text(entry_id).split("-", 1)[0])

@@ -198,6 +198,7 @@ export function cttcEventFormDialog(): string {
     <label class="ctl block">Name <input id="event-name" type="text" placeholder="e.g. high CPU on api" /></label>
     <div class="dlg-section-help muted">Systems monitored</div>
     <div id="event-systems"><label class="ctl block">Data stream <select id="event-stream"><option value="self" selected>This Sump's host</option></select></label><label class="ctl block"><input type="checkbox" data-event-system="1" value="db"> db (container)</label><label class="ctl block"><input type="checkbox" data-event-system="1" value="web"> web (container)</label><label class="ctl block"><input type="checkbox" data-event-system="1" value="__host__"> host (host)</label></div>
+    <label class="ctl block">Trigger <select id="event-trigger"><option value="conditions">When conditions are met</option><option value="once">Once, at a time</option><option value="cron">On a schedule (cron)</option></select></label>
     <div class="dlg-section-help muted">Conditions (one or more)</div>
     <div id="event-conditions"><div class="keys-box" data-condition-row="1">
     <label class="ctl">Condition

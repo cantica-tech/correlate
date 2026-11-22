@@ -10,7 +10,8 @@ description = "correlate-app Sump plugin: events evaluated on the Sump's live st
 readme = "README.md"
 requires-python = ">=3.13"
 # The Sump's plugin core and its Redis client.
-dependencies = ["correlate-sump", "redis>=5.0"]
+# tzdata: the IANA zones where the system has none (Windows), for schedules.
+dependencies = ["correlate-sump", "redis>=5.0", "tzdata>=2024.1"]
 
 # How the Sump finds this plugin.
 [project.entry-points."sump.plugins"]

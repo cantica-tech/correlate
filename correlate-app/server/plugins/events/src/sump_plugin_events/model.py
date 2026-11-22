@@ -18,6 +18,11 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
+from sump_plugin_events.errors import InvalidEvent
+from sump_plugin_events.schedule import Schedule, parse_schedule
+
+__all__ = ["InvalidEvent"]
+
 #: The comparisons a metric condition may use.
 OPS = (">", "<", ">=", "<=", "=")
 #: The metrics a metric condition may watch.
@@ -35,6 +40,7 @@ DEFINITION = frozenset(
         "conditions",
         "match",
         "action",
+        "schedule",
         "containers",
         "host",
         "enabled",
@@ -43,10 +49,6 @@ DEFINITION = frozenset(
         "version",
     }
 )
-
-
-class InvalidEvent(ValueError):
-    """An event the Sump refuses, with the reason."""
 
 
 @dataclass
@@ -120,6 +122,8 @@ class Event:
     match: Literal["any", "all"] = "any"
     #: What a firing does (Item 47).
     action: Action = field(default_factory=Action)
+    #: When it fires by the clock, besides conditions (Item 49).
+    schedule: Schedule = field(default_factory=Schedule)
     #: The containers watched; empty, all of the stream's.
     containers: list[str] = field(default_factory=list)
     #: The stream's host is watched by its metric conditions too.
@@ -140,6 +144,8 @@ class Event:
     trigger_detail: str | None = None
     #: Per log condition (its index), per source: the last stream id read.
     positions: dict[str, dict[str, str]] = field(default_factory=dict)
+    #: A schedule's next due time (epoch ms); None when it has none left.
+    next_due: int | None = None
 
     def to_json(self) -> dict[str, Any]:
         """The whole event, as the API answers it."""
@@ -164,6 +170,7 @@ class Event:
             conditions=[parse_condition(c) for c in data.get("conditions", [])],
             match="all" if data.get("match") == "all" else "any",
             action=parse_action(data.get("action")),
+            schedule=parse_schedule(data.get("schedule")),
             containers=[str(c) for c in data.get("containers", [])],
             host=data.get("host") is True,
             enabled=data.get("enabled") is not False,
@@ -179,6 +186,7 @@ class Event:
             },
             owner=str(data.get("owner", "")),
             version=int(data.get("version", 1)),
+            next_due=int(data["next_due"]) if data.get("next_due") is not None else None,
         )
         validate(event)
         return event
@@ -215,8 +223,8 @@ def validate(event: Event) -> None:
     for name in event.containers:
         if not isinstance(name, str) or not _NAME.match(name):
             raise InvalidEvent(f"not a container name: {name!r}")
-    if not event.conditions:
-        raise InvalidEvent("an event needs at least one condition")
+    if not event.conditions and event.schedule.kind == "none":
+        raise InvalidEvent("an event needs at least one condition, or a schedule")
     if event.match not in ("any", "all"):
         raise InvalidEvent(f"match must be 'any' or 'all', got {event.match!r}")
     for condition in event.conditions:

@@ -18,6 +18,7 @@ import {
   type Condition,
   createEvent,
   type EventSpec,
+  localZone,
   type SumpEvent,
   updateEvent,
 } from "./api.js";
@@ -68,6 +69,13 @@ export function conditionsOf(rows: readonly Row[]): Condition[] | string {
   return out;
 }
 
+/** Epoch ms as a `datetime-local` input's value, in the app's zone. */
+function localInput(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 /** The dialog's props. */
 export interface EventFormDialogProps {
   open: boolean;
@@ -95,6 +103,10 @@ export function EventFormDialog(props: EventFormDialogProps) {
   const [host, setHost] = useState(false);
   const [rows, setRows] = useState<Row[]>([newRow()]);
   const [match, setMatch] = useState<"any" | "all">("any");
+  // What makes it fire (REQ-000047-sJpO9KMY): its conditions, once, or on cron.
+  const [trigger, setTrigger] = useState<"conditions" | "once" | "cron">("conditions");
+  const [onceAt, setOnceAt] = useState("");
+  const [cron, setCron] = useState("0 2 * * *");
   const [kind, setKind] = useState<"snapshot" | "recording">("snapshot");
   const [minutes, setMinutes] = useState("5");
   const [duration, setDuration] = useState("10");
@@ -113,6 +125,10 @@ export function EventFormDialog(props: EventFormDialogProps) {
     setHost(e?.host ?? false);
     setRows(e ? e.conditions.map(rowOf) : [newRow()]);
     setMatch(e?.match ?? "any");
+    const sched = e?.schedule;
+    setTrigger(sched?.kind === "once" ? "once" : sched?.kind === "cron" ? "cron" : "conditions");
+    setOnceAt(sched?.kind === "once" && sched.at ? localInput(sched.at) : "");
+    setCron(sched?.kind === "cron" && sched.cron ? sched.cron : "0 2 * * *");
     const k = e?.action.kind === "recording" ? "recording" : "snapshot";
     setKind(k);
     setMinutes(k === "snapshot" && e ? String(e.action.minutes) : "5");
@@ -126,8 +142,11 @@ export function EventFormDialog(props: EventFormDialogProps) {
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...change } : r)));
 
   const save = async () => {
-    const conditions = conditionsOf(rows);
+    const conditions = trigger === "conditions" ? conditionsOf(rows) : [];
     if (typeof conditions === "string") return say(conditions);
+    const at = trigger === "once" ? new Date(onceAt).getTime() : null;
+    if (trigger === "once" && (at === null || !Number.isFinite(at)))
+      return say("pick when it fires");
     if (!name.trim()) return say("give the event a name");
     if (!stream) return say("pick a data stream");
     const spec: EventSpec = {
@@ -137,6 +156,12 @@ export function EventFormDialog(props: EventFormDialogProps) {
       host,
       conditions,
       match,
+      schedule:
+        trigger === "once"
+          ? { kind: "once", at, tz: localZone() }
+          : trigger === "cron"
+            ? { kind: "cron", cron: cron.trim(), tz: localZone() }
+            : { kind: "none", tz: localZone() },
       action: {
         kind,
         minutes: Number(kind === "snapshot" ? minutes : duration),
@@ -152,6 +177,8 @@ export function EventFormDialog(props: EventFormDialogProps) {
     }
     if (r.ok) {
       say(`Event "${spec.name}" ${editing ? "updated" : "created"}`);
+      // The Sump's word on a snapshot window its streams do not keep (Item 49).
+      for (const warning of r.value.warnings ?? []) say(`Event "${spec.name}": ${warning}`);
       onSaved(r.value);
       return onClose();
     }
@@ -226,8 +253,43 @@ export function EventFormDialog(props: EventFormDialogProps) {
           host (host)
         </label>
       </div>
-      <div className="dlg-section-help muted">Conditions (one or more)</div>
-      <div id="event-conditions">
+      <label className="ctl block">
+        Trigger{" "}
+        <select
+          id="event-trigger"
+          value={trigger}
+          onChange={(e) => setTrigger(e.currentTarget.value as typeof trigger)}
+        >
+          <option value="conditions">When conditions are met</option>
+          <option value="once">Once, at a time</option>
+          <option value="cron">On a schedule (cron)</option>
+        </select>
+      </label>
+      <label className="ctl block" id="event-once-row" hidden={trigger !== "once"}>
+        At{" "}
+        <input
+          id="event-once-at"
+          type="datetime-local"
+          value={onceAt}
+          onChange={(e) => setOnceAt(e.currentTarget.value)}
+        />{" "}
+        <span className="muted">{localZone()}</span>
+      </label>
+      <label className="ctl block" id="event-cron-row" hidden={trigger !== "cron"}>
+        Cron{" "}
+        <input
+          id="event-cron"
+          type="text"
+          placeholder="minute hour day month weekday, e.g. 0 2 * * *"
+          value={cron}
+          onChange={(e) => setCron(e.currentTarget.value)}
+        />{" "}
+        <span className="muted">{localZone()}</span>
+      </label>
+      <div className="dlg-section-help muted" hidden={trigger !== "conditions"}>
+        Conditions (one or more)
+      </div>
+      <div id="event-conditions" hidden={trigger !== "conditions"}>
         {rows.map((row) => (
           <div className="keys-box" data-condition-row="1" key={row.key}>
             <label className="ctl">
@@ -305,7 +367,7 @@ export function EventFormDialog(props: EventFormDialogProps) {
           </div>
         ))}
       </div>
-      <div className="dlg-actions">
+      <div className="dlg-actions" hidden={trigger !== "conditions"}>
         <button
           type="button"
           id="event-add-condition"
@@ -314,7 +376,11 @@ export function EventFormDialog(props: EventFormDialogProps) {
           + Add condition
         </button>
       </div>
-      <label className="ctl block" id="event-match-row" hidden={rows.length < 2}>
+      <label
+        className="ctl block"
+        id="event-match-row"
+        hidden={rows.length < 2 || trigger !== "conditions"}
+      >
         Trigger when{" "}
         <select
           id="event-match"

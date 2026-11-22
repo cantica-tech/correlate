@@ -19,6 +19,17 @@ export interface Action {
   keep_days: number;
 }
 
+/** When an event fires by the clock (REQ-000047-sJpO9KMY): once, or on cron, in a zone. */
+export interface Schedule {
+  kind: "none" | "once" | "cron";
+  /** `once`: epoch ms. */
+  at?: number | null;
+  /** `cron`: five fields. */
+  cron?: string;
+  /** The IANA zone, e.g. `Europe/Paris`. */
+  tz: string;
+}
+
 /** What the dialog sends: an event's definition. */
 export interface EventSpec {
   name: string;
@@ -28,6 +39,7 @@ export interface EventSpec {
   conditions: Condition[];
   match: "any" | "all";
   action: Action;
+  schedule?: Schedule;
   enabled?: boolean;
 }
 
@@ -41,6 +53,10 @@ export interface SumpEvent extends EventSpec {
   trigger_count: number;
   trigger_detail: string | null;
   triggered_at: number | null;
+  /** A schedule's next due time (epoch ms), or null. */
+  next_due?: number | null;
+  /** On a create or an edit: streams keeping less than a snapshot's window. */
+  warnings?: string[];
 }
 
 /** An artifact, as the Sump answers it. */
@@ -147,6 +163,20 @@ export function conditionsText(event: Pick<EventSpec, "conditions" | "match">): 
       c.type === "metric" ? `${c.metric} ${c.op} ${c.threshold}` : `log ~ /${c.pattern}/`,
     )
     .join(event.match === "all" ? " AND " : " OR ");
+}
+
+/** What makes an event fire, in words: its conditions, or its schedule. */
+export function triggerText(event: Pick<EventSpec, "conditions" | "match" | "schedule">): string {
+  const s = event.schedule;
+  if (s?.kind === "cron") return `cron ${s.cron} (${s.tz})`;
+  if (s?.kind === "once" && s.at != null)
+    return `once at ${new Date(s.at).toLocaleString()} (${s.tz})`;
+  return conditionsText(event);
+}
+
+/** The app's time zone, as the Sump keeps it with a schedule. */
+export function localZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
 /** cttc's summary of an action: `snapshot (last 5m)`, `record 10m`. */

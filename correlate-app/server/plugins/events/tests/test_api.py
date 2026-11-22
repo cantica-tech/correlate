@@ -69,6 +69,7 @@ async def test_an_event_is_its_creators_and_answered_whole(sump: Sump) -> None:
     assert event["conditions"] == [{**CPU, "threshold": 50.0}]
     listed = (await sump.call("GET", "/events")).json()["events"]
     assert [e["id"] for e in listed] == [event["id"]]
+    assert event.pop("warnings") == []
     assert (await sump.call("GET", f"/events/{event['id']}")).json() == event
 
 

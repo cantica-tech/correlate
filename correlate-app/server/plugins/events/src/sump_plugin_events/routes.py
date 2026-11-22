@@ -4,7 +4,8 @@ Behind the Sump's session guard: every call has a user, the D3 identity.
 
 - `GET /events`: the caller's events (all of them for the Sump's owner).
 - `POST /events`: a new event, the caller's; refused (422) if the engine
-  could not evaluate it.
+  could not evaluate it. Its answer (and an edit's) carries `warnings`: the
+  watched streams whose cap holds less than a snapshot's window (Item 49).
 - `GET /events/{id}`: one event the caller sees.
 - `PUT /events/{id}`: an edit, based on `version`; the event's owner only
   (403); a stale version refused (409), never overwritten.
@@ -36,7 +37,7 @@ from fastapi import Body, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
 from correlate_sump.sse import ServerSentEvent, event_stream
-from sump_plugin_events.artifacts import ArtifactRefused, Artifacts
+from sump_plugin_events.artifacts import ArtifactRefused, Artifacts, window_warnings
 from sump_plugin_events.engine import FIRINGS, EventRefused, EventStore, visible
 from sump_plugin_events.model import InvalidEvent
 
@@ -77,6 +78,13 @@ def add_event_routes(
             raise HTTPException(status_code=503, detail="the event engine is not running")
         return found
 
+    async def with_warnings(event: Any) -> dict[str, Any]:
+        """The event, and whether its streams keep its snapshot's window (Item 49)."""
+        found = artifacts()
+        maxlen = found.maxlen if found is not None else None
+        warnings = await window_warnings(the_store().redis, event, maxlen)
+        return {**event.to_json(), "warnings": warnings}
+
     def refused(error: EventRefused | InvalidEvent) -> HTTPException:
         status = 422 if isinstance(error, InvalidEvent) else error.status
         return HTTPException(status_code=status, detail=str(error))
@@ -96,7 +104,7 @@ def add_event_routes(
             event = await the_store().create(spec, caller, now_ms())
         except InvalidEvent as error:
             raise refused(error) from error
-        return event.to_json()
+        return await with_warnings(event)
 
     @app.get("/events/{event_id}")
     async def get_event(event_id: str, request: Request) -> dict[str, Any]:
@@ -119,7 +127,7 @@ def add_event_routes(
             event = await store.update(event_id, spec, caller)
         except (EventRefused, InvalidEvent) as error:
             raise refused(error) from error
-        return event.to_json()
+        return await with_warnings(event)
 
     @app.delete("/events/{event_id}")
     async def delete_event(

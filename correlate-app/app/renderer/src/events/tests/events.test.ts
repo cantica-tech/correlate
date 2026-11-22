@@ -12,6 +12,7 @@ import {
   deleteEvent,
   listEvents,
   type SumpEvent,
+  triggerText,
   updateEvent,
 } from "../api.js";
 import { conditionsOf } from "../EventFormDialog.js";
@@ -84,6 +85,16 @@ describe("REQ-000046-sJpO9KMY: the events API from the app", () => {
     expect(conditionsText({ ...event, match: "all" })).toBe("cpu > 80 AND log ~ /ERROR|FATAL/");
     expect(actionText({ kind: "recording", minutes: 10, keep_days: 0 })).toBe("record 10m");
     expect(actionText(event.action)).toBe("snapshot (last 5m)");
+  });
+
+  it("says what makes an event fire: its conditions, or its schedule (REQ-000047)", () => {
+    expect(triggerText(event)).toBe("cpu > 80 OR log ~ /ERROR|FATAL/");
+    expect(
+      triggerText({ ...event, schedule: { kind: "cron", cron: "0 2 * * *", tz: "Europe/Paris" } }),
+    ).toBe("cron 0 2 * * * (Europe/Paris)");
+    expect(
+      triggerText({ ...event, schedule: { kind: "once", at: Date.UTC(2026, 11, 1), tz: "UTC" } }),
+    ).toMatch(/^once at .+ \(UTC\)$/);
   });
 
   it("says an artifact's state, and why a failed one failed", () => {

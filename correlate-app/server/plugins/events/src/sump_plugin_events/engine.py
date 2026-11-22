@@ -41,6 +41,7 @@ from sump_plugin_events.model import (
     parse_condition,
     validate,
 )
+from sump_plugin_events.schedule import describe, next_due, parse_schedule, zone
 
 if TYPE_CHECKING:
     from sump_plugin_events.artifacts import Artifacts
@@ -139,7 +140,19 @@ class EventConflict(EventRefused):
 
 
 #: The definition fields an edit may change.
-EDITABLE = ("name", "stream", "conditions", "match", "action", "containers", "host", "enabled")
+EDITABLE = (
+    "name",
+    "stream",
+    "conditions",
+    "match",
+    "action",
+    "schedule",
+    "containers",
+    "host",
+    "enabled",
+)
+#: A schedule this late when the engine sees it was missed: said, not run (Item 49).
+MISSED_AFTER_MS = 90_000
 
 
 def state_key(event_id: str) -> str:
@@ -198,10 +211,12 @@ class EventStore:
         except WatchError:
             return False
 
-    async def _seed(self, event: Event) -> None:
-        """Re-arm `event` and put its log positions at the streams' tails."""
+    async def _seed(self, event: Event, now_ms: int | None = None) -> None:
+        """Re-arm `event`, its log positions at the streams' tails, its schedule's next time."""
         event.armed, event.status = True, "armed"
         event.positions = {}
+        now = now_ms if now_ms is not None else int(time.time() * 1000)
+        event.next_due = next_due(event.schedule, now)
         engine = Engine(self.redis, self)
         for index, condition in enumerate(event.conditions):
             if isinstance(condition, LogCondition):
@@ -222,6 +237,7 @@ class EventStore:
             conditions=conditions,
             match=spec.get("match", "any"),
             action=parse_action(spec.get("action")),
+            schedule=parse_schedule(spec.get("schedule"), now_ms),
             containers=list(spec.get("containers") or []),
             host=spec.get("host") is True,
             enabled=spec.get("enabled") is not False,
@@ -230,7 +246,7 @@ class EventStore:
             version=1,
         )
         validate(event)
-        await self._seed(event)
+        await self._seed(event, now_ms)
         async with self.redis.pipeline(transaction=True) as pipe:
             pipe.set(event_key(event.id), json.dumps(event.definition()))
             pipe.set(state_key(event.id), json.dumps(event.state()))
@@ -268,6 +284,8 @@ class EventStore:
                         value = [parse_condition(c) for c in value or []]
                     elif name == "action":
                         value = parse_action(value)
+                    elif name == "schedule":
+                        value = parse_schedule(value, int(time.time() * 1000))
                     elif name in ("host", "enabled"):
                         value = value is True
                     elif name == "containers":
@@ -275,7 +293,11 @@ class EventStore:
                     setattr(edited, name, value)
                 validate(edited)
                 edited.version = current.version + 1
-                reseed = edited.stream != current.stream or edited.conditions != current.conditions
+                reseed = (
+                    edited.stream != current.stream
+                    or edited.conditions != current.conditions
+                    or edited.schedule != current.schedule
+                )
                 if reseed:
                     await self._seed(edited)
                 pipe.multi()
@@ -369,6 +391,8 @@ class Engine:
     async def evaluate(self, event: Event) -> dict[str, Any] | None:
         """Check `event` once, fire it on an edge, keep its state; its firing, if any."""
         now = int(self.now())
+        if event.schedule.kind != "none":
+            return await self._evaluate_schedule(event, now)
         # Every condition, never short-circuited: log positions always move.
         details = [await self._check(event, i, c, now) for i, c in enumerate(event.conditions)]
         hits = [d for d in details if d is not None]
@@ -408,6 +432,44 @@ class Engine:
             firing["artifact"] = artifact or ""
             firing["note"] = note or ""
             await self.redis.xadd(FIRINGS, firing, maxlen=FIRINGS_MAXLEN, approximate=True)
+        return firing
+
+    async def _evaluate_schedule(self, event: Event, now: int) -> dict[str, Any] | None:
+        """Fire a scheduled event when it is due (Item 49); a time missed while
+        the Sump was down is said once as missed, never run late."""
+        due = event.next_due
+        if due is None or due > now:
+            return None
+        missed = now - due > MISSED_AFTER_MS
+        event.trigger_count += 1
+        event.triggered_at = now
+        event.trigger_detail = describe(event.schedule)
+        event.next_due = next_due(event.schedule, now)
+        event.status = "triggered" if event.next_due is None else "armed"
+        if not await self.store.save_state(event):
+            return None
+        firing = {
+            "event": event.id,
+            "name": event.name,
+            "owner": event.owner,
+            "stream": event.stream,
+            "at": str(now),
+            "detail": event.trigger_detail,
+            "count": str(event.trigger_count),
+            "artifact": "",
+            "note": "",
+        }
+        if missed:
+            local = datetime.fromtimestamp(due / 1000, zone(event.schedule.tz))
+            firing["note"] = f"missed: the Sump was not running at {local:%Y-%m-%d %H:%M}"
+        elif self.artifacts is not None:
+            try:
+                artifact, note = await self.artifacts.on_firing(event, now)
+                firing["artifact"], firing["note"] = artifact or "", note or ""
+            except Exception as error:
+                logger.exception("event %s's action failed", event.id)
+                firing["note"] = f"the action failed: {error}"
+        await self.redis.xadd(FIRINGS, firing, maxlen=FIRINGS_MAXLEN, approximate=True)
         return firing
 
     async def _check(self, event: Event, index: int, condition: Any, now: int) -> str | None:

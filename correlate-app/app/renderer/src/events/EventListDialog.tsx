@@ -14,13 +14,13 @@ import type { SumpRequester } from "../shell/bridge.js";
 import {
   type Artifact,
   actionText,
-  conditionsText,
   deleteEvent,
   keepArtifact,
   listArtifacts,
   listEvents,
   resetEvent,
   type SumpEvent,
+  triggerText,
   updateEvent,
 } from "./api.js";
 
@@ -90,7 +90,7 @@ export function EventListDialog(props: EventListDialogProps) {
         {events?.map((ev) => (
           <div key={ev.id}>
             <div className="ctl block">
-              {`${ev.name} -- ${conditionsText(ev)} -> ${actionText(ev.action)} -- ${ev.enabled ? ev.status : "disabled"}${
+              {`${ev.name} -- ${triggerText(ev)} -> ${actionText(ev.action)} -- ${ev.enabled ? ev.status : "disabled"}${
                 ev.status === "triggered" && ev.trigger_detail ? ` (${ev.trigger_detail})` : ""
               } `}
               <button type="button" onClick={() => onEdit(ev)}>
