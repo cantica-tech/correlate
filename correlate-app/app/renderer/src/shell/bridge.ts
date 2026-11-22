@@ -92,6 +92,31 @@ export interface OpenList {
   active: string | null;
 }
 
+/** The window's project, as the main process answers (REQ-000035-sJpO9KMY). */
+export interface ProjectState {
+  ok: boolean;
+  cancelled?: boolean;
+  message?: string;
+  refused?: string[];
+  warnings?: string[];
+  session: {
+    file: string | null;
+    name: string;
+    dirty: boolean;
+    isDefault: boolean;
+    missing: string[];
+    project: {
+      name: string;
+      folders: { id: string; name: string; parent: string | null }[];
+      items: { id: string; path: string; folder: string | null }[];
+      sump: { id: string; stream: string } | null;
+      tracks: Record<string, Record<string, { delaySecs: number; hidden: boolean }>>;
+    };
+  };
+  open: OpenList;
+  recent: string[];
+}
+
 /** The live view's settings, as the main process keeps them (REQ-000031-sJpO9KMY). */
 export interface LiveSettings {
   /** Rows this close to the cursor are highlighted, in s. */
@@ -116,15 +141,25 @@ export interface ShellBridge {
   };
   /** The analysis view's open files (REQ-000033-sJpO9KMY, REQ-000034-sJpO9KMY). */
   analysis?: {
-    open(): Promise<
-      | (OpenList & { ok: true; refused: string[]; warnings: string[] })
-      | { ok: false; cancelled?: true; refused?: string[] }
-    >;
     list(): Promise<OpenList>;
-    switchTo(path: string): Promise<OpenList & { ok: boolean }>;
-    remove(path: string): Promise<OpenList & { ok: boolean }>;
     request: SumpRequester;
     close(): Promise<{ ok: boolean }>;
+  };
+  /** The window's project (REQ-000035-sJpO9KMY). */
+  project?: {
+    get(): Promise<ProjectState>;
+    newProject(): Promise<ProjectState>;
+    open(): Promise<ProjectState>;
+    openFile(file: string): Promise<ProjectState>;
+    save(): Promise<ProjectState>;
+    saveAs(): Promise<ProjectState>;
+    addFiles(): Promise<ProjectState>;
+    show(id: string): Promise<ProjectState>;
+    change(change: Record<string, unknown> & { op: string }): Promise<ProjectState>;
+    tracks(): Promise<{
+      item: string | null;
+      tracks: Record<string, { delaySecs: number; hidden: boolean }>;
+    }>;
   };
   /** The live view's settings (REQ-000031-sJpO9KMY). */
   live?: {

@@ -123,6 +123,8 @@ export interface ChartBlockProps {
   analysis?: { from: number; to: number } | null;
   /** "Back to live tracking" (REQ-000033-sJpO9KMY). */
   onBackToLive?: () => void;
+  /** A legend entry's right-click: the track's menu (REQ-000035-sJpO9KMY). */
+  onLegendMenu?: (name: string, x: number, y: number) => void;
   /** The live view to start from (the one saved when a file was opened). */
   initialView?: ViewState | null;
   /** Told of every change of the view, so the shell can keep the live one. */
@@ -169,6 +171,7 @@ export function ChartBlock({
   onHostToggle,
   analysis = null,
   onBackToLive,
+  onLegendMenu,
   initialView = null,
   onViewState,
 }: ChartBlockProps) {
@@ -494,6 +497,14 @@ export function ChartBlock({
                   aria-pressed={!off}
                   title={`${off ? `Show ${name}` : `Hide ${name}`}; drag, or Alt+arrow, to move it`}
                   onClick={() => toggle(name)}
+                  onContextMenu={
+                    onLegendMenu
+                      ? (e) => {
+                          e.preventDefault();
+                          onLegendMenu(name, e.clientX, e.clientY);
+                        }
+                      : undefined
+                  }
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();

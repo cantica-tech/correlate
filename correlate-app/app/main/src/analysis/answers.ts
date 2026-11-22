@@ -34,10 +34,30 @@ const refuse = (status: number, message: string): FileAnswer => ({
   error: { kind: "http", message, status, detail: message },
 });
 
-/** Answer `request` from `file`; never throws. */
-export function answer(file: FileData, request: FileRequest): FileAnswer {
+/**
+ * Answer `request` from `file`; never throws. `delays`: seconds each
+ * container's data is shifted by (a track's delay, REQ-000035-sJpO9KMY): its
+ * stats and logs answered as if recorded that much later.
+ */
+export function answer(
+  file: FileData,
+  request: FileRequest,
+  delays: Record<string, number> = {},
+): FileAnswer {
   if (request.method !== "GET") return refuse(405, "a file is only read");
-  const q = request.query ?? {};
+  const raw = request.query ?? {};
+  // A delayed track: its window asked that much earlier, its rows told that much later.
+  const delayMs =
+    typeof raw.source === "string"
+      ? (delays[raw.source.slice(FILE_STREAM.length + 1)] ?? 0) * 1000
+      : 0;
+  const shiftTime = (v: unknown) =>
+    typeof v === "string" && Number.isFinite(Date.parse(v))
+      ? new Date(Date.parse(v) - delayMs).toISOString()
+      : v;
+  const q: Record<string, unknown> = delayMs
+    ? { ...raw, from: shiftTime(raw.from), to: shiftTime(raw.to), t: shiftTime(raw.t) }
+    : raw;
   try {
     switch (request.path) {
       case "/streams":
@@ -46,8 +66,15 @@ export function answer(file: FileData, request: FileRequest): FileAnswer {
         return { ok: true, value: rangeOf(file, String(q.sources ?? "")) };
       case "/records/buckets":
         return { ok: true, value: { values: buckets(file, q) } };
-      case "/records/logs":
-        return { ok: true, value: logPage(file, q) };
+      case "/records/logs": {
+        const page = logPage(file, q);
+        if (!delayMs) return { ok: true, value: page };
+        const rows = page.rows.map((r) => ({
+          ...r,
+          ts: new Date(Date.parse(r.ts) + delayMs).toISOString(),
+        }));
+        return { ok: true, value: { ...page, rows } };
+      }
       case "/records/logs/find":
         return { ok: true, value: findRow(file, q) };
       case "/records/logs/at":

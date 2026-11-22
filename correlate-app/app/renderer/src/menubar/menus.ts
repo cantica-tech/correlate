@@ -32,25 +32,50 @@ export interface Menu {
   items: readonly MenuLine[];
 }
 
+/** The File menu's project entries, run by the window, not the main process (REQ-000035-sJpO9KMY). */
+export const PROJECT_ACTIONS: readonly string[] = [
+  "new-project",
+  "open-project",
+  "save-project",
+  "save-project-as",
+  "add-files",
+];
+
 export const MENUS: readonly Menu[] = [
   {
     id: "file",
     label: "File",
     items: [
       {
+        action: "new-project",
+        label: "New Project",
+        icon: "new",
+        title: "Start a correlation project",
+      },
+      {
         action: "open-project",
         label: "Open Project…",
         acc: "Ctrl+O",
         icon: "load-data",
-        later: true,
-        title: "Open a saved project or an imported recording",
+        title: "Open a saved project",
       },
       {
-        action: "opened-data",
-        label: "Opened Data…",
+        action: "save-project",
+        label: "Save Project",
+        acc: "Ctrl+S",
+        title: "Save the project to its file",
+      },
+      {
+        action: "save-project-as",
+        label: "Save Project As…",
+        acc: "Ctrl+Shift+S",
+        title: "Save the project as a new file",
+      },
+      {
+        action: "add-files",
+        label: "Add Files…",
         icon: "opened-data",
-        later: true,
-        title: "Switch to one of the open projects",
+        title: "Add cttc recordings or metrics to the project",
       },
       {
         action: "export",

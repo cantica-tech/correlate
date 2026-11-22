@@ -11,7 +11,14 @@ import { describe, expect, it } from "vitest";
 import { MENU_ACTIONS } from "../../../../main/src/menu.js";
 import { bare, cssBlocks, cttcRules } from "../../testing/cttcCss.js";
 import { MenuBar } from "../MenuBar.js";
-import { accText, MENUS, type MenuItem, SHORTCUTS, shortcutFor } from "../menus.js";
+import {
+  accText,
+  MENUS,
+  type MenuItem,
+  PROJECT_ACTIONS,
+  SHORTCUTS,
+  shortcutFor,
+} from "../menus.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const items = MENUS.flatMap((m) =>
@@ -22,8 +29,11 @@ describe("REQ-000023-sJpO9KMY: the menus", () => {
   it("are cttc's five, with correlate-app's File entries", () => {
     expect(MENUS.map((m) => m.label)).toEqual(["File", "Edit", "View", "Window", "Help"]);
     expect(items.map((i) => i.label)).toEqual([
+      "New Project",
       "Open Project…",
-      "Opened Data…",
+      "Save Project",
+      "Save Project As…",
+      "Add Files…",
       "Export…",
       "Restart",
       "Quit",
@@ -47,7 +57,9 @@ describe("REQ-000023-sJpO9KMY: the menus", () => {
 
   it("ask the main process only for actions it knows; the others are not built yet", () => {
     for (const item of items) {
-      if (item.later) expect(MENU_ACTIONS).not.toContain(item.action);
+      // The project's run in the window (REQ-000035-sJpO9KMY).
+      if (item.later || PROJECT_ACTIONS.includes(item.action))
+        expect(MENU_ACTIONS).not.toContain(item.action);
       else expect(MENU_ACTIONS).toContain(item.action);
     }
     for (const action of Object.values(SHORTCUTS)) expect(MENU_ACTIONS).toContain(action);
@@ -107,9 +119,9 @@ describe("REQ-000023-sJpO9KMY: the bar's markup", () => {
     expect(out).toContain('class="menu-indent">Toggle Developer Tools<span class="acc">F12</span>');
   });
 
-  it("shows File's entries with their icon, disabled until projects land", () => {
+  it("shows File's project entries with their icon, working (REQ-000035-sJpO9KMY)", () => {
     expect(out).toContain(
-      'data-action="open-project" disabled="" title="Open a saved project or an imported recording (Not available yet)"><span class="menu-item-label"><span class="icon ctxmenu-icon" aria-hidden="true">',
+      'data-action="open-project" title="Open a saved project"><span class="menu-item-label"><span class="icon ctxmenu-icon" aria-hidden="true">',
     );
   });
 

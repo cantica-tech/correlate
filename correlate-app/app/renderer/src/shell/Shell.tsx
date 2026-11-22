@@ -14,7 +14,7 @@ import {
 } from "react";
 import { ChartBlock } from "../charts/ChartBlock.js";
 import type { ViewState } from "../charts/viewState.js";
-import { Button, Dialog, SegControl, Switch } from "../components/index.js";
+import { Button, ContextMenu, Dialog, SegControl, Switch } from "../components/index.js";
 import { Lanes } from "../logs/Lanes.js";
 import { Panels, useLogPrefs } from "../logs/Panels.js";
 import { MenuBar } from "../menubar/MenuBar.js";
@@ -25,13 +25,14 @@ import { StreamsDialog } from "../streams/StreamsDialog.js";
 import type {
   LayoutChange,
   LiveSettings,
-  OpenList,
+  ProjectState,
   ShellBridge,
   SidebarLayout,
   ThemeMode,
 } from "./bridge.js";
+import { DelayDialog } from "./DelayDialog.js";
 import { LivePreferences } from "./LivePreferences.js";
-import { OpenedData } from "./OpenedData.js";
+import { ProjectTree, type TreeChange } from "./ProjectTree.js";
 import { Sidebar } from "./Sidebar.js";
 
 /** The splitter's bounds, as the main process checks them. */
@@ -70,11 +71,20 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   const logs = useLogPrefs(bridge);
   // A live view's pause countdown, held in the status bar (REQ-000031-sJpO9KMY).
   const [liveStatus, setLiveStatus] = useState("");
-  // The window's open files and the one shown, null for live (REQ-000033-sJpO9KMY,
-  // REQ-000034-sJpO9KMY); `shown` counts every open and switch, so each one frames anew.
-  const [files, setFiles] = useState<OpenList>({ files: [], active: null });
+  // The window's project, its open files and the one shown, null for live
+  // (REQ-000033-sJpO9KMY, REQ-000034-sJpO9KMY, REQ-000035-sJpO9KMY); `shown`
+  // counts every show, so each one frames the file anew.
+  const [project, setProject] = useState<ProjectState | null>(null);
   const [shown, setShown] = useState(0);
-  const [openedData, setOpenedData] = useState(false);
+  const [tracksVersion, setTracksVersion] = useState(0);
+  // Before a project with changes is replaced: Save, Discard or Cancel.
+  const [asking, setAsking] = useState<(() => void) | null>(null);
+  // A bound project's Sump, offered when it is not the window's.
+  const [offer, setOffer] = useState<{ sump: string; stream: string } | null>(null);
+  // A track's right-click menu and its Delay… dialog (REQ-000035-sJpO9KMY Requirement 5).
+  const [trackMenu, setTrackMenu] = useState<{ name: string; x: number; y: number } | null>(null);
+  const [delaying, setDelaying] = useState<{ name: string; secs: number } | null>(null);
+  const files = project?.open ?? { files: [], active: null };
   const analysis = files.files.find((f) => f.path === files.active) ?? null;
   // The live view, kept while a file is shown, restored on the way back.
   const liveView = useRef<ViewState | null>(null);
@@ -82,68 +92,155 @@ export function Shell({ bridge, detached = false }: ShellProps) {
     liveView.current = state;
   }, []);
 
-  // A bridge answering from the open file: the views ask it as they ask a Sump,
-  // and nothing of it reaches one (br-ANLYS-000001-sJpO9KMY).
+  /** Take the main process's answer; say what went wrong; frame anew when a file is shown. */
+  const take = useCallback(
+    (r: ProjectState | undefined, framed = false) => {
+      if (!r) return;
+      setProject(r);
+      for (const why of r.refused ?? []) void bridge.status.add(why);
+      for (const warning of r.warnings ?? []) void bridge.status.add(warning);
+      if (!r.ok && !r.cancelled && r.message) void bridge.status.add(r.message);
+      if (framed && r.open.active) {
+        setShown((n) => n + 1);
+        setLiveStatus("");
+      }
+    },
+    [bridge],
+  );
+  useEffect(() => {
+    if (!detached) void bridge.project?.get().then((r) => take(r));
+  }, [bridge, detached, take]);
+
+  /** Another project is coming: its Sump offered when it is bound elsewhere. */
+  const arrived = useCallback(
+    async (r: ProjectState | undefined) => {
+      take(r);
+      const sump = r?.ok ? r.session.project.sump : null;
+      if (!sump) return;
+      const current = await bridge.sump.active();
+      if (current?.id !== sump.id) setOffer({ sump: sump.id, stream: sump.stream });
+    },
+    [bridge, take],
+  );
+  /** Run `then` once the project's changes are saved or discarded (asked first). */
+  const guard = useCallback(
+    (then: () => void) => {
+      if (project?.session.dirty) setAsking(() => then);
+      else then();
+    },
+    [project],
+  );
+  const newProject = useCallback(
+    () => guard(() => void bridge.project?.newProject().then((r) => take(r))),
+    [bridge, guard, take],
+  );
+  const openProject = useCallback(
+    () => guard(() => void bridge.project?.open().then(arrived)),
+    [bridge, guard, arrived],
+  );
+  const openRecent = useCallback(
+    (file: string) => guard(() => void bridge.project?.openFile(file).then(arrived)),
+    [bridge, guard, arrived],
+  );
+  const saveProject = useCallback(
+    () => void bridge.project?.save().then((r) => take(r)),
+    [bridge, take],
+  );
+  const saveProjectAs = useCallback(
+    () => void bridge.project?.saveAs().then((r) => take(r)),
+    [bridge, take],
+  );
+  const addFiles = useCallback(
+    () => void bridge.project?.addFiles().then((r) => take(r, true)),
+    [bridge, take],
+  );
+  const showFile = useCallback(
+    (id: string) => void bridge.project?.show(id).then((r) => take(r, true)),
+    [bridge, take],
+  );
+  const changeProject = useCallback(
+    (change: TreeChange | { op: "bind"; sump: string; stream: string }) =>
+      void bridge.project?.change(change).then((r) => {
+        const before = project?.open.active ?? null;
+        take(r, r ? r.open.active !== before && r.open.active !== null : false);
+      }),
+    [bridge, take, project],
+  );
+  const bind = useCallback(async () => {
+    const sump = await bridge.sump.active();
+    const stream = await bridge.stream?.active();
+    if (!sump || !stream)
+      return void bridge.status.add("Pick a data stream first: the project binds to it");
+    changeProject({ op: "bind", sump: sump.id, stream });
+  }, [bridge, changeProject]);
+  /** Switch the window to the bound project's Sump and stream (the offer is the confirmation). */
+  const switchToBound = useCallback(async () => {
+    if (!offer) return;
+    setOffer(null);
+    const listed = await bridge.sump.list();
+    if (!listed.some((s) => s.id === offer.sump)) {
+      return void bridge.status.add(
+        `The project's Sump ${offer.sump} is not in the catalog; nothing switched`,
+      );
+    }
+    const r = await bridge.sump.switchTo({ id: offer.sump, confirmed: true });
+    if (!r.ok) return void bridge.status.add(r.message);
+    await bridge.stream?.setActive(offer.stream);
+    streamsChanged();
+  }, [bridge, offer, streamsChanged]);
+
+  // A bridge answering from the shown file: the views ask it as they ask a Sump,
+  // and nothing of it reaches one (br-ANLYS-000001-sJpO9KMY). Its tracks'
+  // visibility is kept in the project (REQ-000035-sJpO9KMY).
   const fileBridge = useMemo<ShellBridge | null>(() => {
-    const files = bridge.analysis;
-    if (!analysis || !files) return null;
+    const filesApi = bridge.analysis;
+    const projectApi = bridge.project;
+    if (!analysis || !filesApi || !projectApi) return null;
     return {
       ...bridge,
-      sump: { ...bridge.sump, request: files.request },
+      sump: { ...bridge.sump, request: filesApi.request },
       stream: { active: async () => "file", setActive: async () => ({ ok: true }) },
-      series: undefined,
+      series: {
+        get: async () => {
+          const { tracks } = await projectApi.tracks();
+          return { order: [], hidden: Object.keys(tracks).filter((n) => tracks[n]?.hidden) };
+        },
+        set: async ({ hidden }) => {
+          const { item, tracks } = await projectApi.tracks();
+          if (!item) return { ok: false };
+          const names = new Set([...Object.keys(tracks), ...hidden]);
+          for (const name of names) {
+            const wanted = hidden.includes(name);
+            if ((tracks[name]?.hidden ?? false) !== wanted) {
+              // The tree shows the project as changed (unsaved) at once.
+              take(
+                await projectApi.change({ op: "setTrack", item, container: name, hidden: wanted }),
+              );
+            }
+          }
+          return { ok: true };
+        },
+      },
     };
-  }, [bridge, analysis]);
+  }, [bridge, analysis, take]);
 
-  /** Show what the main process says is open; a new open or switch frames the file again. */
-  const show = useCallback((list: OpenList) => {
-    setFiles({ files: list.files, active: list.active });
-    setShown((n) => n + 1);
-    if (list.active) setLiveStatus("");
-  }, []);
-
-  /** Open cttc files in this window's analysis view (Open Project…, for now). */
-  const openFiles = useCallback(async () => {
-    const r = await bridge.analysis?.open();
-    if (!r) return;
-    for (const why of r.refused ?? []) void bridge.status.add(why);
-    if (!r.ok) return;
-    show(r);
-    for (const warning of r.warnings) void bridge.status.add(warning);
-    const active = r.files.find((f) => f.path === r.active);
-    if (active) void bridge.status.add(`Opened ${active.label} in analysis mode`);
-  }, [bridge, show]);
-  /** Opened Data…: switch to an open file. */
-  const switchTo = useCallback(
-    async (path: string) => {
-      setOpenedData(false);
-      const r = await bridge.analysis?.switchTo(path);
-      if (r?.ok) show(r);
-    },
-    [bridge, show],
-  );
-  /** Opened Data…: close a file; the view falls back to another, or to live. */
-  const remove = useCallback(
-    async (path: string) => {
-      const r = await bridge.analysis?.remove(path);
-      if (!r) return;
-      const changed = r.active !== files.active;
-      setFiles({ files: r.files, active: r.active });
-      if (changed) setShown((n) => n + 1);
-    },
-    [bridge, files.active],
-  );
   /** Back to live tracking: the files stay open. */
   const backToLive = useCallback(() => {
     void bridge.analysis?.close();
-    setFiles((f) => ({ ...f, active: null }));
+    setProject((p) => (p ? { ...p, open: { ...p.open, active: null } } : p));
   }, [bridge]);
-  const showOpenedData = useCallback(async () => {
-    const list = await bridge.analysis?.list();
-    if (list)
-      setFiles((f) => ({ files: list.files, active: f.active === null ? null : list.active }));
-    setOpenedData(true);
-  }, [bridge]);
+  /** A track's delay, set from its legend entry's menu. */
+  const setDelay = useCallback(
+    async (name: string, secs: number) => {
+      const { item } = (await bridge.project?.tracks()) ?? { item: null };
+      if (!item) return;
+      take(
+        await bridge.project?.change({ op: "setTrack", item, container: name, delaySecs: secs }),
+      );
+      setTracksVersion((v) => v + 1);
+    },
+    [bridge, take],
+  );
 
   useEffect(() => {
     let live = true;
@@ -174,8 +271,9 @@ export function Shell({ bridge, detached = false }: ShellProps) {
       if (name === "edit-data-streams") setStreams("edit");
       if (name === "remove-data-stream") setRemoving(true);
       if (name === "close-data-streams") void closeActive();
-      if (name === "open-project") void openFiles();
-      if (name === "opened-data") void showOpenedData();
+      if (name === "new-project") newProject();
+      if (name === "open-project") openProject();
+      if (name === "add-files") addFiles();
       if (name === "preferences") {
         void bridge.theme.get().then(setTheme);
         void bridge.status.visible().then(setStatusBar);
@@ -183,7 +281,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
         setPreferences(true);
       }
     });
-  }, [bridge, detached, closeActive, openFiles, showOpenedData]);
+  }, [bridge, detached, closeActive, newProject, openProject, addFiles]);
 
   /** Keep a live setting; the field shows what the main process kept. */
   const changeLive = useCallback(
@@ -203,7 +301,18 @@ export function Shell({ bridge, detached = false }: ShellProps) {
     [bridge],
   );
   const action = useCallback((name: string) => void bridge.sidebar.action(name), [bridge]);
-  const menuAction = useCallback((name: string) => void bridge.menu.action(name), [bridge]);
+  // The File menu's project entries run here; the others in the main process.
+  const menuAction = useCallback(
+    (name: string) => {
+      if (name === "new-project") return newProject();
+      if (name === "open-project") return openProject();
+      if (name === "save-project") return saveProject();
+      if (name === "save-project-as") return saveProjectAs();
+      if (name === "add-files") return addFiles();
+      void bridge.menu.action(name);
+    },
+    [bridge, newProject, openProject, saveProject, saveProjectAs, addFiles],
+  );
 
   // Drag the splitter to resize, as cttc's (app.js:4512-4536).
   const drag = (event: ReactMouseEvent) => {
@@ -232,7 +341,36 @@ export function Shell({ bridge, detached = false }: ShellProps) {
 
   if (!layout) return null;
   const sidebar = (
-    <Sidebar layout={layout} detached={detached} onChange={change} onAction={action} />
+    <Sidebar
+      layout={layout}
+      detached={detached}
+      onChange={change}
+      onAction={action}
+      projectTree={
+        project && !detached ? (
+          <ProjectTree
+            project={{
+              name: project.session.name,
+              dirty: project.session.dirty,
+              isDefault: project.session.isDefault,
+              folders: project.session.project.folders,
+              items: project.session.project.items,
+              sump: project.session.project.sump,
+              missing: project.session.missing,
+            }}
+            open={project.open}
+            recent={project.recent}
+            onShow={showFile}
+            onChange={changeProject}
+            onAddFiles={addFiles}
+            onSave={saveProject}
+            onSaveAs={saveProjectAs}
+            onOpenRecent={openRecent}
+            onBind={() => void bind()}
+          />
+        ) : undefined
+      }
+    />
   );
   if (detached) return sidebar;
   return (
@@ -246,7 +384,8 @@ export function Shell({ bridge, detached = false }: ShellProps) {
           <ChartBlock
             key={analysis ? `file:${analysis.path}:${shown}` : "live"}
             bridge={fileBridge ?? bridge}
-            version={streamsVersion}
+            version={streamsVersion + tracksVersion}
+            onLegendMenu={analysis ? (name, x, y) => setTrackMenu({ name, x, y }) : undefined}
             analysis={analysis}
             onBackToLive={backToLive}
             initialView={analysis ? null : liveView.current}
@@ -334,13 +473,87 @@ export function Shell({ bridge, detached = false }: ShellProps) {
           streamsChanged();
         }}
       />
-      <OpenedData
-        open={openedData}
-        list={files}
-        onSwitch={(path) => void switchTo(path)}
-        onRemove={(path) => void remove(path)}
-        onClose={() => setOpenedData(false)}
+      {trackMenu ? (
+        <ContextMenu
+          x={trackMenu.x}
+          y={trackMenu.y}
+          label={`Track ${trackMenu.name}`}
+          onClose={() => setTrackMenu(null)}
+          entries={[
+            {
+              label: "Delay…",
+              title: "Shift this track's data, to line up captures from clocks that differ",
+              onSelect: () => {
+                const name = trackMenu.name;
+                void bridge.project
+                  ?.tracks()
+                  .then(({ tracks }) => setDelaying({ name, secs: tracks[name]?.delaySecs ?? 0 }));
+              },
+            },
+          ]}
+        />
+      ) : null}
+      <DelayDialog
+        delaying={delaying}
+        onClose={() => setDelaying(null)}
+        onSet={(name, secs) => void setDelay(name, secs)}
       />
+      <Dialog
+        id="dlg-project-unsaved"
+        open={asking !== null}
+        onClose={() => setAsking(null)}
+        title="Save the project?"
+        actions={
+          <>
+            <Button onClick={() => setAsking(null)}>Cancel</Button>
+            <Button
+              kind="danger"
+              onClick={() => {
+                const then = asking;
+                setAsking(null);
+                then?.();
+              }}
+            >
+              Discard
+            </Button>
+            <Button
+              kind="primary"
+              onClick={async () => {
+                const then = asking;
+                setAsking(null);
+                const r = await bridge.project?.save();
+                take(r);
+                if (r?.ok) then?.();
+              }}
+            >
+              Save
+            </Button>
+          </>
+        }
+      >
+        <p className="dlg-intro">
+          {project?.session.name} has changes not saved. Discarded changes are lost.
+        </p>
+      </Dialog>
+      <Dialog
+        id="dlg-project-sump"
+        open={offer !== null}
+        onClose={() => setOffer(null)}
+        title="Switch to the project's Sump?"
+        actions={
+          <>
+            <Button onClick={() => setOffer(null)}>Stay</Button>
+            <Button kind="primary" onClick={() => void switchToBound()}>
+              Switch
+            </Button>
+          </>
+        }
+      >
+        <p className="dlg-intro">
+          This project is bound to the Sump {offer?.sump} and its data stream {offer?.stream}.
+          Switching moves this window to them.
+        </p>
+      </Dialog>
       <RemoveDialog
         bridge={bridge}
         open={removing}

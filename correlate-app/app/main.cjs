@@ -35,6 +35,7 @@ const {
   configuredSumps,
   OPENED_EXTENSIONS,
   OpenFiles,
+  Projects,
   openCatalog,
   openVault,
   registerMenuIpc,
@@ -42,6 +43,7 @@ const {
   registerLiveIpc,
   registerLogsIpc,
   registerPickerIpc,
+  registerProjectIpc,
   registerSeriesIpc,
   registerProvisionIpc,
   registerSidebarIpc,
@@ -52,6 +54,7 @@ const {
   runCommand,
   reloginWith,
   SessionTokens,
+  shownTracks,
   Settings,
   SidebarHost,
   startForwards,
@@ -63,6 +66,8 @@ let activeSumps;
 const activeStreams = new ActiveStreams();
 /** Each window's open file, in the analysis view (REQ-033). */
 const openFiles = new OpenFiles();
+/** Each window's project (REQ-035); set once the app is ready. */
+let projectsReady = null;
 /** The main window, the one the sidebar's actions act on (REQ-000021). */
 let mainWindow = null;
 /** The sidebar's layout and detached window (REQ-000021); set once the app is ready. */
@@ -104,10 +109,41 @@ function createWindow() {
   // Each window has its own active Sump, starting on the last one used.
   const id = window.webContents.id;
   activeSumps?.open(id);
+  // A project with unsaved changes is asked about before the window goes (REQ-035).
+  let closing = false;
+  window.on("close", (event) => {
+    if (closing || !projectsReady?.dirty(id)) return;
+    event.preventDefault();
+    const name = projectsReady.view(id).name;
+    void dialog
+      .showMessageBox(window, {
+        type: "question",
+        buttons: ["Save", "Discard", "Cancel"],
+        defaultId: 0,
+        cancelId: 2,
+        message: `Save the changes to the project ${name}?`,
+        detail: "Discarded changes are lost.",
+      })
+      .then(async ({ response }) => {
+        if (response === 2) return;
+        if (response === 0 && !projectsReady.save(id)) {
+          const r = await dialog.showSaveDialog(window, {
+            title: "Save Project As",
+            defaultPath: `${name}.correlator`,
+            filters: [{ name: "Projects", extensions: ["correlator"] }],
+          });
+          if (r.canceled || !r.filePath) return;
+          projectsReady.saveAs(id, r.filePath);
+        }
+        closing = true;
+        window.close();
+      });
+  });
   window.on("closed", () => {
     activeSumps?.close(id);
     activeStreams.close(id);
     openFiles.close(id);
+    projectsReady?.close(id);
     if (mainWindow === window) {
       mainWindow = null;
       // The detached sidebar goes with the main window, and stays detached.
@@ -235,20 +271,54 @@ app.whenReady().then(() => {
   });
   // The analysis view: a cttc file opened read-only, its data answered here,
   // never sent to a Sump (REQ-033).
-  registerAnalysisIpc(ipcMain, openFiles, {
-    ask: async (event) => {
-      const window = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+  // Projects (REQ-035): each window's, the default beside the settings; its
+  // files shown through the analysis view's open files (REQ-033, REQ-034),
+  // read by this process and never sent to a Sump.
+  const projects = new Projects(path.dirname(defaultSettingsPath(process.env)), settings);
+  registerAnalysisIpc(ipcMain, openFiles, (window) => {
+    const { tracks } = shownTracks(projects, openFiles, window);
+    return Object.fromEntries(Object.entries(tracks).map(([name, t]) => [name, t.delaySecs]));
+  });
+  const windowOfEvent = (event) => BrowserWindow.fromWebContents(event.sender) ?? undefined;
+  registerProjectIpc(ipcMain, projects, openFiles, {
+    askProject: async (event) => {
       const options = {
-        title: "Open recordings",
+        title: "Open Project",
+        properties: ["openFile"],
+        filters: [{ name: "Projects", extensions: ["correlator"] }],
+      };
+      const window = windowOfEvent(event);
+      const r = window
+        ? await dialog.showOpenDialog(window, options)
+        : await dialog.showOpenDialog(options);
+      return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0];
+    },
+    askSaveAs: async (event, suggested) => {
+      const options = {
+        title: "Save Project As",
+        defaultPath: suggested,
+        filters: [{ name: "Projects", extensions: ["correlator"] }],
+      };
+      const window = windowOfEvent(event);
+      const r = window
+        ? await dialog.showSaveDialog(window, options)
+        : await dialog.showSaveDialog(options);
+      return r.canceled || !r.filePath ? null : r.filePath;
+    },
+    askFiles: async (event) => {
+      const options = {
+        title: "Add Files",
         properties: ["openFile", "multiSelections"],
         filters: [{ name: "cttc recordings and metrics", extensions: OPENED_EXTENSIONS }],
       };
+      const window = windowOfEvent(event);
       const r = window
         ? await dialog.showOpenDialog(window, options)
         : await dialog.showOpenDialog(options);
       return r.canceled ? [] : r.filePaths;
     },
   });
+  projectsReady = projects;
   // Notifications and their History, one feed for every window; a Sump a
   // window is on that is lost or comes back is notified (REQ-000022).
   const notifications = new Notifications();

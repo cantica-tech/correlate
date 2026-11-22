@@ -4,14 +4,14 @@
  * by their full path (br-ANLYS-000005-sJpO9KMY), one of them active, each
  * read once and kept in memory while open.
  *
- * - `analysis:open`: the open dialog first (several files at once); each new
- *   file read, one already open switched to; the last chosen becomes active.
- *   A file without data, or one that cannot be read, is refused.
- * - `analysis:list`: the open files and the active one (Opened Data…).
- * - `analysis:switch` (path): make an open file the active one.
- * - `analysis:remove` (path): close it, the file on disk untouched; the
- *   active one falls back to the last opened of those left, or to none
- *   (live) when none are left (br-ANLYS-000006-sJpO9KMY).
+ * `openFiles` reads several files at once (each new one read, one already
+ * open switched to; the last becomes active; a file without data, or one that
+ * cannot be read, refused); `OpenFiles.remove` closes one, the file on disk
+ * untouched, the active one falling back to the last opened of those left, or
+ * to none (live) (br-ANLYS-000006-sJpO9KMY). The project's channels
+ * (REQ-000035-sJpO9KMY) use both.
+ *
+ * - `analysis:list`: the open files and the active one.
  * - `analysis:close`: back to live; the files stay open.
  * - `analysis:request`: one of the views' queries, answered from the
  *   window's active file only (`answers.ts`).
@@ -23,10 +23,7 @@ import { answer, type FileAnswer, type FileRequest } from "./answers.js";
 import { type FileData, readCttcArchive } from "./archive.js";
 import { DEFAULT_LIMITS } from "./zip.js";
 
-export const ANALYSIS_OPEN_CHANNEL = "analysis:open";
 export const ANALYSIS_LIST_CHANNEL = "analysis:list";
-export const ANALYSIS_SWITCH_CHANNEL = "analysis:switch";
-export const ANALYSIS_REMOVE_CHANNEL = "analysis:remove";
 export const ANALYSIS_REQUEST_CHANNEL = "analysis:request";
 export const ANALYSIS_CLOSE_CHANNEL = "analysis:close";
 
@@ -196,33 +193,36 @@ export async function openFiles(
   return { ok: true, ...files.list(window), refused, warnings };
 }
 
-/** Answer a query for the window's active file; refused when it shows live. */
-export function fileRequest(files: OpenFiles, window: number, message: unknown): FileAnswer {
+/** Answer a query for the window's active file, its tracks' delays applied; refused in live. */
+export function fileRequest(
+  files: OpenFiles,
+  window: number,
+  message: unknown,
+  delays: Record<string, number> = {},
+): FileAnswer {
   const file = files.get(window);
   if (!file) {
     const why = "this window shows no file";
     return { ok: false, error: { kind: "http", message: why, status: 409, detail: why } };
   }
-  return answer(file, (message ?? {}) as FileRequest);
+  return answer(file, (message ?? {}) as FileRequest, delays);
 }
 
-/** Answer the channels. */
-export function registerAnalysisIpc(ipcMain: IpcMainLike, files: OpenFiles, deps: AnalysisDeps) {
-  ipcMain.handle(ANALYSIS_OPEN_CHANNEL, (event) => openFiles(event, files, deps));
+/**
+ * Answer the analysis view's channels (its files are opened, shown and removed
+ * through the project's, `../projects/ipc.ts`); `delays` gives the shown
+ * file's tracks' delays, in seconds, by container.
+ */
+export function registerAnalysisIpc(
+  ipcMain: IpcMainLike,
+  files: OpenFiles,
+  delays: (window: number) => Record<string, number> = () => ({}),
+) {
   ipcMain.handle(ANALYSIS_LIST_CHANNEL, (event) => files.list(windowOf(event)));
-  ipcMain.handle(ANALYSIS_SWITCH_CHANNEL, (event, file) => {
+  ipcMain.handle(ANALYSIS_REQUEST_CHANNEL, (event, message) => {
     const window = windowOf(event);
-    const ok = typeof file === "string" && files.switchTo(window, file);
-    return { ok, ...files.list(window) };
+    return fileRequest(files, window, message, delays(window));
   });
-  ipcMain.handle(ANALYSIS_REMOVE_CHANNEL, (event, file) => {
-    const window = windowOf(event);
-    if (typeof file === "string") files.remove(window, file);
-    return { ok: true, ...files.list(window) };
-  });
-  ipcMain.handle(ANALYSIS_REQUEST_CHANNEL, (event, message) =>
-    fileRequest(files, windowOf(event), message),
-  );
   ipcMain.handle(ANALYSIS_CLOSE_CHANNEL, (event) => {
     files.leave(windowOf(event));
     return { ok: true };

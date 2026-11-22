@@ -43,7 +43,7 @@ describe("br-STYLE-000001-sJpO9KMY: the sidebar", () => {
         "Remove Data Stream…",
         "—",
       ],
-      ["New Project…", "Open Project…", "Opened Data…", "—"],
+      ["New Project…", "Open Project…", "Add Files…", "—"],
       ["Create Event…", "Edit Events…", "—"],
     ]);
   });
@@ -120,6 +120,7 @@ describe("br-STYLE-000001-sJpO9KMY: shell.css is cttc's", () => {
   it("lists every block of ours with its reason", () => {
     expect(blocks.filter((b) => !b.from).map((b) => b.head)).toEqual([
       expect.stringMatching(/^ours: cttc's body is the flex column/),
+      expect.stringMatching(/^ours: the project tree/),
     ]);
   });
 });

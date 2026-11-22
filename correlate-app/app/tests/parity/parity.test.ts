@@ -29,7 +29,6 @@ import {
 import { cttcLivePrefs } from "./cttcLive.js";
 import { cttcLanesHead, cttcPanels, cttcRowsScript } from "./cttcLogs.js";
 import { cttcMenuBar } from "./cttcMenuBar.js";
-import { cttcOpenedData } from "./cttcOpened.js";
 import { cttcSidebar, cttcWidthScript } from "./cttcSidebar.js";
 import { cttcPillMenu, cttcStatusBar } from "./cttcStatusBar.js";
 import { cttcRemoveDialog, cttcStreamsDialog } from "./cttcStreams.js";
@@ -79,7 +78,6 @@ async function buildOurs(): Promise<void> {
       path.join(here, "page/ours-menubar.tsx"),
       path.join(here, "page/ours-streams.tsx"),
       path.join(here, "page/ours-remove.tsx"),
-      path.join(here, "page/ours-opened.tsx"),
       path.join(here, "page/ours-charts.tsx"),
       path.join(here, "page/ours-logs.tsx"),
     ],
@@ -308,27 +306,6 @@ async function captureRemove(side: "cttc" | "ours", pictures: Map<string, Buffer
   }
 }
 
-/** The Opened Data dialog, with files and empty (REQ-000034-sJpO9KMY Requirement 4). */
-async function captureOpened(side: "cttc" | "ours", pictures: Map<string, Buffer>): Promise<void> {
-  for (const theme of THEMES) {
-    await page.emulateMedia({ colorScheme: theme });
-    for (const empty of [false, true]) {
-      const url = pathToFileURL(path.join(here, `page/${side}-opened.html`)).href;
-      await page.goto(empty ? `${url}?empty` : url);
-      if (side === "cttc") {
-        await page.evaluate(
-          `(() => { document.body.insertAdjacentHTML("beforeend", ${JSON.stringify(cttcOpenedData(empty))}); document.getElementById("dlg-opened-data").showModal(); })()`,
-        );
-      }
-      await page.waitForSelector("#dlg-opened-data[open]");
-      await page.evaluate("document.activeElement?.blur()");
-      await page.mouse.move(1, 1);
-      await page.evaluate("document.fonts.ready.then(() => true)");
-      pictures.set(`opened-data${empty ? "-empty" : ""}-${theme}`, await shoot("#dlg-opened-data"));
-    }
-  }
-}
-
 /**
  * The charts' head and legend (REQ-000028-sJpO9KMY Requirement 4): on cttc's
  * page, cttc's chart block with its swatches colored by script; on ours, our
@@ -480,8 +457,6 @@ describe.skipIf(process.platform !== "darwin")(
       await captureStreams("ours", ours);
       await captureRemove("cttc", cttc);
       await captureRemove("ours", ours);
-      await captureOpened("cttc", cttc);
-      await captureOpened("ours", ours);
       await captureCharts("cttc", cttc);
       await captureCharts("ours", ours);
       await captureLogs("cttc", cttc);
@@ -501,8 +476,6 @@ describe.skipIf(process.platform !== "darwin")(
       ...MENUBAR_CASES.map((c) => `menubar-${c}`),
       "streams-dialog",
       "remove-dialog",
-      "opened-data",
-      "opened-data-empty",
       "charts-head",
       "charts-legend",
       "charts-nav",

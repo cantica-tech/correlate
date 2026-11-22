@@ -36,7 +36,7 @@ export const SIDEBAR_ACTIONS = [
   "remove-data-stream",
   "new-project",
   "open-project",
-  "opened-data",
+  "add-files",
   "create-event",
   "edit-events",
   "preferences",

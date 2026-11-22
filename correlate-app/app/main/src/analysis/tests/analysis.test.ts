@@ -7,10 +7,7 @@ import { manifestHash, readCttcArchive } from "../archive.js";
 import {
   ANALYSIS_CLOSE_CHANNEL,
   ANALYSIS_LIST_CHANNEL,
-  ANALYSIS_OPEN_CHANNEL,
-  ANALYSIS_REMOVE_CHANNEL,
   ANALYSIS_REQUEST_CHANNEL,
-  ANALYSIS_SWITCH_CHANNEL,
   fileRequest,
   OpenFiles,
   openFiles,
@@ -311,34 +308,28 @@ describe("REQ-000034-sJpO9KMY: a window's open files", () => {
     expect(files.list(1)).toEqual({ files: [], active: null });
   });
 
-  it("answers its channels", async () => {
+  it("answers its channels, the shown file's delays applied", async () => {
     const files = new OpenFiles();
-    const handlers = new Map<string, (e: object, m?: unknown) => unknown>();
-    registerAnalysisIpc(
-      { handle: (c, l) => void handlers.set(c, l) },
+    await openFiles(
+      event,
       files,
       deps([resolved("/d/r.cttc-record"), resolved("/d/s.cttc-record")]),
     );
-    expect(await handlers.get(ANALYSIS_OPEN_CHANNEL)?.(event)).toMatchObject({ ok: true });
-    expect(
-      await handlers.get(ANALYSIS_REQUEST_CHANNEL)?.(event, { method: "GET", path: "/streams" }),
-    ).toMatchObject({ ok: true });
+    const handlers = new Map<string, (e: object, m?: unknown) => unknown>();
+    registerAnalysisIpc({ handle: (c, l) => void handlers.set(c, l) }, files, () => ({ web: 60 }));
     expect(await handlers.get(ANALYSIS_LIST_CHANNEL)?.(event)).toMatchObject({
       active: resolved("/d/s.cttc-record"),
     });
-    expect(
-      await handlers.get(ANALYSIS_SWITCH_CHANNEL)?.(event, resolved("/d/r.cttc-record")),
-    ).toMatchObject({
-      ok: true,
-      active: resolved("/d/r.cttc-record"),
-    });
-    expect(
-      await handlers.get(ANALYSIS_REMOVE_CHANNEL)?.(event, resolved("/d/r.cttc-record")),
-    ).toMatchObject({
-      active: resolved("/d/s.cttc-record"),
-    });
+    // web's rows come a minute later than recorded.
+    const page = (await handlers.get(ANALYSIS_REQUEST_CHANNEL)?.(event, {
+      method: "GET",
+      path: "/records/logs",
+      query: { source: "file/web", from: iso(T0 + 60_000), to: iso(T0 + 240_000), limit: 1 },
+    })) as { ok: true; value: { total: number; rows: { ts: string }[] } };
+    expect(page.value.total).toBe(6);
+    expect(page.value.rows[0]?.ts).toBe(iso(T0 + 129_000 + 60_000));
     expect(await handlers.get(ANALYSIS_CLOSE_CHANNEL)?.(event)).toEqual({ ok: true });
     expect(files.get(1)).toBeUndefined();
-    expect(files.list(1).files).toHaveLength(1);
+    expect(files.list(1).files).toHaveLength(2);
   });
 });

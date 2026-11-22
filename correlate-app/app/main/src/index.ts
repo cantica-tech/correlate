@@ -38,6 +38,8 @@ export { registerLogsIpc } from "./logs.js";
 export { fieldMenuTemplate, nativeMenuTemplate, registerMenuIpc } from "./menu.js";
 export { Notifications, notifyLifecycle, registerStatusIpc } from "./notify.js";
 export { registerPickerIpc } from "./picker.js";
+export { registerProjectIpc, shownTracks } from "./projects/ipc.js";
+export { Projects } from "./projects/store.js";
 export { registerProvisionIpc } from "./provision/ipc.js";
 export { runCommand } from "./provision/runner.js";
 export { connectSsh } from "./provision/ssh.js";

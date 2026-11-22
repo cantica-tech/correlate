@@ -97,10 +97,10 @@ export const SECTIONS: readonly SidebarSection[] = [
         title: "Open a saved project or an imported recording",
       },
       {
-        action: "opened-data",
-        label: "Opened Data…",
+        action: "add-files",
+        label: "Add Files…",
         icon: "opened-data",
-        title: "Switch to one of the open projects",
+        title: "Add cttc recordings or metrics to the project; they open in the analysis view",
       },
       SEPARATOR,
     ],
@@ -133,10 +133,10 @@ export const AVAILABLE: ReadonlySet<string> = new Set([
   "edit-data-streams",
   "close-data-streams",
   "remove-data-stream",
-  // Opens a cttc file in the analysis view until projects come (REQ-000033-sJpO9KMY).
+  // Projects (REQ-000035-sJpO9KMY): new, open, and adding cttc's files.
+  "new-project",
   "open-project",
-  // Switches between and removes the open files (REQ-000034-sJpO9KMY).
-  "opened-data",
+  "add-files",
   "preferences",
   "about",
   "quit",

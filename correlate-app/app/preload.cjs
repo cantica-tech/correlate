@@ -28,7 +28,8 @@
  * `window.correlate.series` keeps each stream's containers' order and hidden
  * set (REQ-000030-sJpO9KMY); `window.correlate.live` the live view's
  * settings (REQ-000031-sJpO9KMY); `window.correlate.analysis` the analysis
- * view's open file, read by the main process (REQ-000033-sJpO9KMY).
+ * view's open files, read by the main process (REQ-000033-sJpO9KMY);
+ * `window.correlate.project` the window's project (REQ-000035-sJpO9KMY).
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -70,12 +71,22 @@ const MENU_ACTION_CHANNEL = "menu:action";
 const PICKER_LAST_CHANNEL = "picker:lastStream";
 const PICKER_SET_LAST_CHANNEL = "picker:setLastStream";
 /** Must match the channels in `main/src/analysis/ipc.ts`. */
-const ANALYSIS_OPEN_CHANNEL = "analysis:open";
 const ANALYSIS_LIST_CHANNEL = "analysis:list";
-const ANALYSIS_SWITCH_CHANNEL = "analysis:switch";
-const ANALYSIS_REMOVE_CHANNEL = "analysis:remove";
 const ANALYSIS_REQUEST_CHANNEL = "analysis:request";
 const ANALYSIS_CLOSE_CHANNEL = "analysis:close";
+/** Must match the channels in `main/src/projects/ipc.ts`. */
+const PROJECT_CHANNELS = {
+  get: "project:get",
+  newProject: "project:new",
+  open: "project:open",
+  openFile: "project:openFile",
+  save: "project:save",
+  saveAs: "project:saveAs",
+  addFiles: "project:addFiles",
+  show: "project:show",
+  change: "project:change",
+  tracks: "project:tracks",
+};
 /** Must match the channels in `main/src/live.ts`. */
 const LIVE_GET_CHANNEL = "live:get";
 const LIVE_SET_CHANNEL = "live:set";
@@ -182,18 +193,34 @@ contextBridge.exposeInMainWorld("correlate", {
     setActive: (stream) => ipcRenderer.invoke(STREAM_SET_ACTIVE_CHANNEL, stream),
   },
   analysis: {
-    /** Ask for cttc files and open them in this window's analysis view; the last becomes active. */
-    open: () => ipcRenderer.invoke(ANALYSIS_OPEN_CHANNEL),
-    /** This window's open files and the active one. */
+    /** This window's open files and the shown one. */
     list: () => ipcRenderer.invoke(ANALYSIS_LIST_CHANNEL),
-    /** Show an open file. */
-    switchTo: (path) => ipcRenderer.invoke(ANALYSIS_SWITCH_CHANNEL, path),
-    /** Close an open file (the file on disk untouched). */
-    remove: (path) => ipcRenderer.invoke(ANALYSIS_REMOVE_CHANNEL, path),
     /** One of the views' queries, answered from this window's open file. */
     request: (message) => ipcRenderer.invoke(ANALYSIS_REQUEST_CHANNEL, message),
     /** Back to live: the files stay open. */
     close: () => ipcRenderer.invoke(ANALYSIS_CLOSE_CHANNEL),
+  },
+  project: {
+    /** This window's project, its missing files, its open list, and Recent. */
+    get: () => ipcRenderer.invoke(PROJECT_CHANNELS.get),
+    /** A new project, not saved yet. */
+    newProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.newProject),
+    /** Open a project file (the open dialog). */
+    open: () => ipcRenderer.invoke(PROJECT_CHANNELS.open),
+    /** Open a Recent project. */
+    openFile: (file) => ipcRenderer.invoke(PROJECT_CHANNELS.openFile, file),
+    /** Save the project (Save As when it has no file yet). */
+    save: () => ipcRenderer.invoke(PROJECT_CHANNELS.save),
+    /** Save the project as a new file (the save dialog). */
+    saveAs: () => ipcRenderer.invoke(PROJECT_CHANNELS.saveAs),
+    /** Add cttc files to the project (the open dialog); the last is shown. */
+    addFiles: () => ipcRenderer.invoke(PROJECT_CHANNELS.addFiles),
+    /** Show one of the project's files, by id. */
+    show: (id) => ipcRenderer.invoke(PROJECT_CHANNELS.show, id),
+    /** Change the project: `{ op, ... }`. */
+    change: (change) => ipcRenderer.invoke(PROJECT_CHANNELS.change, change),
+    /** The shown file's tracks: `{ item, tracks }`. */
+    tracks: () => ipcRenderer.invoke(PROJECT_CHANNELS.tracks),
   },
   live: {
     /** The live view's settings: windowSecs, liveTrack, liveTrackSecs, resumeSecs. */

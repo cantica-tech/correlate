@@ -4,7 +4,7 @@
  * rules in `shell.css` style it. It draws a layout and reports what the user
  * asks for; the main process keeps the layout.
  */
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Icon } from "../icons/Icon.js";
 import type { LayoutChange, SidebarLayout } from "./bridge.js";
 import { railArrow } from "./rail.js";
@@ -21,6 +21,8 @@ export interface SidebarProps {
   onAction: (action: string) => void;
   /** The actions that work; the others are disabled. */
   available?: ReadonlySet<string>;
+  /** The window's project, under the Projects section's entries (REQ-000035-sJpO9KMY). */
+  projectTree?: ReactNode;
 }
 
 const DOCKS = [
@@ -35,6 +37,7 @@ export function Sidebar({
   onChange,
   onAction,
   available = AVAILABLE,
+  projectTree,
 }: SidebarProps) {
   const entry = (e: Entry) => {
     const works = available.has(e.action);
@@ -137,6 +140,7 @@ export function Sidebar({
                 // biome-ignore lint/suspicious/noArrayIndexKey: separators have no identity but their place.
                 e === SEPARATOR ? <div className="ab-sep" key={`sep-${i}`} /> : entry(e),
               )}
+              {section.id === "projects" ? projectTree : null}
             </div>
           </div>
         );

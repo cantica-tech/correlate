@@ -154,6 +154,7 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       "picker",
       "stream",
       "analysis",
+      "project",
       "live",
       "series",
       "logs",
@@ -161,27 +162,37 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
     // The analysis view's file: only its own channels (REQ-000033-sJpO9KMY).
     const analysis = (exposed.correlate as { analysis: Record<string, (m?: unknown) => unknown> })
       .analysis;
-    expect(Object.keys(analysis)).toEqual([
-      "open",
-      "list",
-      "switchTo",
-      "remove",
-      "request",
-      "close",
-    ]);
-    await analysis.open?.();
+    expect(Object.keys(analysis)).toEqual(["list", "request", "close"]);
     await analysis.list?.();
-    await analysis.switchTo?.("/a.cttc-record");
-    await analysis.remove?.("/a.cttc-record");
     await analysis.request?.({ method: "GET", path: "/streams" });
     await analysis.close?.();
     expect(invoked.splice(0)).toEqual([
-      ["analysis:open"],
       ["analysis:list"],
-      ["analysis:switch", "/a.cttc-record"],
-      ["analysis:remove", "/a.cttc-record"],
       ["analysis:request", { method: "GET", path: "/streams" }],
       ["analysis:close"],
+    ]);
+    // The window's project: only its own channels (REQ-000035-sJpO9KMY).
+    const project = (exposed.correlate as { project: Record<string, (m?: unknown) => unknown> })
+      .project;
+    expect(Object.keys(project)).toEqual([
+      "get",
+      "newProject",
+      "open",
+      "openFile",
+      "save",
+      "saveAs",
+      "addFiles",
+      "show",
+      "change",
+      "tracks",
+    ]);
+    await project.get?.();
+    await project.openFile?.("/p.correlator");
+    await project.change?.({ op: "unbind" });
+    expect(invoked.splice(0)).toEqual([
+      ["project:get"],
+      ["project:openFile", "/p.correlator"],
+      ["project:change", { op: "unbind" }],
     ]);
     // The live view's settings: only their own channels (REQ-000031-sJpO9KMY).
     const live = (exposed.correlate as { live: Record<string, (m?: unknown) => unknown> }).live;
