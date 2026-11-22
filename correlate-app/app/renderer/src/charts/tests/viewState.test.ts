@@ -11,6 +11,7 @@ import {
   FOLLOW_LAG_MS,
   fileState,
   followed,
+  frameOf,
   goLive,
   initialState,
   liveCursor,
@@ -117,9 +118,12 @@ describe("REQ-000031-sJpO9KMY: the navigator", () => {
 describe("br-ANLYS-000003-sJpO9KMY: the analysis view stays within its file", () => {
   const file = { from: 10_000, to: 70_000 };
 
-  it("opens on the file's range, never live", () => {
+  it("opens on the file's frame, its span 75% of the view, never live (REQ-000034-sJpO9KMY)", () => {
+    // A 60 s file: 10 s on each side.
+    expect(frameOf(file)).toEqual({ from: 0, to: 80_000 });
+    expect(frameOf({ from: 0, to: 300 })).toEqual({ from: -850, to: 1150 });
     expect(fileState(file)).toEqual({
-      view: { t0: 10_000, t1: 70_000 },
+      view: { t0: 0, t1: 80_000 },
       live: false,
       resumeAt: null,
     });

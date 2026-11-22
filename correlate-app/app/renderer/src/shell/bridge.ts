@@ -78,6 +78,20 @@ export type SumpRequester = (message: {
   timeoutMs?: number;
 }) => Promise<{ ok: true; value: unknown } | { ok: false; error: SumpErrorInfo }>;
 
+/** An open file (REQ-000034-sJpO9KMY). */
+export interface OpenInfo {
+  path: string;
+  label: string;
+  from: number;
+  to: number;
+}
+
+/** A window's open files and its active one: null shows live. */
+export interface OpenList {
+  files: OpenInfo[];
+  active: string | null;
+}
+
 /** The live view's settings, as the main process keeps them (REQ-000031-sJpO9KMY). */
 export interface LiveSettings {
   /** Rows this close to the cursor are highlighted, in s. */
@@ -100,12 +114,15 @@ export interface ShellBridge {
     active(): Promise<string | null>;
     setActive(stream: string): Promise<{ ok: boolean; message?: string }>;
   };
-  /** The analysis view's open file (REQ-000033-sJpO9KMY). */
+  /** The analysis view's open files (REQ-000033-sJpO9KMY, REQ-000034-sJpO9KMY). */
   analysis?: {
     open(): Promise<
-      | { ok: true; label: string; path: string; from: number; to: number; warnings: string[] }
-      | { ok: false; cancelled?: true; message?: string }
+      | (OpenList & { ok: true; refused: string[]; warnings: string[] })
+      | { ok: false; cancelled?: true; refused?: string[] }
     >;
+    list(): Promise<OpenList>;
+    switchTo(path: string): Promise<OpenList & { ok: boolean }>;
+    remove(path: string): Promise<OpenList & { ok: boolean }>;
     request: SumpRequester;
     close(): Promise<{ ok: boolean }>;
   };

@@ -239,14 +239,14 @@ app.whenReady().then(() => {
     ask: async (event) => {
       const window = BrowserWindow.fromWebContents(event.sender) ?? undefined;
       const options = {
-        title: "Open a recording",
-        properties: ["openFile"],
+        title: "Open recordings",
+        properties: ["openFile", "multiSelections"],
         filters: [{ name: "cttc recordings and metrics", extensions: OPENED_EXTENSIONS }],
       };
       const r = window
         ? await dialog.showOpenDialog(window, options)
         : await dialog.showOpenDialog(options);
-      return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0];
+      return r.canceled ? [] : r.filePaths;
     },
   });
   // Notifications and their History, one feed for every window; a Sump a

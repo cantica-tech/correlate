@@ -25,11 +25,13 @@ import { StreamsDialog } from "../streams/StreamsDialog.js";
 import type {
   LayoutChange,
   LiveSettings,
+  OpenList,
   ShellBridge,
   SidebarLayout,
   ThemeMode,
 } from "./bridge.js";
 import { LivePreferences } from "./LivePreferences.js";
+import { OpenedData } from "./OpenedData.js";
 import { Sidebar } from "./Sidebar.js";
 
 /** The splitter's bounds, as the main process checks them. */
@@ -68,13 +70,12 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   const logs = useLogPrefs(bridge);
   // A live view's pause countdown, held in the status bar (REQ-000031-sJpO9KMY).
   const [liveStatus, setLiveStatus] = useState("");
-  // The analysis view's open file, or null for the live view (REQ-000033-sJpO9KMY).
-  const [analysis, setAnalysis] = useState<{
-    path: string;
-    label: string;
-    from: number;
-    to: number;
-  } | null>(null);
+  // The window's open files and the one shown, null for live (REQ-000033-sJpO9KMY,
+  // REQ-000034-sJpO9KMY); `shown` counts every open and switch, so each one frames anew.
+  const [files, setFiles] = useState<OpenList>({ files: [], active: null });
+  const [shown, setShown] = useState(0);
+  const [openedData, setOpenedData] = useState(false);
+  const analysis = files.files.find((f) => f.path === files.active) ?? null;
   // The live view, kept while a file is shown, restored on the way back.
   const liveView = useRef<ViewState | null>(null);
   const keepLiveView = useCallback((state: ViewState) => {
@@ -94,22 +95,54 @@ export function Shell({ bridge, detached = false }: ShellProps) {
     };
   }, [bridge, analysis]);
 
-  /** Open a cttc file in this window's analysis view (Open Project…, for now). */
-  const openFile = useCallback(async () => {
+  /** Show what the main process says is open; a new open or switch frames the file again. */
+  const show = useCallback((list: OpenList) => {
+    setFiles({ files: list.files, active: list.active });
+    setShown((n) => n + 1);
+    if (list.active) setLiveStatus("");
+  }, []);
+
+  /** Open cttc files in this window's analysis view (Open Project…, for now). */
+  const openFiles = useCallback(async () => {
     const r = await bridge.analysis?.open();
     if (!r) return;
-    if (r.ok) {
-      setLiveStatus("");
-      setAnalysis({ path: r.path, label: r.label, from: r.from, to: r.to });
-      void bridge.status.add(`Opened ${r.label} in analysis mode`);
-      for (const warning of r.warnings) void bridge.status.add(`${r.label}: ${warning}`);
-    } else if (!r.cancelled && r.message) {
-      void bridge.status.add(r.message);
-    }
-  }, [bridge]);
+    for (const why of r.refused ?? []) void bridge.status.add(why);
+    if (!r.ok) return;
+    show(r);
+    for (const warning of r.warnings) void bridge.status.add(warning);
+    const active = r.files.find((f) => f.path === r.active);
+    if (active) void bridge.status.add(`Opened ${active.label} in analysis mode`);
+  }, [bridge, show]);
+  /** Opened Data…: switch to an open file. */
+  const switchTo = useCallback(
+    async (path: string) => {
+      setOpenedData(false);
+      const r = await bridge.analysis?.switchTo(path);
+      if (r?.ok) show(r);
+    },
+    [bridge, show],
+  );
+  /** Opened Data…: close a file; the view falls back to another, or to live. */
+  const remove = useCallback(
+    async (path: string) => {
+      const r = await bridge.analysis?.remove(path);
+      if (!r) return;
+      const changed = r.active !== files.active;
+      setFiles({ files: r.files, active: r.active });
+      if (changed) setShown((n) => n + 1);
+    },
+    [bridge, files.active],
+  );
+  /** Back to live tracking: the files stay open. */
   const backToLive = useCallback(() => {
     void bridge.analysis?.close();
-    setAnalysis(null);
+    setFiles((f) => ({ ...f, active: null }));
+  }, [bridge]);
+  const showOpenedData = useCallback(async () => {
+    const list = await bridge.analysis?.list();
+    if (list)
+      setFiles((f) => ({ files: list.files, active: f.active === null ? null : list.active }));
+    setOpenedData(true);
   }, [bridge]);
 
   useEffect(() => {
@@ -141,7 +174,8 @@ export function Shell({ bridge, detached = false }: ShellProps) {
       if (name === "edit-data-streams") setStreams("edit");
       if (name === "remove-data-stream") setRemoving(true);
       if (name === "close-data-streams") void closeActive();
-      if (name === "open-project") void openFile();
+      if (name === "open-project") void openFiles();
+      if (name === "opened-data") void showOpenedData();
       if (name === "preferences") {
         void bridge.theme.get().then(setTheme);
         void bridge.status.visible().then(setStatusBar);
@@ -149,7 +183,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
         setPreferences(true);
       }
     });
-  }, [bridge, detached, closeActive, openFile]);
+  }, [bridge, detached, closeActive, openFiles, showOpenedData]);
 
   /** Keep a live setting; the field shows what the main process kept. */
   const changeLive = useCallback(
@@ -210,7 +244,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
         <div id="action-bar-splitter" title="Drag to resize the sidebar" onMouseDown={drag} />
         <div id="main-content">
           <ChartBlock
-            key={analysis ? `file:${analysis.path}` : "live"}
+            key={analysis ? `file:${analysis.path}:${shown}` : "live"}
             bridge={fileBridge ?? bridge}
             version={streamsVersion}
             analysis={analysis}
@@ -299,6 +333,13 @@ export function Shell({ bridge, detached = false }: ShellProps) {
           setStreams(null);
           streamsChanged();
         }}
+      />
+      <OpenedData
+        open={openedData}
+        list={files}
+        onSwitch={(path) => void switchTo(path)}
+        onRemove={(path) => void remove(path)}
+        onClose={() => setOpenedData(false)}
       />
       <RemoveDialog
         bridge={bridge}

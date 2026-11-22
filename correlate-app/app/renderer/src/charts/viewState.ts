@@ -134,13 +134,28 @@ export function liveCursor(
   return now + Math.min(0, settings.liveTrackSecs) * 1000;
 }
 
+/** A file's span is never framed narrower than cttc's 1.5 s. */
+export const FRAME_MIN_SPAN_MS = 1_500;
+
+/**
+ * A file's frame (REQ-000034-sJpO9KMY, br-ANLYS-000004-sJpO9KMY, cttc's
+ * framing): centred on the file's midpoint, its span (1.5 s at least)
+ * filling 75% of the view, a sixth of it on each side. It is also the widest
+ * view the analysis view allows: its bounds (br-ANLYS-000003-sJpO9KMY).
+ */
+export function frameOf(range: { from: number; to: number }): { from: number; to: number } {
+  const span = Math.max(range.to - range.from, FRAME_MIN_SPAN_MS);
+  const middle = (range.from + range.to) / 2;
+  return { from: middle - (span / 2) * (4 / 3), to: middle + (span / 2) * (4 / 3) };
+}
+
 /**
  * The analysis view (REQ-000033-sJpO9KMY, br-ANLYS-000002-sJpO9KMY): a file's
- * view is never live and opens on the file's whole range (Item 35 frames it
- * at 75%).
+ * view is never live and opens on its frame.
  */
 export function fileState(range: { from: number; to: number }): ViewState {
-  return { view: { t0: range.from, t1: range.to }, live: false, resumeAt: null };
+  const frame = frameOf(range);
+  return { view: { t0: frame.from, t1: frame.to }, live: false, resumeAt: null };
 }
 
 /**

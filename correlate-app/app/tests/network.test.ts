@@ -161,12 +161,25 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
     // The analysis view's file: only its own channels (REQ-000033-sJpO9KMY).
     const analysis = (exposed.correlate as { analysis: Record<string, (m?: unknown) => unknown> })
       .analysis;
-    expect(Object.keys(analysis)).toEqual(["open", "request", "close"]);
+    expect(Object.keys(analysis)).toEqual([
+      "open",
+      "list",
+      "switchTo",
+      "remove",
+      "request",
+      "close",
+    ]);
     await analysis.open?.();
+    await analysis.list?.();
+    await analysis.switchTo?.("/a.cttc-record");
+    await analysis.remove?.("/a.cttc-record");
     await analysis.request?.({ method: "GET", path: "/streams" });
     await analysis.close?.();
     expect(invoked.splice(0)).toEqual([
       ["analysis:open"],
+      ["analysis:list"],
+      ["analysis:switch", "/a.cttc-record"],
+      ["analysis:remove", "/a.cttc-record"],
       ["analysis:request", { method: "GET", path: "/streams" }],
       ["analysis:close"],
     ]);

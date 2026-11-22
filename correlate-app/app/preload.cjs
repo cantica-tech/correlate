@@ -71,6 +71,9 @@ const PICKER_LAST_CHANNEL = "picker:lastStream";
 const PICKER_SET_LAST_CHANNEL = "picker:setLastStream";
 /** Must match the channels in `main/src/analysis/ipc.ts`. */
 const ANALYSIS_OPEN_CHANNEL = "analysis:open";
+const ANALYSIS_LIST_CHANNEL = "analysis:list";
+const ANALYSIS_SWITCH_CHANNEL = "analysis:switch";
+const ANALYSIS_REMOVE_CHANNEL = "analysis:remove";
 const ANALYSIS_REQUEST_CHANNEL = "analysis:request";
 const ANALYSIS_CLOSE_CHANNEL = "analysis:close";
 /** Must match the channels in `main/src/live.ts`. */
@@ -179,11 +182,17 @@ contextBridge.exposeInMainWorld("correlate", {
     setActive: (stream) => ipcRenderer.invoke(STREAM_SET_ACTIVE_CHANNEL, stream),
   },
   analysis: {
-    /** Ask for a cttc file and open it in this window's analysis view. */
+    /** Ask for cttc files and open them in this window's analysis view; the last becomes active. */
     open: () => ipcRenderer.invoke(ANALYSIS_OPEN_CHANNEL),
+    /** This window's open files and the active one. */
+    list: () => ipcRenderer.invoke(ANALYSIS_LIST_CHANNEL),
+    /** Show an open file. */
+    switchTo: (path) => ipcRenderer.invoke(ANALYSIS_SWITCH_CHANNEL, path),
+    /** Close an open file (the file on disk untouched). */
+    remove: (path) => ipcRenderer.invoke(ANALYSIS_REMOVE_CHANNEL, path),
     /** One of the views' queries, answered from this window's open file. */
     request: (message) => ipcRenderer.invoke(ANALYSIS_REQUEST_CHANNEL, message),
-    /** Back to live: the file is closed. */
+    /** Back to live: the files stay open. */
     close: () => ipcRenderer.invoke(ANALYSIS_CLOSE_CHANNEL),
   },
   live: {

@@ -6,11 +6,14 @@ import { answer } from "../answers.js";
 import { manifestHash, readCttcArchive } from "../archive.js";
 import {
   ANALYSIS_CLOSE_CHANNEL,
+  ANALYSIS_LIST_CHANNEL,
   ANALYSIS_OPEN_CHANNEL,
+  ANALYSIS_REMOVE_CHANNEL,
   ANALYSIS_REQUEST_CHANNEL,
+  ANALYSIS_SWITCH_CHANNEL,
   fileRequest,
   OpenFiles,
-  openFile,
+  openFiles,
   registerAnalysisIpc,
 } from "../ipc.js";
 import { readZip } from "../zip.js";
@@ -209,19 +212,20 @@ describe("br-ANLYS-000001-sJpO9KMY: the file answers the views", () => {
   });
 });
 
-describe("REQ-000033-sJpO9KMY: a window's open file", () => {
+describe("REQ-000034-sJpO9KMY: a window's open files", () => {
   const event = { sender: { id: 1 } };
-  const deps = (chosen: string | null, bytes = archive()) => ({
+  /** Deps choosing `chosen`, each read as `bytes` (or per path). */
+  const deps = (chosen: string[], bytes: Record<string, Buffer> | Buffer = archive()) => ({
     ask: async () => chosen,
-    size: async () => bytes.length,
-    read: async () => bytes,
+    size: async () => 1000,
+    read: async (f: string) => (Buffer.isBuffer(bytes) ? bytes : (bytes[f] ?? archive())),
   });
 
-  it("asks first; cancelling reads nothing; a file is kept for its window only", async () => {
+  it("asks first; cancelling reads nothing; files are kept for their window only", async () => {
     const files = new OpenFiles();
     let read = false;
-    const cancelled = await openFile(event, files, {
-      ...deps(null),
+    const cancelled = await openFiles(event, files, {
+      ...deps([]),
       read: async () => {
         read = true;
         return archive();
@@ -229,30 +233,94 @@ describe("REQ-000033-sJpO9KMY: a window's open file", () => {
     });
     expect(cancelled).toEqual({ ok: false, cancelled: true });
     expect(read).toBe(false);
-    const opened = await openFile(event, files, deps("/data/run.cttc-record"));
-    expect(opened).toMatchObject({ ok: true, label: "run.cttc-record", from: T0 });
+    const opened = await openFiles(event, files, deps(["/data/run.cttc-record"]));
+    expect(opened).toMatchObject({
+      ok: true,
+      active: "/data/run.cttc-record",
+      files: [{ path: "/data/run.cttc-record", label: "run.cttc-record", from: T0 }],
+      refused: [],
+    });
     expect(fileRequest(files, 1, { method: "GET", path: "/streams" }).ok).toBe(true);
     expect(fileRequest(files, 2, { method: "GET", path: "/streams" })).toMatchObject({
       ok: false,
       error: { status: 409 },
     });
-    const bad = await openFile(event, files, deps("/data/x.cttc-record", Buffer.from("no")));
-    expect(bad).toMatchObject({ ok: false, message: expect.stringContaining("not a zip") });
   });
 
-  it("answers its channels and forgets the file on close", async () => {
+  it("opens several, the last active; refuses one it cannot read or without data", async () => {
+    const files = new OpenFiles();
+    const empty = zip({
+      "manifest.json": JSON.stringify({
+        version: 3,
+        segments: [{ from: T0, to: T0 + 1000, sources: [] }],
+      }),
+    });
+    const r = await openFiles(
+      event,
+      files,
+      deps(
+        ["/a/one.cttc-record", "/a/bad.cttc-record", "/a/empty.cttc-metric", "/a/two.cttc-record"],
+        {
+          "/a/bad.cttc-record": Buffer.from("no"),
+          "/a/empty.cttc-metric": empty,
+        },
+      ),
+    );
+    expect(r).toMatchObject({ ok: true, active: "/a/two.cttc-record" });
+    if (!r.ok) return;
+    expect(r.files.map((f) => f.path)).toEqual(["/a/one.cttc-record", "/a/two.cttc-record"]);
+    expect(r.refused).toEqual([
+      expect.stringContaining("bad.cttc-record: not a zip"),
+      expect.stringContaining("empty.cttc-metric: it holds no data"),
+    ]);
+    const none = await openFiles(event, new OpenFiles(), deps(["/a/bad"], Buffer.from("x")));
+    expect(none).toMatchObject({ ok: false, refused: [expect.stringContaining("not a zip")] });
+  });
+
+  it("switches, removes falling back to the last opened left, then live; live keeps the files", () => {
+    const files = new OpenFiles();
+    for (const name of ["a", "b", "c"]) {
+      files.set(1, readCttcArchive(archive(), `/d/${name}.cttc-record`));
+    }
+    expect(files.switchTo(1, "/d/a.cttc-record")).toBe(true);
+    expect(files.switchTo(1, "/d/zzz.cttc-record")).toBe(false);
+    files.remove(1, "/d/a.cttc-record");
+    expect(files.list(1).active).toBe("/d/c.cttc-record");
+    files.leave(1);
+    expect(files.list(1)).toMatchObject({ active: null });
+    expect(files.list(1).files).toHaveLength(2);
+    expect(files.get(1)).toBeUndefined();
+    files.remove(1, "/d/b.cttc-record");
+    expect(files.list(1).active).toBeNull();
+    files.switchTo(1, "/d/c.cttc-record");
+    files.remove(1, "/d/c.cttc-record");
+    expect(files.list(1)).toEqual({ files: [], active: null });
+  });
+
+  it("answers its channels", async () => {
     const files = new OpenFiles();
     const handlers = new Map<string, (e: object, m?: unknown) => unknown>();
     registerAnalysisIpc(
       { handle: (c, l) => void handlers.set(c, l) },
       files,
-      deps("/d/r.cttc-record"),
+      deps(["/d/r.cttc-record", "/d/s.cttc-record"]),
     );
     expect(await handlers.get(ANALYSIS_OPEN_CHANNEL)?.(event)).toMatchObject({ ok: true });
     expect(
       await handlers.get(ANALYSIS_REQUEST_CHANNEL)?.(event, { method: "GET", path: "/streams" }),
     ).toMatchObject({ ok: true });
+    expect(await handlers.get(ANALYSIS_LIST_CHANNEL)?.(event)).toMatchObject({
+      active: "/d/s.cttc-record",
+    });
+    expect(await handlers.get(ANALYSIS_SWITCH_CHANNEL)?.(event, "/d/r.cttc-record")).toMatchObject({
+      ok: true,
+      active: "/d/r.cttc-record",
+    });
+    expect(await handlers.get(ANALYSIS_REMOVE_CHANNEL)?.(event, "/d/r.cttc-record")).toMatchObject({
+      active: "/d/s.cttc-record",
+    });
     expect(await handlers.get(ANALYSIS_CLOSE_CHANNEL)?.(event)).toEqual({ ok: true });
     expect(files.get(1)).toBeUndefined();
+    expect(files.list(1).files).toHaveLength(1);
   });
 });

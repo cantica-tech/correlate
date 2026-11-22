@@ -45,6 +45,7 @@ import {
   countdown,
   countdownText,
   fileState,
+  frameOf,
   goLive,
   initialState,
   liveCursor,
@@ -201,7 +202,7 @@ export function ChartBlock({
 
   // In the analysis view every view is kept within the file (br-ANLYS-000003-sJpO9KMY).
   const setVs = useCallback((next: ViewState) => {
-    const range = analysisRef.current;
+    const range = analysisRef.current ? frameOf(analysisRef.current) : null;
     const kept = range
       ? { ...next, view: bounded(next.view, range), live: false, resumeAt: null }
       : next;
@@ -376,9 +377,9 @@ export function ChartBlock({
 
   const view = vs.view;
   // The analysis view's navigator spans the file, not now (br-ANLYS-000003-sJpO9KMY).
-  const bounds = analysis
-    ? { lo: analysis.from, hi: analysis.to }
-    : navBounds(view, dataRange, nowT);
+  // The file's frame is also its bounds (br-ANLYS-000003-sJpO9KMY, br-ANLYS-000004-sJpO9KMY).
+  const frame = analysis ? frameOf(analysis) : null;
+  const bounds = frame ? { lo: frame.from, hi: frame.to } : navBounds(view, dataRange, nowT);
   // No now line in the analysis view; NaN is in no view.
   const shownNow = analysis ? Number.NaN : nowT;
   const windowMs = live.windowSecs * 1000;
