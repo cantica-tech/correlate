@@ -98,6 +98,10 @@ export interface RecordingState {
   target: { sump: string; stream: string; containers: string[]; host: boolean } | null;
   segments: { from: number; to: number }[];
   segmentStart: number | null;
+  /** A recording interrupted by a crash, offered to resume (REQ-000038-sJpO9KMY). */
+  interrupted?: { segmentStart: number; pieceStart: number; restartAt: number } | null;
+  /** The recording's Sump has left the catalog. */
+  sumpGone?: boolean;
 }
 
 /** The window's project, as the main process answers (REQ-000035-sJpO9KMY). */
@@ -180,6 +184,7 @@ export interface ShellBridge {
     }): Promise<RecordingState>;
     pause(): Promise<RecordingState>;
     stop(): Promise<RecordingState>;
+    resume(from: "interruption" | "now"): Promise<RecordingState>;
     onChanged(listener: (state: RecordingState) => void): () => void;
   };
   /** Files the OS handed the app (REQ-000036-sJpO9KMY). */

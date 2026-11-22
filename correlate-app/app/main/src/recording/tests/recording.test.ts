@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { readCttcArchive } from "../../analysis/archive.js";
 import { appendToRecording, type SegmentData } from "../archive.js";
 import { parseTarget } from "../ipc.js";
-import { PIECE_EVERY_MS, type RecordingDeps, RecordingSession, suggestedName } from "../session.js";
+import {
+  PIECE_EVERY_MS,
+  parseMarker,
+  type RecordingDeps,
+  RecordingSession,
+  suggestedName,
+} from "../session.js";
 
 // REQ-000037-sJpO9KMY Requirements 2-4, br-REC-000002-sJpO9KMY: the session and its archive.
 
@@ -198,5 +204,123 @@ describe("br-REC-000002-sJpO9KMY: the recording session", () => {
       target,
     );
     expect(() => parseTarget({ stream: "a b" }, "local")).toThrow();
+  });
+});
+
+describe("br-REC-000002-sJpO9KMY: crash recovery (REQ-000038-sJpO9KMY)", () => {
+  /** A session whose markers are kept, as the disk would. */
+  function withMarker() {
+    const markers: ReturnType<RecordingSession["marker"]>[] = [];
+    const s = setup({ saveMarker: async (m) => void markers.push(m) });
+    return { ...s, markers };
+  }
+
+  it("keeps a marker through every change and flush, and removes it when idle", async () => {
+    const s = withMarker();
+    await s.session.start(target);
+    s.at(PIECE_EVERY_MS);
+    await s.session.tick();
+    s.at(PIECE_EVERY_MS + 1000);
+    await s.session.stop();
+    await new Promise((r) => setTimeout(r, 0));
+    const statuses = s.markers.map((m) => m?.status ?? "none");
+    expect(statuses[0]).toBe("recording");
+    expect(s.markers.some((m) => m?.pieceStart === T0 + PIECE_EVERY_MS)).toBe(true);
+    expect(statuses.at(-1)).toBe("none");
+    expect(parseMarker(JSON.parse(JSON.stringify(s.markers[0])))).toEqual(s.markers[0]);
+    expect(parseMarker({ status: "recording" })).toBeNull();
+  });
+
+  it("brings a running recording back paused, its flushed part kept, the interruption offered", async () => {
+    const before = setup();
+    await before.session.start(target);
+    before.at(PIECE_EVERY_MS);
+    await before.session.tick();
+    const marker = before.session.marker();
+    if (!marker) throw new Error("no marker");
+    // The app crashed; it starts again later.
+    const after = setup();
+    after.at(PIECE_EVERY_MS + 60_000);
+    const state = after.session.recover(marker, true);
+    expect(state).toMatchObject({
+      status: "paused",
+      segments: [{ from: T0, to: T0 + PIECE_EVERY_MS }],
+      interrupted: {
+        segmentStart: T0,
+        pieceStart: T0 + PIECE_EVERY_MS,
+        restartAt: T0 + PIECE_EVERY_MS + 60_000,
+      },
+      sumpGone: false,
+    });
+    // Resume from the interruption point: the same segment, from its last piece.
+    // The scratch file survived the crash.
+    after.disk.set(
+      "/data/recording-in-progress.recording",
+      before.disk.get("/data/recording-in-progress.recording") as Buffer,
+    );
+    await after.session.resume("interruption");
+    expect(after.session.state()).toMatchObject({
+      status: "recording",
+      segmentStart: T0,
+      segments: [],
+    });
+    after.at(PIECE_EVERY_MS + 90_000);
+    await after.session.pause();
+    expect(after.asked.at(-1)).toEqual({
+      from: new Date(T0 + PIECE_EVERY_MS).toISOString(),
+      to: new Date(T0 + PIECE_EVERY_MS + 90_000).toISOString(),
+    });
+    expect(after.session.state().segments).toEqual([
+      { from: T0, to: T0 + PIECE_EVERY_MS + 90_000 },
+    ]);
+  });
+
+  it("resumes from now as a new segment, or leaves it paused; a stopped one waits to be saved", async () => {
+    const marker = {
+      status: "recording" as const,
+      target,
+      segments: [],
+      segmentStart: T0,
+      pieceStart: T0,
+      startedAt: T0,
+    };
+    const s = setup();
+    s.at(500_000);
+    s.session.recover(marker, true);
+    await s.session.resume("now");
+    expect(s.session.state()).toMatchObject({
+      status: "recording",
+      segmentStart: T0 + 500_000,
+      segments: [],
+    });
+    const stopped = setup();
+    expect(stopped.session.recover({ ...marker, status: "stopped" }, true)).toMatchObject({
+      status: "stopped",
+      interrupted: null,
+    });
+    expect(stopped.told.at(-1)).toContain("Stop to choose where");
+  });
+
+  it("refuses Resume when the recording's Sump has left the catalog; Stop saves what was flushed", async () => {
+    const s = setup();
+    s.disk.set("/data/recording-in-progress.recording", Buffer.from("flushed"));
+    s.session.recover(
+      {
+        status: "recording",
+        target,
+        segments: [],
+        segmentStart: T0,
+        pieceStart: T0,
+        startedAt: T0,
+      },
+      false,
+    );
+    expect(s.session.state().sumpGone).toBe(true);
+    await s.session.resume("interruption");
+    await s.session.start();
+    expect(s.session.state().status).toBe("paused");
+    expect(await s.session.stop()).toMatchObject({ status: "idle" });
+    expect(s.asked).toEqual([]);
+    expect(s.disk.get("/out/run.recording")?.toString()).toBe("flushed");
   });
 });

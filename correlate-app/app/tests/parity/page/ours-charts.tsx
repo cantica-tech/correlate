@@ -12,6 +12,7 @@ import { createRoot } from "react-dom/client";
 import "../../../renderer/src/theme/tokens.css";
 import "../../../renderer/src/theme/cttc.generated.css";
 import { ChartBlock, type ChartsShown } from "../../../renderer/src/charts/ChartBlock.js";
+import { RecoveryDialog } from "../../../renderer/src/recording/RecoveryDialog.js";
 import { Transport } from "../../../renderer/src/recording/Transport.js";
 import type { ShellBridge } from "../../../renderer/src/shell/bridge.js";
 import { LivePreferences } from "../../../renderer/src/shell/LivePreferences.js";
@@ -62,10 +63,20 @@ if (paused) {
   Date.now = () => frozen;
 }
 const prefs = location.search.includes("prefs");
+// `?recovery`: the "Recording interrupted" dialog alone (REQ-000038-sJpO9KMY).
+const recovery = location.search.includes("recovery");
 const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
-    prefs ? (
+    recovery ? (
+      <RecoveryDialog
+        open
+        sumpGone={false}
+        onInterruption={() => {}}
+        onNow={() => {}}
+        onLater={() => {}}
+      />
+    ) : prefs ? (
       <div id="stage" className="prefs-stage">
         <LivePreferences
           live={{ windowSecs: 5, liveTrack: true, liveTrackSecs: 0, resumeSecs: 10 }}

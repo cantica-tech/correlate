@@ -24,6 +24,7 @@ import {
   cttcHostBlock,
   cttcNav,
   cttcNavScript,
+  cttcRecoveryDialog,
   cttcSwatchScript,
   cttcTransport,
 } from "./cttcCharts.js";
@@ -384,6 +385,18 @@ async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer
       await page.evaluate("document.fonts.ready.then(() => true)");
       pictures.set(`recording-transport-${status}-${theme}`, await shoot("#recording-transport"));
     }
+    // The "Recording interrupted" dialog (REQ-000038-sJpO9KMY).
+    await page.goto(`${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?recovery`);
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.body.insertAdjacentHTML("beforeend", ${JSON.stringify(cttcRecoveryDialog())}); document.getElementById("dlg-recording-resume-choice").showModal(); })()`,
+      );
+    }
+    await page.waitForSelector("#dlg-recording-resume-choice[open]");
+    await page.evaluate("document.activeElement?.blur()");
+    await page.mouse.move(1, 1);
+    await page.evaluate("document.fonts.ready.then(() => true)");
+    pictures.set(`recording-recovery-${theme}`, await shoot("#dlg-recording-resume-choice"));
     // The analysis view's head: "Back to live tracking" (REQ-000033-sJpO9KMY).
     await page.goto(`${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?file`);
     if (side === "cttc") {
@@ -500,6 +513,7 @@ describe.skipIf(process.platform !== "darwin")(
       "recording-transport-idle",
       "recording-transport-recording",
       "recording-transport-paused",
+      "recording-recovery",
       "host-head",
       "host-head-folded",
       "host-loading-line",

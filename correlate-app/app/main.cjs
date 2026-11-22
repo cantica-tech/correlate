@@ -24,6 +24,7 @@ const {
   connectSsh,
   defaultSettingsPath,
   diskDeps,
+  markerDeps,
   fieldMenuTemplate,
   filesFromArgv,
   fileRequest,
@@ -43,6 +44,7 @@ const {
   Projects,
   RECORDING_CHANGED_EVENT,
   RecordingSession,
+  readMarker,
   openCatalog,
   openVault,
   registerMenuIpc,
@@ -379,6 +381,8 @@ app.whenReady().then(() => {
         lifecycle,
       ),
     ...diskDeps,
+    // The marker follows the session for crash recovery (REQ-038).
+    ...markerDeps(path.join(dataDir, "recording-marker.json")),
     askSave: async (suggested) => {
       const id = mainWindow?.webContents.id;
       const file = id === undefined ? null : projects.view(id).file;
@@ -400,6 +404,17 @@ app.whenReady().then(() => {
   });
   registerRecordingIpc(ipcMain, recording, (event) => activeSumps.get(event.sender.id));
   recording.startTicking();
+  // A recording interrupted by a crash comes back paused, its choice offered
+  // to the main window; its Sump known only if still in the catalog (REQ-038).
+  void readMarker(path.join(dataDir, "recording-marker.json"), (text) =>
+    notifications.add(text),
+  ).then((marker) => {
+    if (marker)
+      recording.recover(
+        marker,
+        Boolean(catalog?.get(marker.target.sump) ?? marker.target.sump === "local"),
+      );
+  });
   // A Sump a window is on is probed every 5 s, the others every 30 s.
   const probe = new HealthProbe(lifecycle, sumps, { inUse: () => activeSumps.inUse() });
   probe.start();

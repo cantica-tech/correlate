@@ -15,6 +15,14 @@
  * The scratch file is a valid `*.recording` after every flush. What is
  * recorded is fixed at Start: the Sump, the stream, its followed containers
  * and host, so a later switch of the window never mixes another stream in.
+ *
+ * Crash recovery (REQ-000038-sJpO9KMY, cttc's `recoverInterruptedRecording`):
+ * a marker follows the session through every change and flush; at the next
+ * start, a recording that was running comes back paused, the part of its
+ * segment already flushed kept, the interruption offered to resume from (or
+ * from now, or later); a paused one comes back paused, a stopped one
+ * stopped. When the recording's Sump has left the catalog, Resume is
+ * refused, and Stop saves what was flushed.
  */
 import type { SegmentData } from "./archive.js";
 import { appendToRecording } from "./archive.js";
@@ -43,6 +51,54 @@ export interface RecordingState {
   segments: { from: number; to: number }[];
   /** The current segment's start, while recording. */
   segmentStart: number | null;
+  /** A recording interrupted by a crash, offered to resume (REQ-000038-sJpO9KMY). */
+  interrupted: { segmentStart: number; pieceStart: number; restartAt: number } | null;
+  /** The recording's Sump has left the catalog: Resume is refused. */
+  sumpGone: boolean;
+}
+
+/** What the marker on disk holds. */
+export interface RecordingMarker {
+  status: Exclude<RecordingStatus, "idle">;
+  target: RecordingTarget;
+  segments: { from: number; to: number }[];
+  segmentStart: number | null;
+  pieceStart: number | null;
+  startedAt: number;
+}
+
+/** A marker read back, or null when it is not one (its fields checked). */
+export function parseMarker(value: unknown): RecordingMarker | null {
+  const m = (value ?? {}) as Record<string, unknown>;
+  const t = (m.target ?? {}) as Record<string, unknown>;
+  const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+  const statuses = ["recording", "paused", "stopped"];
+  if (
+    typeof m.status !== "string" ||
+    !statuses.includes(m.status) ||
+    typeof t.sump !== "string" ||
+    typeof t.stream !== "string" ||
+    !Array.isArray(t.containers) ||
+    !t.containers.every((c) => typeof c === "string") ||
+    !num(m.startedAt) ||
+    !Array.isArray(m.segments) ||
+    !m.segments.every((g) => num((g as { from?: unknown }).from) && num((g as { to?: unknown }).to))
+  ) {
+    return null;
+  }
+  return {
+    status: m.status as RecordingMarker["status"],
+    target: {
+      sump: t.sump,
+      stream: t.stream,
+      containers: t.containers as string[],
+      host: t.host === true,
+    },
+    segments: m.segments as { from: number; to: number }[],
+    segmentStart: num(m.segmentStart) ? (m.segmentStart as number) : null,
+    pieceStart: num(m.pieceStart) ? (m.pieceStart as number) : null,
+    startedAt: m.startedAt as number,
+  };
 }
 
 /** What the session needs from the app. */
@@ -63,6 +119,8 @@ export interface RecordingDeps {
   addToProject: (file: string) => void;
   notify: (text: string) => void;
   changed: (state: RecordingState) => void;
+  /** Keep the marker on disk; null removes it (REQ-000038-sJpO9KMY). */
+  saveMarker?: (marker: RecordingMarker | null) => Promise<void>;
   now?: () => number;
 }
 
@@ -82,6 +140,8 @@ export class RecordingSession {
   private pieceStart: number | null = null;
   private startedAt = 0;
   private flushing: Promise<unknown> = Promise.resolve();
+  private interrupted: RecordingState["interrupted"] = null;
+  private sumpGone = false;
 
   constructor(private readonly deps: RecordingDeps) {}
 
@@ -95,12 +155,102 @@ export class RecordingSession {
       target: this.target,
       segments: [...this.segments],
       segmentStart: this.segmentStart,
+      interrupted: this.interrupted,
+      sumpGone: this.sumpGone,
     };
+  }
+
+  /** The marker for the current state, or null when idle. */
+  marker(): RecordingMarker | null {
+    if (this.status === "idle" || !this.target) return null;
+    return {
+      status: this.status,
+      target: this.target,
+      segments: [...this.segments],
+      segmentStart: this.segmentStart,
+      pieceStart: this.pieceStart,
+      startedAt: this.startedAt,
+    };
+  }
+
+  /** Keep the marker; a failure is said, the recording goes on. */
+  private async persist(): Promise<void> {
+    try {
+      await this.deps.saveMarker?.(this.marker());
+    } catch (error) {
+      this.deps.notify(`Could not keep the recording's marker: ${(error as Error).message}`);
+    }
   }
 
   private tell(text?: string): void {
     if (text) this.deps.notify(text);
     this.deps.changed(this.state());
+    void this.persist();
+  }
+
+  /**
+   * Recover from a marker left by a crash (cttc's `recoverInterruptedRecording`):
+   * recording → paused, the interrupted segment's flushed part kept and the
+   * interruption offered; paused → paused; stopped → stopped. `sumpKnown`:
+   * the recording's Sump is still in the catalog.
+   */
+  recover(marker: RecordingMarker, sumpKnown: boolean): RecordingState {
+    const restartAt = this.now();
+    this.target = marker.target;
+    this.startedAt = marker.startedAt;
+    this.segments = [...marker.segments];
+    this.segmentStart = this.pieceStart = null;
+    this.sumpGone = !sumpKnown;
+    this.interrupted = null;
+    if (marker.status === "stopped") {
+      this.status = "stopped";
+      this.tell(
+        "A previous recording finished but wasn't saved yet: Stop to choose where to save it",
+      );
+      return this.state();
+    }
+    this.status = "paused";
+    if (marker.status === "recording" && marker.segmentStart !== null) {
+      const flushedTo = marker.pieceStart ?? marker.segmentStart;
+      if (flushedTo > marker.segmentStart)
+        this.segments.push({ from: marker.segmentStart, to: flushedTo });
+      this.interrupted = { segmentStart: marker.segmentStart, pieceStart: flushedTo, restartAt };
+      this.tell(
+        this.sumpGone
+          ? `A previous recording was interrupted; its Sump ${marker.target.sump} is no longer known: Stop saves what was recorded`
+          : "A previous recording was interrupted and is now paused: Resume to continue, or Stop to finish",
+      );
+    } else {
+      this.tell("A previous recording is paused: Resume to continue, or Stop to finish");
+    }
+    return this.state();
+  }
+
+  /** The recovery dialog's choice: resume from the interruption point, or from the restart. */
+  async resume(from: "interruption" | "now"): Promise<RecordingState> {
+    const gap = this.interrupted;
+    if (this.status !== "paused" || !gap) return this.state();
+    if (this.sumpGone) {
+      this.deps.notify("The recording's Sump is no longer known: it cannot be resumed");
+      return this.state();
+    }
+    this.interrupted = null;
+    if (from === "interruption") {
+      // The same segment continues: its flushed part is no longer a separate range.
+      const last = this.segments[this.segments.length - 1];
+      if (last && last.from === gap.segmentStart) this.segments.pop();
+      this.segmentStart = gap.segmentStart;
+      this.pieceStart = gap.pieceStart;
+      this.status = "recording";
+      this.tell(
+        `Resumed from the interruption point (continuing since ${new Date(gap.segmentStart).toLocaleString()})`,
+      );
+    } else {
+      this.segmentStart = this.pieceStart = gap.restartAt;
+      this.status = "recording";
+      this.tell("Resumed from now: the interruption is left as a gap");
+    }
+    return this.state();
   }
 
   /** Start, or resume a paused recording; nothing in another state. */
@@ -118,6 +268,11 @@ export class RecordingSession {
       this.status = "recording";
       this.tell(`Recording started on ${target.stream}`);
     } else if (this.status === "paused") {
+      if (this.sumpGone) {
+        this.deps.notify("The recording's Sump is no longer known: it cannot be resumed");
+        return this.state();
+      }
+      this.interrupted = null;
       this.segmentStart = this.pieceStart = this.now();
       this.status = "recording";
       this.tell("Recording resumed");
@@ -149,6 +304,7 @@ export class RecordingSession {
     );
     await this.deps.write(this.deps.scratch, bytes);
     this.pieceStart = to;
+    await this.persist();
   }
 
   /** One flush at a time: a pause during a timed flush waits for it. */
@@ -212,6 +368,7 @@ export class RecordingSession {
           return this.state();
         }
       }
+      this.interrupted = null;
       if (this.status !== "stopped") {
         this.status = "stopped";
         this.segments = [];
@@ -234,6 +391,8 @@ export class RecordingSession {
       this.deps.addToProject(path);
       this.status = "idle";
       this.target = null;
+      this.interrupted = null;
+      this.sumpGone = false;
       this.tell(`Recording saved to ${path}`);
       return this.state();
     });

@@ -18,6 +18,7 @@ import { Button, ContextMenu, Dialog, SegControl, Switch } from "../components/i
 import { Lanes } from "../logs/Lanes.js";
 import { Panels, useLogPrefs } from "../logs/Panels.js";
 import { MenuBar } from "../menubar/MenuBar.js";
+import { RecoveryDialog } from "../recording/RecoveryDialog.js";
 import { Transport } from "../recording/Transport.js";
 import { StatusBar } from "../statusbar/StatusBar.js";
 import { pauseStream } from "../streams/api.js";
@@ -88,6 +89,8 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   const [delaying, setDelaying] = useState<{ name: string; secs: number } | null>(null);
   // The recording session (REQ-000037-sJpO9KMY), and what Start would record.
   const [recording, setRecording] = useState<RecordingState["status"]>("idle");
+  // A crash's interrupted recording, offered to resume until chosen or put off (REQ-000038-sJpO9KMY).
+  const [interrupted, setInterrupted] = useState<{ sumpGone: boolean } | null>(null);
   const recordTarget = useRef<{ stream: string; containers: string[]; host: boolean } | null>(null);
   const files = project?.open ?? { files: [], active: null };
   const analysis = files.files.find((f) => f.path === files.active) ?? null;
@@ -267,8 +270,20 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   // The session, told by the main process; a saved recording joined the project.
   useEffect(() => {
     if (detached || !bridge.recording) return;
-    void bridge.recording.get().then((r) => setRecording(r.status));
+    // Offered once per interruption: Decide later is not asked again.
+    let offered: number | null = null;
+    const offer = (r: RecordingState) => {
+      if (!r.interrupted) return setInterrupted(null);
+      if (r.interrupted.restartAt === offered) return;
+      offered = r.interrupted.restartAt;
+      setInterrupted({ sumpGone: r.sumpGone === true });
+    };
+    void bridge.recording.get().then((r) => {
+      setRecording(r.status);
+      offer(r);
+    });
     return bridge.recording.onChanged((r) => {
+      offer(r);
       setRecording((before) => {
         if (before === "stopped" && r.status === "idle")
           void bridge.project?.get().then((p) => take(p));
@@ -576,6 +591,19 @@ export function Shell({ bridge, detached = false }: ShellProps) {
           ]}
         />
       ) : null}
+      <RecoveryDialog
+        open={interrupted !== null}
+        sumpGone={interrupted?.sumpGone ?? false}
+        onInterruption={() => {
+          setInterrupted(null);
+          void bridge.recording?.resume("interruption");
+        }}
+        onNow={() => {
+          setInterrupted(null);
+          void bridge.recording?.resume("now");
+        }}
+        onLater={() => setInterrupted(null)}
+      />
       <DelayDialog
         delaying={delaying}
         onClose={() => setDelaying(null)}

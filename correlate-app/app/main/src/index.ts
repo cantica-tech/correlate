@@ -45,7 +45,13 @@ export { Projects } from "./projects/store.js";
 export { registerProvisionIpc } from "./provision/ipc.js";
 export { runCommand } from "./provision/runner.js";
 export { connectSsh } from "./provision/ssh.js";
-export { diskDeps, RECORDING_CHANGED_EVENT, registerRecordingIpc } from "./recording/ipc.js";
+export {
+  diskDeps,
+  markerDeps,
+  RECORDING_CHANGED_EVENT,
+  readMarker,
+  registerRecordingIpc,
+} from "./recording/ipc.js";
 export { RecordingSession } from "./recording/session.js";
 export { registerSeriesIpc } from "./series.js";
 export {

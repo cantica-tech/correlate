@@ -202,16 +202,18 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
     // The recording session: only its own channels (REQ-000037-sJpO9KMY).
     const rec = (exposed.correlate as { recording: Record<string, (m?: unknown) => unknown> })
       .recording;
-    expect(Object.keys(rec)).toEqual(["get", "start", "pause", "stop", "onChanged"]);
+    expect(Object.keys(rec)).toEqual(["get", "start", "pause", "stop", "resume", "onChanged"]);
     await rec.get?.();
     await rec.start?.({ stream: "self", containers: ["web"], host: true });
     await rec.pause?.();
     await rec.stop?.();
+    await rec.resume?.("now");
     expect(invoked.splice(0)).toEqual([
       ["recording:get"],
       ["recording:start", { stream: "self", containers: ["web"], host: true }],
       ["recording:pause"],
       ["recording:stop"],
+      ["recording:resume", "now"],
     ]);
     const stopRec = rec.onChanged?.(() => {}) as () => void;
     expect(listeners.has("recording:changed")).toBe(true);

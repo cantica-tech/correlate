@@ -72,6 +72,21 @@ export function cttcTransport(status: "idle" | "recording" | "paused"): string {
   return `<div class="panel-head-right"><span class="btn-group" id="recording-transport"><button id="btn-start-recording" data-state="${status}" title="${startTitle}"${off(status === "recording")}><span id="recording-glyph">⏺</span><span id="recording-dot" class="recording-dot"></span></button><button id="btn-pause-recording" data-state="${status}" title="${status === "paused" ? "Recording Paused" : "Pause Recording"}"${off(status !== "recording")}><span id="pause-glyph">⏸</span></button><button id="btn-stop-recording" title="Stop Recording"${off(status === "idle")}>⏹</button></span></div>`;
 }
 
+/** cttc's "Recording interrupted" dialog (`index.html:800-810`), verbatim (REQ-000038-sJpO9KMY). */
+export function cttcRecoveryDialog(): string {
+  return `<dialog id="dlg-recording-resume-choice">
+    <h2>Recording interrupted</h2>
+    <p class="dlg-intro muted">A previous recording was interrupted before it could be paused or stopped. How would you like to resume it?</p>
+    <p class="dlg-intro muted"><strong>Resume from the interruption point</strong> continues the same segment from when it was interrupted — whatever telemetry was actually captured in the meantime will be included once you next Pause or Stop; anything genuinely missing (never collected, or past the retention window) stays a real gap.</p>
+    <p class="dlg-intro muted"><strong>Resume from now</strong> starts a fresh segment at the moment this app restarted, leaving the interruption itself as an honest, unhighlighted gap.</p>
+    <div class="dlg-actions">
+      <button id="dlg-recording-resume-choice-later" title="Leave the recording paused for now — Resume/Stop remain available">Decide later</button>
+      <button id="dlg-recording-resume-choice-now" title="Start a fresh segment at the moment the app restarted">Resume from now</button>
+      <button id="dlg-recording-resume-choice-interruption" class="primary" title="Continue the interrupted segment, backfilling whatever survived in Redis">Resume from the interruption point</button>
+    </div>
+  </dialog>`;
+}
+
 /** cttc's navigator (`index.html:240-245`), "now" live or not. */
 export function cttcNav(live: boolean): string {
   return `<div id="chart-nav" class="timeline-nav" title="Drag the thumb or click the track to pan · click “now” to jump to the present and resume following it"><div class="tl-track"><div class="tl-thumb"></div><span class="tl-now-label" data-live="${live}">now</span></div></div>`;

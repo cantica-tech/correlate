@@ -99,6 +99,7 @@ const RECORDING_CHANNELS = {
   start: "recording:start",
   pause: "recording:pause",
   stop: "recording:stop",
+  resume: "recording:resume",
   changed: "recording:changed",
 };
 /** Must match the channels in `main/src/live.ts`. */
@@ -247,6 +248,8 @@ contextBridge.exposeInMainWorld("correlate", {
     pause: () => ipcRenderer.invoke(RECORDING_CHANNELS.pause),
     /** Stop: then the save dialog. */
     stop: () => ipcRenderer.invoke(RECORDING_CHANNELS.stop),
+    /** After a crash: resume from `"interruption"` or `"now"`. */
+    resume: (from) => ipcRenderer.invoke(RECORDING_CHANNELS.resume, from),
     /** Hear the session change; returns the function that stops listening. */
     onChanged: (listener) => listen(RECORDING_CHANNELS.changed, listener),
   },
