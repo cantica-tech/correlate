@@ -3,3 +3,6 @@ node_modules/
 renderer/dist/
 dist/
 tests/parity/out/
+
+# The app's own log, written next to the app when run from source (REQ-000048-sJpO9KMY).
+correlate-*.log
