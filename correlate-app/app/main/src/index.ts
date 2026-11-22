@@ -31,6 +31,7 @@ export {
   OpenFiles,
   registerAnalysisIpc,
 } from "./analysis/ipc.js";
+export { APPEARANCE_CHANGED_EVENT, registerAppearanceIpc } from "./appearance.js";
 export { Auditor } from "./catalog/audit.js";
 export { FiringsFollower } from "./events/firings.js";
 export { EVENTS_FIRED_EVENT, registerEventsIpc } from "./events/ipc.js";
@@ -46,6 +47,7 @@ export { dockerFollow, followLocalSump } from "./ownlog/follow.js";
 export { OwnLog, parseOwnLogSettings } from "./ownlog/ownlog.js";
 export { fetchSumpLog, registerShipIpc } from "./ownlog/ship.js";
 export { registerPickerIpc } from "./picker.js";
+export { registerPreferencesIpc } from "./preferences.js";
 export { registerProjectIpc, shownTracks } from "./projects/ipc.js";
 export { addFiles } from "./projects/project.js";
 export { Projects, writeAtomic } from "./projects/store.js";

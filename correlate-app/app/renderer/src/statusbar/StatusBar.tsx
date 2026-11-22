@@ -26,6 +26,7 @@ import type {
 } from "../shell/bridge.js";
 import { NOT_YET } from "../shell/sections.js";
 import { StreamPill } from "../streams/StreamPill.js";
+import { appearance } from "../theme/appearance.js";
 import { PILL_WORDS, pillState, statusRows, whereIs } from "./pill.js";
 
 /** How long a message stays in the bar: cttc's default (5 s). */
@@ -95,7 +96,7 @@ export function StatusBar({
   const show = useCallback((text: string) => {
     setMessage(text);
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setMessage(""), MESSAGE_MS);
+    timer.current = setTimeout(() => setMessage(""), appearance().statusClearSecs * 1000);
   }, []);
 
   const refreshActive = useCallback(async () => {

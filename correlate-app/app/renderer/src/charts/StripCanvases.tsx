@@ -13,7 +13,7 @@ import { type ChartSeries, drawChartStrip } from "../correlate/chartDraw.js";
 import { colorForSlot, resolveColor } from "../correlate/colorSlots.js";
 import { tToX, xToT } from "../correlate/timeMapping.js";
 import { isClick } from "../correlate/zoom.js";
-import { RECORDING_BAND_COLOR } from "../recording/bands.js";
+import { useAppearance } from "../theme/appearance.js";
 import { drawCursorMark, drawNowMark } from "./marks.js";
 import { STRIPS } from "./strips.js";
 
@@ -92,6 +92,8 @@ export interface StripCanvasesProps {
 export function StripCanvases(props: StripCanvasesProps) {
   const { id, lines, data, view, cursor, nowT, empty = false, hidden = false } = props;
   const bands = props.bands ?? NO_BANDS;
+  // The Appearance pane's colors: the strips redraw when they change (REQ-000050).
+  const look = useAppearance();
   const [size, setSize] = useState({ width: 0, height: 0 });
   const boxRef = useRef<HTMLDivElement>(null);
   const canvases = useRef<(HTMLCanvasElement | null)[]>([]);
@@ -138,8 +140,8 @@ export function StripCanvases(props: StripCanvasesProps) {
         series,
         // The film strip bookends the group: holes on top of the first, below the last.
         bands,
-        bandColor: RECORDING_BAND_COLOR,
-        sprockets: { top: i === 0, bottom: last },
+        bandColor: look.recordingColor,
+        sprockets: look.sprockets ? { top: i === 0, bottom: last } : undefined,
         cursorT: null,
         plotWidth: size.width,
         height,
@@ -165,7 +167,7 @@ export function StripCanvases(props: StripCanvasesProps) {
       ctx.textBaseline = "top";
       ctx.fillText(strip.title, PLOT_MARGIN_LEFT + 6, 4);
     });
-  }, [size, data, lines, view, cursor, nowT, hidden, bands]);
+  }, [size, data, lines, view, cursor, nowT, hidden, bands, look]);
 
   return (
     <div id={id} ref={boxRef} hidden={hidden}>

@@ -1,0 +1,136 @@
+/*
+ * The Preferences dialog (REQ-000050-sJpO9KMY, br-STYLE-000001-sJpO9KMY):
+ * cttc's rules, verbatim, each block headed by its lines in cttc's style.css.
+ */
+
+/* cttc style.css:1613-1701 */
+/* Settings/Preferences, combined -- a macOS System Settings-style layout:
+   a narrow pane list on the left, the selected pane's fields on the right.
+   See app.js's selectPreferencesPane for how .mac-settings-item[data-active]
+   and .mac-settings-pane[hidden] get toggled. */
+#dlg-preferences {
+  padding: 0;
+  min-width: 620px;
+  max-width: 760px;
+  overflow: hidden;
+}
+.mac-settings {
+  display: flex;
+  align-items: stretch;
+  /* Height follows content (however many fieldsets the selected pane has),
+     not a fixed value -- max-height is just a ceiling so a pane with a lot
+     of controls scrolls instead of pushing the dialog off-screen. */
+  max-height: 80vh;
+}
+.mac-settings-sidebar {
+  flex: 0 0 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 8px;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+/* Not wired up yet (see index.html's comment) -- same visual weight as a
+   .mac-settings-item so it reads as part of the same list, not a stray
+   control floating above it. */
+.mac-settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--muted);
+}
+.mac-settings-search svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+.mac-settings-sidebar-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.mac-settings-sidebar-label svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+.mac-settings-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.mac-settings-item-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.mac-settings-item-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.mac-settings-item:hover {
+  background: var(--surface-3);
+}
+.mac-settings-item[data-active="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+.mac-settings-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 20px 22px;
+  overflow-y: auto;
+}
+/* The selected pane's own header, right above its fields -- same icon and
+   name as its .mac-settings-item on the left, so the two always read as
+   the same thing. */
+.mac-settings-pane-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mac-settings-pane-title svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+.mac-settings-pane .dlg-actions {
+  margin-top: 16px;
+}
+
+/* cttc style.css:1809-1809 */
+.log-collect-row {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+}
+
+/* cttc style.css:1813-1814 */
+.danger-zone {
+  border-color: var(--critical);
+}
+.danger-zone legend {
+  color: var(--critical);
+}

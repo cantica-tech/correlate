@@ -12,7 +12,7 @@ export interface DialogProps {
   open: boolean;
   /** Called when the dialog closes on its own (Escape). */
   onClose: () => void;
-  /** Its title, in an `<h2>`, which also names the dialog. */
+  /** Its title, in an `<h2>`, which also names the dialog; null for none (its panes have theirs). */
   title: ReactNode;
   /** Buttons, right-aligned in `.dlg-actions` below the body. */
   actions?: ReactNode;
@@ -47,8 +47,13 @@ export function Dialog({ open, onClose, title, actions, id, className, children 
   }, []);
 
   return (
-    <dialog ref={ref} id={id} className={className} aria-labelledby={titleId}>
-      <h2 id={titleId}>{title}</h2>
+    <dialog
+      ref={ref}
+      id={id}
+      className={className}
+      aria-labelledby={title === null ? undefined : titleId}
+    >
+      {title === null ? null : <h2 id={titleId}>{title}</h2>}
       {children}
       {actions ? <div className="dlg-actions">{actions}</div> : null}
     </dialog>

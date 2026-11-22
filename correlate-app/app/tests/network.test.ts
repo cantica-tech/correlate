@@ -160,6 +160,8 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       "recording",
       "opened",
       "live",
+      "appearance",
+      "preferences",
       "series",
       "logs",
     ]);

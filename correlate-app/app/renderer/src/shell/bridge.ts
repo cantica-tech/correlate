@@ -115,6 +115,24 @@ export interface Firing {
   note?: string;
 }
 
+/** The Appearance pane's settings, as the main process keeps them (REQ-000050-sJpO9KMY). */
+export interface Appearance {
+  hlColor: string;
+  nowColor: string;
+  nowStyle: "dotted" | "dashed" | "solid";
+  liveTrackColor: string;
+  recordingColor: string;
+  sprockets: boolean;
+  statusClearSecs: number;
+}
+
+/** The own log's state (REQ-000050-sJpO9KMY). */
+export interface OwnLogState {
+  enabled: boolean;
+  dir: string | null;
+  current: string | null;
+}
+
 /** An export not written: cancelled, or why it failed (REQ-000041-sJpO9KMY). */
 export interface SaveFailure {
   ok: false;
@@ -261,6 +279,20 @@ export interface ShellBridge {
       change: Partial<LiveSettings>,
     ): Promise<{ ok: boolean; settings?: LiveSettings; message?: string }>;
     onChanged(listener: (settings: LiveSettings) => void): () => void;
+  };
+  /** The Appearance pane's settings (REQ-000050-sJpO9KMY). */
+  appearance?: {
+    get(): Promise<Appearance>;
+    set(
+      change: Partial<Appearance>,
+    ): Promise<{ ok: boolean; appearance?: Appearance; message?: string }>;
+    onChanged(listener: (appearance: Appearance) => void): () => void;
+  };
+  /** The Settings pane's own log and Hard Reset (REQ-000050-sJpO9KMY). */
+  preferences?: {
+    ownLog(): Promise<OwnLogState>;
+    setOwnLog(on: boolean): Promise<OwnLogState>;
+    hardReset(): Promise<{ ok: boolean }>;
   };
   /** Each stream's containers' order and hidden set (REQ-000030-sJpO9KMY). */
   series?: {

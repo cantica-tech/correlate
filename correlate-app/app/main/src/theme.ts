@@ -90,6 +90,17 @@ export class Settings {
     this.save();
   }
 
+  /**
+   * Hard Reset (REQ-000050-sJpO9KMY): forget every preference and the window
+   * layout, as a never-configured install. The Sumps' catalog, the keys,
+   * projects, recordings and own-log files are elsewhere, and kept.
+   */
+  reset(): void {
+    this.mode = "system";
+    for (const key of Object.keys(this.parts)) delete this.parts[key];
+    this.save();
+  }
+
   private save(): void {
     ensurePrivateDir(path.dirname(this.file));
     writeSecretFile(

@@ -21,6 +21,7 @@ import { RecoveryDialog } from "../../../renderer/src/recording/RecoveryDialog.j
 import { Transport } from "../../../renderer/src/recording/Transport.js";
 import type { ShellBridge } from "../../../renderer/src/shell/bridge.js";
 import { LivePreferences } from "../../../renderer/src/shell/LivePreferences.js";
+import { PreferencesDialog } from "../../../renderer/src/shell/PreferencesDialog.js";
 import { ARTIFACT_FIXTURE, EVENT_FIXTURE } from "../eventsFixture.js";
 
 const stream = {
@@ -77,6 +78,8 @@ const prefs = location.search.includes("prefs");
 const recovery = location.search.includes("recovery");
 // `?abandon`: the "Abandon the recording?" dialog alone (REQ-000039-sJpO9KMY).
 const abandon = location.search.includes("abandon");
+// `?preferences`: the Preferences dialog, on Settings (REQ-000050-sJpO9KMY).
+const preferences = location.search.includes("preferences");
 // `?event-form`, `?event-list`: the events' dialogs (REQ-000046-sJpO9KMY).
 const eventForm = location.search.includes("event-form");
 const eventList = location.search.includes("event-list");
@@ -106,7 +109,29 @@ const SNAPSHOT = {
 const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
-    eventForm ? (
+    preferences ? (
+      <PreferencesDialog
+        open
+        onClose={() => {}}
+        bridge={
+          {
+            preferences: {
+              ownLog: async () => ({ enabled: true, dir: "/Users/me/logs", current: null }),
+              setOwnLog: async () => ({ enabled: true, dir: "/Users/me/logs", current: null }),
+              hardReset: async () => ({ ok: false }),
+            },
+          } as never
+        }
+        theme="system"
+        onTheme={() => {}}
+        statusBar
+        onStatusBar={() => {}}
+        live={{ windowSecs: 5, liveTrack: true, liveTrackSecs: 0, resumeSecs: 10 }}
+        onLive={() => {}}
+        onShipLogs={() => {}}
+        say={() => {}}
+      />
+    ) : eventForm ? (
       <EventFormDialog
         open
         editing={null}

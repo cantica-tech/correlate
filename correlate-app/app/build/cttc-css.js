@@ -24,6 +24,7 @@ const SRC = path.join(APP, "renderer", "src");
 export const SOURCES = [
   "components/components.css",
   "shell/shell.css",
+  "shell/preferences.css",
   "statusbar/statusbar.css",
   "menubar/menubar.css",
   "streams/streams.css",

@@ -7,9 +7,6 @@
  */
 import type { RecordingState } from "../shell/bridge.js";
 
-/** cttc's default band color (`DEFAULT_RECORDING_COLOR`); its control comes with Item 52. */
-export const RECORDING_BAND_COLOR = "#fab219";
-
 /** The ranges a recording holds, and where its current segment started. */
 export interface Recorded {
   /** The recording's data stream. */

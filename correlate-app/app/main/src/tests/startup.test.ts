@@ -119,6 +119,11 @@ describe("main.cjs starts", () => {
       "export:metrics",
       "events:download",
       "logs:ship",
+      "appearance:get",
+      "appearance:set",
+      "ownlog:get",
+      "ownlog:set",
+      "app:hardReset",
     ]) {
       expect(channels).toContain(channel);
     }

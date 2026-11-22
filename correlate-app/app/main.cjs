@@ -85,6 +85,8 @@ const {
   dockerFollow,
   registerShipIpc,
   fetchSumpLog,
+  registerAppearanceIpc,
+  registerPreferencesIpc,
 } = require("./main/dist/main.cjs");
 
 /** Each window's active Sump (br-SUMP-000010); set once the app is ready. */
@@ -409,6 +411,46 @@ app.whenReady().then(() => {
   registerStatusIpc(ipcMain, notifications, settings, broadcast);
   // The live view's settings, every window told of a change (REQ-000031).
   registerLiveIpc(ipcMain, settings, broadcast);
+  // The Appearance pane's colors and styles, and the status bar's message time (REQ-050).
+  registerAppearanceIpc(ipcMain, settings, broadcast);
+  // The Settings pane: the own log's switch (asking for a folder) and Hard
+  // Reset, confirmed by the system, preferences only (REQ-050).
+  registerPreferencesIpc(ipcMain, {
+    ownLog,
+    settings,
+    askFolder: async (event, start) => {
+      const owner = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+      const options = {
+        title: "Choose a folder for correlate-app's own logs",
+        defaultPath: start ?? undefined,
+        properties: ["openDirectory", "createDirectory"],
+      };
+      const r = owner
+        ? await dialog.showOpenDialog(owner, options)
+        : await dialog.showOpenDialog(options);
+      return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+    },
+    confirmReset: async (event) => {
+      const owner = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+      const options = {
+        type: "warning",
+        buttons: ["Cancel", "Hard Reset"],
+        defaultId: 0,
+        cancelId: 0,
+        message: "Hard Reset",
+        detail:
+          "This erases every correlate-app preference on this machine (theme, colors, live settings, window layout, recent projects) and relaunches the app. Your Sumps, keys, projects, recordings and log files are kept. This cannot be undone.",
+      };
+      const r = owner
+        ? await dialog.showMessageBox(owner, options)
+        : await dialog.showMessageBox(options);
+      return r.response === 1;
+    },
+    relaunch: () => {
+      app.relaunch();
+      app.exit(0);
+    },
+  });
   // The recording session (REQ-037): one for the app; its segments come from
   // the Sump it started on, saved where the user chooses, joining the project.
   const dataDir = path.dirname(defaultSettingsPath(process.env));

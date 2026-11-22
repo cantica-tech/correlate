@@ -30,6 +30,7 @@ import {
   cttcHostBlock,
   cttcNav,
   cttcNavScript,
+  cttcPreferencesDialog,
   cttcRecoveryDialog,
   cttcSnapshotDialog,
   cttcSwatchScript,
@@ -417,6 +418,34 @@ async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer
     await page.mouse.move(1, 1);
     await page.evaluate("document.fonts.ready.then(() => true)");
     pictures.set(`recording-abandon-${theme}`, await shoot("#dlg-abandon-recording"));
+    // The Preferences dialog, Settings then Appearance (REQ-000050-sJpO9KMY).
+    await page.goto(
+      `${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?preferences`,
+    );
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.body.insertAdjacentHTML("beforeend", ${JSON.stringify(cttcPreferencesDialog())}); document.getElementById("dlg-preferences").showModal(); })()`,
+      );
+    }
+    await page.waitForSelector("#dlg-preferences[open]");
+    await page.waitForFunction(
+      'document.getElementById("log-collect-status")?.textContent.startsWith("Folder")',
+    );
+    await page.evaluate("document.activeElement?.blur()");
+    await page.mouse.move(1, 1);
+    await page.evaluate("document.fonts.ready.then(() => true)");
+    pictures.set(`preferences-settings-${theme}`, await shoot("#dlg-preferences"));
+    // Appearance: on cttc's side as its selectPreferencesPane does.
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.getElementById("pane-settings").hidden = true; document.getElementById("pane-preferences").hidden = false; for (const b of document.querySelectorAll(".mac-settings-item")) b.toggleAttribute("data-active", b.dataset.pane === "pane-preferences"); document.querySelector('[data-pane="pane-preferences"]').dataset.active = "true"; })()`,
+      );
+    } else {
+      await page.click('[data-pane="pane-preferences"]');
+    }
+    await page.evaluate("document.activeElement?.blur()");
+    await page.mouse.move(1, 1);
+    pictures.set(`preferences-appearance-${theme}`, await shoot("#dlg-preferences"));
     // The events' event-form dialog (REQ-000046-sJpO9KMY).
     await page.goto(
       `${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?event-form`,
@@ -605,6 +634,8 @@ describe.skipIf(process.platform !== "darwin")(
       "recording-transport-paused",
       "recording-recovery",
       "recording-abandon",
+      "preferences-settings",
+      "preferences-appearance",
       "event-form",
       "event-list",
       "export-snapshot",

@@ -305,6 +305,22 @@ contextBridge.exposeInMainWorld("correlate", {
     /** Hear them change; returns the function that stops listening. */
     onChanged: (listener) => listen(LIVE_CHANGED_EVENT, listener),
   },
+  appearance: {
+    /** The Appearance pane's colors and styles, and the status bar's message time (REQ-000050). */
+    get: () => ipcRenderer.invoke("appearance:get"),
+    /** Keep a part of them. */
+    set: (change) => ipcRenderer.invoke("appearance:set", change),
+    /** Hear them change; returns the function that stops listening. */
+    onChanged: (listener) => listen("appearance:changed", listener),
+  },
+  preferences: {
+    /** The own log's `{ enabled, dir, current }`. */
+    ownLog: () => ipcRenderer.invoke("ownlog:get"),
+    /** Turn it on (asking for a folder) or off; its state after. */
+    setOwnLog: (on) => ipcRenderer.invoke("ownlog:set", on),
+    /** Hard Reset, after the system's confirmation: preferences only, then a relaunch. */
+    hardReset: () => ipcRenderer.invoke("app:hardReset"),
+  },
   series: {
     /** A stream's containers' `{ order, hidden }` on this window's Sump. */
     get: (stream) => ipcRenderer.invoke(SERIES_GET_CHANNEL, stream),

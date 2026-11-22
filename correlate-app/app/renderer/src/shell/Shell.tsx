@@ -14,7 +14,7 @@ import {
 } from "react";
 import { ChartBlock } from "../charts/ChartBlock.js";
 import type { ViewState } from "../charts/viewState.js";
-import { Button, ContextMenu, Dialog, SegControl, Switch } from "../components/index.js";
+import { Button, ContextMenu, Dialog } from "../components/index.js";
 import type { Artifact, SumpEvent } from "../events/api.js";
 import { EventFormDialog } from "../events/EventFormDialog.js";
 import { EventListDialog } from "../events/EventListDialog.js";
@@ -30,6 +30,7 @@ import { StatusBar } from "../statusbar/StatusBar.js";
 import { pauseStream } from "../streams/api.js";
 import { RemoveDialog } from "../streams/RemoveDialog.js";
 import { StreamsDialog } from "../streams/StreamsDialog.js";
+import { setAppearance } from "../theme/appearance.js";
 import type {
   CaptureRequest,
   LayoutChange,
@@ -41,19 +42,13 @@ import type {
   ThemeMode,
 } from "./bridge.js";
 import { DelayDialog } from "./DelayDialog.js";
-import { LivePreferences } from "./LivePreferences.js";
+import { PreferencesDialog } from "./PreferencesDialog.js";
 import { ProjectTree, type TreeChange } from "./ProjectTree.js";
 import { Sidebar } from "./Sidebar.js";
 
 /** The splitter's bounds, as the main process checks them. */
 const MIN_WIDTH = 120;
 const MAX_WIDTH = 480;
-
-const THEMES = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "system", label: "System" },
-] as const;
 
 /** Apply a change here at once; the main process's answer follows. */
 function applyChange(layout: SidebarLayout, change: LayoutChange): SidebarLayout {
@@ -465,6 +460,12 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
     },
     [bridge, take],
   );
+  // The Appearance pane's colors, as the main process keeps them (REQ-000050-sJpO9KMY).
+  useEffect(() => {
+    if (!bridge.appearance) return;
+    void bridge.appearance.get().then(setAppearance);
+    return bridge.appearance.onChanged(setAppearance);
+  }, [bridge]);
   // Ship Logs… (REQ-000049-sJpO9KMY): said in the status bar.
   const shipLogs = useCallback(async () => {
     const r = await bridge.logs?.ship?.();
@@ -650,49 +651,25 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
             )}
           />
         </div>
-        <Dialog
-          id="dlg-preferences-theme"
+        <PreferencesDialog
           open={preferences}
           onClose={() => setPreferences(false)}
-          title="Preferences"
-          actions={
-            <Button kind="primary" onClick={() => setPreferences(false)}>
-              Done
-            </Button>
-          }
-        >
-          <fieldset className="keys-box">
-            <legend>Mode</legend>
-            <p className="dlg-section-help muted">
-              Light, dark, or match this computer's system setting.
-            </p>
-            <SegControl
-              label="Mode"
-              options={THEMES}
-              value={theme}
-              onChange={(mode) => {
-                setTheme(mode);
-                void bridge.theme.set(mode);
-              }}
-            />
-          </fieldset>
-          <fieldset className="keys-box">
-            <legend>Status bar</legend>
-            <p className="dlg-section-help muted">
-              A slim bar at the bottom of the window: the Sump's status, messages and their History.
-            </p>
-            <Switch
-              checked={statusBar}
-              onChange={(visible) => {
-                setStatusBar(visible);
-                void bridge.status.setVisible(visible);
-              }}
-            >
-              Show status bar
-            </Switch>
-          </fieldset>
-          {live ? <LivePreferences live={live} onChange={(c) => void changeLive(c)} /> : null}
-        </Dialog>
+          bridge={bridge}
+          theme={theme}
+          onTheme={(mode) => {
+            setTheme(mode);
+            void bridge.theme.set(mode);
+          }}
+          statusBar={statusBar}
+          onStatusBar={(visible) => {
+            setStatusBar(visible);
+            void bridge.status.setVisible(visible);
+          }}
+          live={live}
+          onLive={(c) => void changeLive(c)}
+          onShipLogs={() => void shipLogs()}
+          say={say}
+        />
       </div>
       <StreamsDialog
         bridge={bridge}

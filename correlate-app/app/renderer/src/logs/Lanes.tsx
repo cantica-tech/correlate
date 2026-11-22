@@ -16,8 +16,8 @@ import { PLOT_MARGIN_LEFT } from "../correlate/axes.js";
 import { drawBands } from "../correlate/chartDraw.js";
 import { colorForSlot, resolveColor, type SlotMap } from "../correlate/colorSlots.js";
 import { isClick } from "../correlate/zoom.js";
-import { RECORDING_BAND_COLOR } from "../recording/bands.js";
 import type { SumpRequester } from "../shell/bridge.js";
+import { useAppearance } from "../theme/appearance.js";
 import { density } from "./api.js";
 
 /** A lane's height: cttc's `LANE_H`. */
@@ -118,6 +118,8 @@ export function Lanes({
   onTimeMenu,
 }: LanesProps) {
   const drawn = shownView ?? view;
+  // The Appearance pane's colors: the lanes redraw when they change (REQ-000050).
+  const look = useAppearance();
   const downX = useRef<number | null>(null);
   const [counts, setCounts] = useState<Record<string, number[]>>({});
   const [width, setWidth] = useState(0);
@@ -167,7 +169,7 @@ export function Lanes({
       // cttc's drawHighlightBands: the recording's band first, behind; no sprocket holes on lanes.
       if (bands.length > 0) {
         const area = { left: PLOT_MARGIN_LEFT, width: Math.max(1, width - PLOT_MARGIN_LEFT) };
-        drawBands(ctx, bands, drawn, { ...area, height: LANE_HEIGHT }, RECORDING_BAND_COLOR);
+        drawBands(ctx, bands, drawn, { ...area, height: LANE_HEIGHT }, look.recordingColor);
       }
       ctx.fillStyle = resolveColor(colorForSlot(slots[name] ?? 0, dark), (v) =>
         style.getPropertyValue(v).trim(),
@@ -185,7 +187,7 @@ export function Lanes({
       }
       if (nowT !== null && inView(nowT)) drawNowMark(ctx, xAt(nowT, drawn, width), LANE_HEIGHT);
     }
-  }, [open, width, counts, containers, slots, cursorT, cursorLive, nowT, view, drawn, bands]);
+  }, [open, width, counts, containers, slots, cursorT, cursorLive, nowT, view, drawn, bands, look]);
 
   return (
     <>

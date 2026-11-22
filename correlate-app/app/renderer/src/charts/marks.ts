@@ -6,10 +6,8 @@
  */
 import { NOW_LINE_DASH } from "../correlate/chartDraw.js";
 
-/** cttc's `DEFAULT_NOW_COLOR`. */
-export const NOW_COLOR = "#14b8a6";
-/** cttc's `DEFAULT_LIVE_TRACK_COLOR`. */
-export const LIVE_TRACK_COLOR = "#22c55e";
+import { appearance } from "../theme/appearance.js";
+
 /** cttc's marks are 1.5 px. */
 const MARK_WIDTH = 1.5;
 
@@ -33,19 +31,20 @@ export function drawCursorMark(
   accent: string,
 ): void {
   if (live) {
-    ctx.fillStyle = LIVE_TRACK_COLOR;
+    ctx.fillStyle = appearance().liveTrackColor;
     ctx.globalAlpha = 0.25;
     ctx.fillRect(x - 3, 0, 6, height);
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = LIVE_TRACK_COLOR;
+    ctx.strokeStyle = appearance().liveTrackColor;
   } else {
     ctx.strokeStyle = accent;
   }
   line(ctx, x, height);
 }
 
-/** The now line at `x`: teal, dotted. */
+/** The now line at `x`, in the Appearance pane's color and style (teal, dotted by default). */
 export function drawNowMark(ctx: CanvasRenderingContext2D, x: number, height: number): void {
-  ctx.strokeStyle = NOW_COLOR;
-  line(ctx, x, height, NOW_LINE_DASH.dotted);
+  const { nowColor, nowStyle } = appearance();
+  ctx.strokeStyle = nowColor;
+  line(ctx, x, height, NOW_LINE_DASH[nowStyle]);
 }
