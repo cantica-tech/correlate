@@ -22,7 +22,8 @@ describe("br-REC-000001-sJpO9KMY", () => {
   // recordings themselves with Item 40): cttc's New Gateway and pill switch
   // moved the window to another gateway with no recording check. Every path
   // that switches now asks first while a recording is live, and moves nothing
-  // until confirmed. Item 40 plugs the real recordings into the same guard.
+  // until confirmed. Item 40 (REQ-000039-sJpO9KMY) plugged the recording
+  // session into the same guard, and the stream switch too.
   it("cttc BUG-000029: New Gateway and pill switch change the active gateway with no recording check", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "cttc-recording-"));
     try {

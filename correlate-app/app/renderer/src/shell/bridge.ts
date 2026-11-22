@@ -149,7 +149,10 @@ export interface ShellBridge {
   /** This window's active data stream (REQ-000027-sJpO9KMY). */
   stream?: {
     active(): Promise<string | null>;
-    setActive(stream: string): Promise<{ ok: boolean; message?: string }>;
+    setActive(
+      stream: string,
+      confirmed?: boolean,
+    ): Promise<{ ok: boolean; step?: string; message?: string }>;
   };
   /** The analysis view's open files (REQ-000033-sJpO9KMY, REQ-000034-sJpO9KMY). */
   analysis?: {
@@ -185,6 +188,8 @@ export interface ShellBridge {
     pause(): Promise<RecordingState>;
     stop(): Promise<RecordingState>;
     resume(from: "interruption" | "now"): Promise<RecordingState>;
+    /** Abandon the recording, once the user confirmed (REQ-000039-sJpO9KMY). */
+    discard?(): Promise<RecordingState>;
     onChanged(listener: (state: RecordingState) => void): () => void;
   };
   /** Files the OS handed the app (REQ-000036-sJpO9KMY). */

@@ -39,4 +39,37 @@ describe("REQ-000027-sJpO9KMY: the active stream", () => {
     expect(await call(STREAM_SET_ACTIVE_CHANNEL, 2, "self")).toMatchObject({ ok: false });
     expect(await call(STREAM_SET_ACTIVE_CHANNEL, 1, "")).toMatchObject({ ok: false });
   });
+
+  it("asks before changing the stream while a recording is live, and abandons it once confirmed (REQ-000039-sJpO9KMY)", async () => {
+    const handlers = new Map<string, (event: unknown, message: unknown) => unknown>();
+    let live: string | undefined = "in progress";
+    let abandoned = 0;
+    const guard = {
+      liveRecording: () => live,
+      abandon: async () => {
+        abandoned++;
+        live = undefined;
+      },
+    };
+    registerStreamIpc(
+      { handle: (c, f) => void handlers.set(c, f as never) },
+      new ActiveStreams(),
+      { get: () => "local" },
+      guard,
+    );
+    const set = (m: unknown) =>
+      (handlers.get(STREAM_SET_ACTIVE_CHANNEL) as (e: unknown, m: unknown) => unknown)(
+        { sender: { id: 1 } },
+        m,
+      );
+    // The window's first stream changes nothing recorded; the same one neither.
+    expect(await set("self")).toEqual({ ok: true, stream: "self" });
+    expect(await set("self")).toEqual({ ok: true, stream: "self" });
+    expect(await set("other")).toMatchObject({ ok: false, step: "confirm" });
+    expect(abandoned).toBe(0);
+    expect(await set({ stream: "other", confirmed: true })).toEqual({ ok: true, stream: "other" });
+    expect(abandoned).toBe(1);
+    // Idle: no question.
+    expect(await set("self")).toEqual({ ok: true, stream: "self" });
+  });
 });

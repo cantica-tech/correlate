@@ -163,12 +163,14 @@ export interface ProvisionContext {
 
 /**
  * Whether a recording is live: every path that switches a window asks for
- * confirmation first while one is (br-REC-000001-sJpO9KMY, cttc
- * BUG-000029-uKKrzikI). Phase 8 plugs the recordings in; until then none is.
+ * confirmation first while one is, and a confirmed one abandons it
+ * (br-REC-000001-sJpO9KMY, cttc BUG-000029-uKKrzikI; REQ-000039-sJpO9KMY).
  */
 export interface SwitchGuard {
-  /** The live recording's name, if one is live. */
+  /** The live recording's state ("in progress", "paused", ...), if one is live. */
   liveRecording(): string | undefined;
+  /** Abandon the live recording. */
+  abandon?(): Promise<unknown>;
 }
 
 /** The answer while a recording is live and the call was not confirmed. */
@@ -178,8 +180,13 @@ export function confirmNeeded(guard: SwitchGuard | undefined, confirmed: boolean
   return {
     ok: false as const,
     step: "confirm",
-    message: `recording "${recording}" is live; switching Sumps abandons it. Confirm to go on.`,
+    message: `the recording ${recording} would be abandoned. Confirm to go on.`,
   };
+}
+
+/** A confirmed call with a recording live abandons it before acting. */
+export async function abandonIfLive(guard: SwitchGuard | undefined): Promise<void> {
+  if (guard?.liveRecording()) await guard.abandon?.();
 }
 
 /** What the screens get back: never an exception. */
@@ -231,6 +238,7 @@ export async function provisionLocal(
   if (options.switchTo) {
     const ask = confirmNeeded(ctx.guard, options.confirmed);
     if (ask) return ask;
+    await abandonIfLive(ctx.guard);
   }
   const sumpPort = options.sumpPort ?? 8765;
   const known = ctx.lifecycle.get(LOCAL_ID);

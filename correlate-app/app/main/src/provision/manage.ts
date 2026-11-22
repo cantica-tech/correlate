@@ -14,7 +14,7 @@ import type { SumpEntry } from "../catalog/catalog.js";
 import { privateKeyFrom } from "../identity/sshkey.js";
 import { request } from "../sump/client.js";
 import { SumpHttpError } from "../sump/errors.js";
-import { confirmNeeded, LOCAL_PROJECT } from "./local.js";
+import { abandonIfLive, confirmNeeded, LOCAL_PROJECT } from "./local.js";
 import { REMOTE_DIR, REMOTE_PROJECT, type RemoteContext, sshKeyIdFor } from "./remote.js";
 import { connectSsh, type SshTarget } from "./ssh.js";
 
@@ -121,6 +121,7 @@ export async function switchSump(
     }
   }
   ctx.lifecycle.reachable(id, "answered before a switch");
+  await abandonIfLive(ctx.guard);
   try {
     ctx.active?.set(windowId, id);
   } catch (error) {
@@ -156,7 +157,7 @@ export async function uninstallSump(
   const windows = ctx.active?.windowsOn(id) ?? [];
   const recording = windows.length > 0 ? ctx.guard?.liveRecording() : undefined;
   if (!options.confirmed) {
-    const warning = recording ? ` Recording "${recording}" is live and will be abandoned.` : "";
+    const warning = recording ? ` The recording ${recording} will be abandoned.` : "";
     return {
       ok: false,
       step: "confirm",
@@ -164,6 +165,7 @@ export async function uninstallSump(
       removes: UNINSTALL_REMOVES,
     };
   }
+  if (recording) await abandonIfLive(ctx.guard);
   const log = ctx.logger ?? console;
   try {
     if (entry.kind === "local") {

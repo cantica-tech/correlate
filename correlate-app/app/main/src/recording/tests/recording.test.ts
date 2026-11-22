@@ -324,3 +324,53 @@ describe("br-REC-000002-sJpO9KMY: crash recovery (REQ-000038-sJpO9KMY)", () => {
     expect(s.disk.get("/out/run.recording")?.toString()).toBe("flushed");
   });
 });
+
+// REQ-000039-sJpO9KMY Requirement 1, br-REC-000001-sJpO9KMY: abandoning.
+describe("br-REC-000001-sJpO9KMY: discarding the recording", () => {
+  it.each([
+    ["recording", async (s: ReturnType<typeof setup>) => s.session.start(target)],
+    [
+      "paused",
+      async (s: ReturnType<typeof setup>) => {
+        await s.session.start(target);
+        s.at(2000);
+        await s.session.pause();
+      },
+    ],
+    [
+      "stopped",
+      async (s: ReturnType<typeof setup>) => {
+        await s.session.start(target);
+        s.saveTo(null);
+        s.at(2000);
+        await s.session.stop();
+      },
+    ],
+  ])("empties the scratch file and goes idle from %s", async (status, reach) => {
+    const markers: unknown[] = [];
+    const s = setup({ saveMarker: async (m) => void markers.push(m) });
+    await reach(s);
+    expect(s.session.state().status).toBe(status);
+    expect(s.session.live()).toBeTruthy();
+    const state = await s.session.discard();
+    expect(state).toMatchObject({ status: "idle", target: null, segments: [] });
+    expect(s.session.live()).toBeUndefined();
+    expect(s.disk.get("/data/recording-in-progress.recording")?.length).toBe(0);
+    expect(s.told.at(-1)).toBe("Recording discarded");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(markers.at(-1)).toBeNull();
+    expect(s.project).toEqual([]);
+  });
+
+  it("says what abandoning loses, and does nothing when idle", async () => {
+    const s = setup();
+    expect(s.session.live()).toBeUndefined();
+    expect(await s.session.discard()).toMatchObject({ status: "idle" });
+    expect(s.told).toEqual([]);
+    await s.session.start(target);
+    expect(s.session.live()).toBe("in progress");
+    s.at(1000);
+    await s.session.pause();
+    expect(s.session.live()).toBe("paused");
+  });
+});

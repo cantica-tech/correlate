@@ -160,6 +160,40 @@ export class RecordingSession {
     };
   }
 
+  /**
+   * What abandoning would lose, for the confirmations (REQ-000039-sJpO9KMY):
+   * "in progress", "paused", "stopped but not saved", or undefined when idle.
+   */
+  live(): string | undefined {
+    if (this.status === "recording") return "in progress";
+    if (this.status === "paused") return "paused";
+    if (this.status === "stopped") return "stopped but not saved";
+    return undefined;
+  }
+
+  /**
+   * Abandon the recording (cttc's `discardRecording`, br-REC-000001-sJpO9KMY):
+   * the scratch file emptied, the marker removed, idle. A no-op when idle.
+   */
+  async discard(): Promise<RecordingState> {
+    return this.serial(async () => {
+      if (this.status === "idle") return this.state();
+      try {
+        await this.deps.write(this.deps.scratch, Buffer.alloc(0));
+      } catch {
+        // Best effort: the next Start empties it again.
+      }
+      this.status = "idle";
+      this.target = null;
+      this.segments = [];
+      this.segmentStart = this.pieceStart = null;
+      this.interrupted = null;
+      this.sumpGone = false;
+      this.tell("Recording discarded");
+      return this.state();
+    });
+  }
+
   /** The marker for the current state, or null when idle. */
   marker(): RecordingMarker | null {
     if (this.status === "idle" || !this.target) return null;

@@ -19,6 +19,7 @@ import { _electron, type ElectronApplication, type Page } from "playwright-core"
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COMPONENT_LIMIT, compare, type Mask, readPng, writePng } from "./compare.js";
 import {
+  cttcAbandonDialog,
   cttcBackToLive,
   cttcChartBlock,
   cttcHostBlock,
@@ -397,6 +398,18 @@ async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer
     await page.mouse.move(1, 1);
     await page.evaluate("document.fonts.ready.then(() => true)");
     pictures.set(`recording-recovery-${theme}`, await shoot("#dlg-recording-resume-choice"));
+    // The "Abandon the recording?" dialog (REQ-000039-sJpO9KMY).
+    await page.goto(`${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?abandon`);
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.body.insertAdjacentHTML("beforeend", ${JSON.stringify(cttcAbandonDialog())}); document.getElementById("dlg-abandon-recording").showModal(); })()`,
+      );
+    }
+    await page.waitForSelector("#dlg-abandon-recording[open]");
+    await page.evaluate("document.activeElement?.blur()");
+    await page.mouse.move(1, 1);
+    await page.evaluate("document.fonts.ready.then(() => true)");
+    pictures.set(`recording-abandon-${theme}`, await shoot("#dlg-abandon-recording"));
     // The analysis view's head: "Back to live tracking" (REQ-000033-sJpO9KMY).
     await page.goto(`${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?file`);
     if (side === "cttc") {
@@ -514,6 +527,7 @@ describe.skipIf(process.platform !== "darwin")(
       "recording-transport-recording",
       "recording-transport-paused",
       "recording-recovery",
+      "recording-abandon",
       "host-head",
       "host-head-folded",
       "host-loading-line",

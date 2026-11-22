@@ -271,8 +271,14 @@ app.whenReady().then(() => {
   const afterConnect = () => auditor?.soon();
   const relogin = reloginWith(vault, sumps, tokens, process.env, catalog, lifecycle, afterConnect);
   registerSumpIpc(ipcMain, sumps, tokens, relogin, activeSumps, lifecycle);
+  // A live recording is abandoned only once the user confirms
+  // (br-REC-000001, REQ-000039): the session below answers.
+  const recordingGuard = {
+    liveRecording: () => recording.live(),
+    abandon: () => recording.discard(),
+  };
   // Each window's active data stream, on its active Sump (REQ-000027).
-  registerStreamIpc(ipcMain, activeStreams, activeSumps);
+  registerStreamIpc(ipcMain, activeStreams, activeSumps, recordingGuard);
   registerOpenIpc(ipcMain, inbox);
   // Each stream's containers: their order and those hidden (REQ-000030).
   registerSeriesIpc(ipcMain, settings, activeSumps);
@@ -433,8 +439,7 @@ app.whenReady().then(() => {
     forwards,
     afterConnect,
     audit: auditor ? () => auditor.run() : undefined,
-    // Recordings plug in with Phase 8; until then none is ever live.
-    guard: { liveRecording: () => undefined },
+    guard: recordingGuard,
   });
   // The passphrase's derived key lives only for the session.
   app.on("will-quit", () => {

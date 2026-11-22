@@ -87,6 +87,22 @@ export function cttcRecoveryDialog(): string {
   </dialog>`;
 }
 
+/**
+ * The "Abandon the recording?" question (REQ-000039-sJpO9KMY) in cttc's
+ * dialog markup: cttc asked it with the system's `confirm`
+ * (`confirmAbandonRecordingIfAny`), so its words in cttc's dialog style.
+ */
+export function cttcAbandonDialog(): string {
+  return `<dialog id="dlg-abandon-recording">
+    <h2>Abandon the recording?</h2>
+    <p class="dlg-intro">Switching to Sump lab will abandon the recording in progress: it has not been saved and will be discarded. Stop first to keep it.</p>
+    <div class="dlg-actions">
+      <button id="dlg-abandon-recording-cancel">Cancel</button>
+      <button id="dlg-abandon-recording-confirm" class="btn-danger" title="Discard the recording, then go on">Abandon recording</button>
+    </div>
+  </dialog>`;
+}
+
 /** cttc's navigator (`index.html:240-245`), "now" live or not. */
 export function cttcNav(live: boolean): string {
   return `<div id="chart-nav" class="timeline-nav" title="Drag the thumb or click the track to pan · click “now” to jump to the present and resume following it"><div class="tl-track"><div class="tl-thumb"></div><span class="tl-now-label" data-live="${live}">now</span></div></div>`;

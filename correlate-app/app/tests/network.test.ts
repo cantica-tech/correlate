@@ -202,18 +202,28 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
     // The recording session: only its own channels (REQ-000037-sJpO9KMY).
     const rec = (exposed.correlate as { recording: Record<string, (m?: unknown) => unknown> })
       .recording;
-    expect(Object.keys(rec)).toEqual(["get", "start", "pause", "stop", "resume", "onChanged"]);
+    expect(Object.keys(rec)).toEqual([
+      "get",
+      "start",
+      "pause",
+      "stop",
+      "resume",
+      "discard",
+      "onChanged",
+    ]);
     await rec.get?.();
     await rec.start?.({ stream: "self", containers: ["web"], host: true });
     await rec.pause?.();
     await rec.stop?.();
     await rec.resume?.("now");
+    await rec.discard?.();
     expect(invoked.splice(0)).toEqual([
       ["recording:get"],
       ["recording:start", { stream: "self", containers: ["web"], host: true }],
       ["recording:pause"],
       ["recording:stop"],
       ["recording:resume", "now"],
+      ["recording:discard"],
     ]);
     const stopRec = rec.onChanged?.(() => {}) as () => void;
     expect(listeners.has("recording:changed")).toBe(true);
@@ -262,7 +272,12 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
     expect(Object.keys(stream)).toEqual(["active", "setActive"]);
     await stream.active?.();
     await stream.setActive?.("self");
-    expect(invoked.splice(0)).toEqual([["stream:active"], ["stream:setActive", "self"]]);
+    await (stream.setActive as (s: string, c: boolean) => unknown)?.("other", true);
+    expect(invoked.splice(0)).toEqual([
+      ["stream:active"],
+      ["stream:setActive", "self"],
+      ["stream:setActive", { stream: "other", confirmed: true }],
+    ]);
     const picker = (exposed.correlate as { picker: Record<string, (m?: unknown) => unknown> })
       .picker;
     expect(Object.keys(picker)).toEqual(["lastStream", "setLastStream"]);

@@ -28,6 +28,7 @@ import type { Forwards } from "../sump/forward.js";
 import type { SumpResolver } from "../sump/ipc.js";
 import { login } from "../sump/login.js";
 import {
+  abandonIfLive,
   checkComposeLoopback,
   composeFile,
   confirmNeeded,
@@ -145,6 +146,7 @@ export async function provisionRemote(
   if (options.switchTo) {
     const ask = confirmNeeded(ctx.guard, options.confirmed);
     if (ask) return ask;
+    await abandonIfLive(ctx.guard);
   }
   const taken = hostWithLiveSump(ctx, details);
   if (taken) {

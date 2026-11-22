@@ -266,8 +266,34 @@ describe("cttc BUG-000029 territory: every switch asks first while a recording i
       step: "confirm",
     });
     const uninstall = await uninstallSump(ctx, "local");
-    expect(!uninstall.ok && uninstall.message).toContain('Recording "night run" is live');
+    expect(!uninstall.ok && uninstall.message).toContain(
+      "The recording night run will be abandoned",
+    );
     expect(ctx.active?.get(1)).toBe("local");
     expect(await switchSump(ctx, 1, target.id, { confirmed: true })).toMatchObject({ ok: true });
+  });
+
+  it("abandons the live recording once a switch is confirmed, and only then (REQ-000039-sJpO9KMY)", async () => {
+    const up = await answering();
+    const target = catalog.recordConnect({ kind: "remote", sumpPort: 1, sshTarget: "other" });
+    catalog.recordConnect({ kind: "local", sumpPort: 8765 });
+    let live: string | undefined = "paused";
+    let abandoned = 0;
+    const guard = {
+      liveRecording: () => live,
+      abandon: async () => {
+        abandoned++;
+        live = undefined;
+      },
+    };
+    const ctx = context({ guard, resolve: () => up.sump });
+    ctx.active?.open(1);
+    await switchSump(ctx, 1, target.id);
+    expect(abandoned).toBe(0);
+    expect(await switchSump(ctx, 1, target.id, { confirmed: true })).toMatchObject({ ok: true });
+    expect(abandoned).toBe(1);
+    // Nothing live: a confirmed switch abandons nothing.
+    expect(await switchSump(ctx, 1, "local", { confirmed: true })).toMatchObject({ ok: true });
+    expect(abandoned).toBe(1);
   });
 });

@@ -100,6 +100,7 @@ const RECORDING_CHANNELS = {
   pause: "recording:pause",
   stop: "recording:stop",
   resume: "recording:resume",
+  discard: "recording:discard",
   changed: "recording:changed",
 };
 /** Must match the channels in `main/src/live.ts`. */
@@ -204,8 +205,15 @@ contextBridge.exposeInMainWorld("correlate", {
   stream: {
     /** This window's active data stream on its Sump, or null. */
     active: () => ipcRenderer.invoke(STREAM_ACTIVE_CHANNEL),
-    /** Make a stream this window's active one: `{ ok, stream }` or `{ ok: false, message }`. */
-    setActive: (stream) => ipcRenderer.invoke(STREAM_SET_ACTIVE_CHANNEL, stream),
+    /**
+     * Make a stream this window's active one: `{ ok, stream }` or `{ ok: false, message }`;
+     * `{ ok: false, step: "confirm" }` while a recording is live, unless `confirmed`.
+     */
+    setActive: (stream, confirmed) =>
+      ipcRenderer.invoke(
+        STREAM_SET_ACTIVE_CHANNEL,
+        confirmed === true ? { stream, confirmed: true } : stream,
+      ),
   },
   analysis: {
     /** This window's open files and the shown one. */
@@ -250,6 +258,8 @@ contextBridge.exposeInMainWorld("correlate", {
     stop: () => ipcRenderer.invoke(RECORDING_CHANNELS.stop),
     /** After a crash: resume from `"interruption"` or `"now"`. */
     resume: (from) => ipcRenderer.invoke(RECORDING_CHANNELS.resume, from),
+    /** Abandon the recording, once the user confirmed (REQ-000039-sJpO9KMY). */
+    discard: () => ipcRenderer.invoke(RECORDING_CHANNELS.discard),
     /** Hear the session change; returns the function that stops listening. */
     onChanged: (listener) => listen(RECORDING_CHANNELS.changed, listener),
   },

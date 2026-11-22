@@ -15,6 +15,7 @@ import {
 } from "react";
 import { ContextMenu, type MenuEntry } from "../components/index.js";
 import { Icon } from "../icons/Icon.js";
+import { useConfirmAbandon } from "../recording/Abandon.js";
 import type { ShellBridge } from "../shell/bridge.js";
 import { healActive, streamPillState, streamRows, streamWhere } from "./active.js";
 import { listStreams, type Stream } from "./api.js";
@@ -43,6 +44,7 @@ export function StreamPill({ bridge, onAction, version = 0 }: StreamPillProps) {
   const [active, setActive] = useState<string | null>(null);
   const [open, setOpen] = useState<Open>({ kind: "none" });
   const ref = useRef<HTMLDivElement>(null);
+  const confirmAbandon = useConfirmAbandon();
 
   const refresh = useCallback(async () => {
     const list = await listStreams(bridge.sump.request);
@@ -55,6 +57,14 @@ export function StreamPill({ bridge, onAction, version = 0 }: StreamPillProps) {
     if (healed && healed !== current) await bridge.stream?.setActive(healed);
     setActive(healed);
   }, [bridge]);
+
+  /** Switch to `s`, asking first while a recording is live (REQ-000039-sJpO9KMY). */
+  const switchStream = async (s: Stream) => {
+    if (!(await confirmAbandon(`Switching to data stream ${s.label}`))) return;
+    const r = await bridge.stream?.setActive(s.id, true);
+    if (r && !r.ok) return void bridge.status.add(r.message ?? "Could not switch data streams");
+    setActive(s.id);
+  };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` asks for a refresh.
   useEffect(() => {
@@ -158,7 +168,7 @@ export function StreamPill({ bridge, onAction, version = 0 }: StreamPillProps) {
                     ? undefined
                     : () => {
                         setOpen({ kind: "none" });
-                        void bridge.stream?.setActive(s.id).then(() => setActive(s.id));
+                        void switchStream(s);
                       }
                 }
               >

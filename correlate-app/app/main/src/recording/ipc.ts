@@ -8,6 +8,8 @@
  * - `recording:pause`, `recording:stop`.
  * - `recording:resume` (`"interruption"` or `"now"`): the recovery dialog's
  *   choice after a crash (REQ-000038-sJpO9KMY).
+ * - `recording:discard`: abandon it, once the user confirmed
+ *   (REQ-000039-sJpO9KMY).
  * - `recording:changed` (to every window): the new state.
  */
 import { copyFile, readFile, rename, rm } from "node:fs/promises";
@@ -26,6 +28,7 @@ export const RECORDING_START_CHANNEL = "recording:start";
 export const RECORDING_PAUSE_CHANNEL = "recording:pause";
 export const RECORDING_STOP_CHANNEL = "recording:stop";
 export const RECORDING_RESUME_CHANNEL = "recording:resume";
+export const RECORDING_DISCARD_CHANNEL = "recording:discard";
 export const RECORDING_CHANGED_EVENT = "recording:changed";
 
 /** A stream or container name: printable, at most 200 characters. */
@@ -68,6 +71,7 @@ export function registerRecordingIpc(
   });
   ipcMain.handle(RECORDING_PAUSE_CHANNEL, () => session.pause());
   ipcMain.handle(RECORDING_STOP_CHANNEL, () => session.stop());
+  ipcMain.handle(RECORDING_DISCARD_CHANNEL, () => session.discard());
   ipcMain.handle(RECORDING_RESUME_CHANNEL, (_event, from) =>
     from === "interruption" || from === "now" ? session.resume(from) : session.state(),
   );

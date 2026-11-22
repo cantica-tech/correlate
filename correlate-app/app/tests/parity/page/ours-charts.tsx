@@ -12,6 +12,7 @@ import { createRoot } from "react-dom/client";
 import "../../../renderer/src/theme/tokens.css";
 import "../../../renderer/src/theme/cttc.generated.css";
 import { ChartBlock, type ChartsShown } from "../../../renderer/src/charts/ChartBlock.js";
+import { AbandonDialog } from "../../../renderer/src/recording/Abandon.js";
 import { RecoveryDialog } from "../../../renderer/src/recording/RecoveryDialog.js";
 import { Transport } from "../../../renderer/src/recording/Transport.js";
 import type { ShellBridge } from "../../../renderer/src/shell/bridge.js";
@@ -65,10 +66,18 @@ if (paused) {
 const prefs = location.search.includes("prefs");
 // `?recovery`: the "Recording interrupted" dialog alone (REQ-000038-sJpO9KMY).
 const recovery = location.search.includes("recovery");
+// `?abandon`: the "Abandon the recording?" dialog alone (REQ-000039-sJpO9KMY).
+const abandon = location.search.includes("abandon");
 const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
-    recovery ? (
+    abandon ? (
+      <AbandonDialog
+        asking={{ action: "Switching to Sump lab", status: "recording" }}
+        onCancel={() => {}}
+        onAbandon={() => {}}
+      />
+    ) : recovery ? (
       <RecoveryDialog
         open
         sumpGone={false}

@@ -13,8 +13,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { Button, ContextMenu, Dialog, type MenuEntry } from "../components/index.js";
+import { ContextMenu, type MenuEntry } from "../components/index.js";
 import { Icon } from "../icons/Icon.js";
+import { useConfirmAbandon } from "../recording/Abandon.js";
 import { recordingText } from "../recording/Transport.js";
 import type {
   ListedSump,
@@ -83,7 +84,7 @@ export function StatusBar({
   const [active, setActive] = useState<{ id: string; name: string } | null>(null);
   const [states, setStates] = useState<ReadonlyMap<string, StateRecord>>(new Map());
   const [open, setOpen] = useState<Open>({ kind: "none" });
-  const [confirm, setConfirm] = useState<{ sump: ListedSump; message: string } | null>(null);
+  const confirmAbandon = useConfirmAbandon();
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pill = useRef<HTMLDivElement>(null);
   const historyRef = useRef<HTMLDivElement>(null);
@@ -137,15 +138,18 @@ export function StatusBar({
     };
   }, [open.kind]);
 
+  /** Switch to `sump`, asking first while a recording is live (REQ-000039-sJpO9KMY). */
   const switchTo = async (sump: ListedSump, confirmed = false) => {
     setOpen({ kind: "none" });
+    if (!confirmed && !(await confirmAbandon(`Switching to Sump ${sump.name}`))) return;
     const result = await bridge.sump.switchTo({ id: sump.id, confirmed });
     if (result.ok) {
       await refreshActive();
       onSwitched?.(sump.id);
       void bridge.status.add(`Switched to Sump ${sump.name}`);
     } else if (result.step === "confirm") {
-      setConfirm({ sump, message: result.message });
+      // A recording started meanwhile: ask again.
+      if (await confirmAbandon(`Switching to Sump ${sump.name}`)) void switchTo(sump, true);
     } else {
       void bridge.status.add(
         `Switch to Sump ${sump.name} refused: ${result.message}`.slice(0, 500),
@@ -371,31 +375,6 @@ export function StatusBar({
           onClose={() => setOpen((o) => (o.kind === "menu" ? { kind: "none" } : o))}
         />
       ) : null}
-      <Dialog
-        id="dlg-switch-confirm"
-        open={confirm !== null}
-        onClose={() => setConfirm(null)}
-        title="Switch Sump?"
-        actions={
-          <>
-            <Button onClick={() => setConfirm(null)}>Cancel</Button>
-            <Button
-              kind="danger"
-              onClick={() => {
-                const sump = confirm?.sump;
-                setConfirm(null);
-                if (sump) void switchTo(sump, true);
-              }}
-            >
-              Switch
-            </Button>
-          </>
-        }
-      >
-        <p className="dlg-intro">
-          {confirm ? `Switching to Sump ${confirm.sump.name}: ${confirm.message}` : ""}
-        </p>
-      </Dialog>
     </div>
   );
 }

@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { Button, Dialog } from "../components/index.js";
 import { Icon } from "../icons/Icon.js";
+import { useConfirmAbandon } from "../recording/Abandon.js";
 import type { ShellBridge } from "../shell/bridge.js";
 import {
   addStream,
@@ -34,6 +35,7 @@ export interface StreamsDialogProps {
 
 /** The picker. */
 export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
+  const confirmAbandon = useConfirmAbandon();
   const request = bridge.sump.request;
   const [streams, setStreams] = useState<Stream[]>([]);
   const [chosen, setChosen] = useState(NEW_STREAM);
@@ -109,6 +111,16 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
 
   const submit = async () => {
     if (!targets || chosen === NEW_STREAM) return;
+    // Editing the recording's stream, or switching to another, abandons it
+    // (REQ-000039-sJpO9KMY).
+    const current = (await bridge.stream?.active()) ?? null;
+    const label = streams.find((s) => s.id === chosen)?.label ?? chosen;
+    const go = await confirmAbandon(
+      chosen === current ? `Editing data stream ${label}` : `Switching to data stream ${label}`,
+      (recording) =>
+        recording.target?.stream === chosen || (current !== null && chosen !== current),
+    );
+    if (!go) return;
     setBusy(true);
     const wanted = followedFrom(targets, checked);
     const r = await setFollowed(request, chosen, wanted);
@@ -116,8 +128,7 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
     if (!r.ok) return setError(r.message);
     if (sumpId) void bridge.picker?.setLastStream({ sump: sumpId, stream: chosen });
     // The picker's stream becomes this window's active one (REQ-000027-sJpO9KMY).
-    await bridge.stream?.setActive(chosen);
-    const label = streams.find((s) => s.id === chosen)?.label ?? chosen;
+    await bridge.stream?.setActive(chosen, true);
     const n = r.value.containers.length + r.value.services.length;
     void bridge.status.add(`Following ${n} on ${label}`);
     onClose();

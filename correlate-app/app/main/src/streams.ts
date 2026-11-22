@@ -8,6 +8,7 @@
  * when it has none or its stream is gone.
  */
 import type { ActiveSumps } from "./catalog/windows.js";
+import { abandonIfLive, confirmNeeded, type SwitchGuard } from "./provision/local.js";
 import type { IpcEventLike, IpcMainLike } from "./sump/ipc.js";
 
 export const STREAM_ACTIVE_CHANNEL = "stream:active";
@@ -43,22 +44,37 @@ export class ActiveStreams {
 
 /**
  * Answer `stream:active` and `stream:setActive` for the calling window, on
- * its active Sump; a window with no Sump has no active stream.
+ * its active Sump; a window with no Sump has no active stream. While a
+ * recording is live, changing the stream answers "confirm" unless the call
+ * is confirmed (`{ stream, confirmed: true }`), which abandons the recording first
+ * (br-REC-000001-sJpO9KMY, REQ-000039-sJpO9KMY).
  */
 export function registerStreamIpc(
   ipcMain: IpcMainLike,
   streams: ActiveStreams,
   sumps: Pick<ActiveSumps, "get">,
+  guard?: SwitchGuard,
 ): void {
   const windowOf = (event: IpcEventLike) => event?.sender?.id ?? -1;
   ipcMain.handle(STREAM_ACTIVE_CHANNEL, (event) => {
     const window = windowOf(event);
     return streams.get(window, sumps.get(window));
   });
-  ipcMain.handle(STREAM_SET_ACTIVE_CHANNEL, (event, stream) => {
+  ipcMain.handle(STREAM_SET_ACTIVE_CHANNEL, async (event, message) => {
+    // A stream id, or `{ stream, confirmed }` once the user confirmed.
+    const m = message as { stream?: unknown; confirmed?: unknown } | null;
+    const confirmed = typeof message === "object" && m?.confirmed === true;
+    const stream = typeof message === "object" && m !== null ? m.stream : message;
     const window = windowOf(event);
     const sump = sumps.get(window);
     if (!sump) return { ok: false, message: "this window has no Sump" };
+    // A window's first stream (after a switch, at start) changes nothing recorded.
+    const current = streams.get(window, sump);
+    if (current !== null && stream !== current) {
+      const ask = confirmNeeded(guard, confirmed);
+      if (ask) return ask;
+      await abandonIfLive(guard);
+    }
     try {
       return { ok: true, stream: streams.set(window, sump, stream) };
     } catch (error) {

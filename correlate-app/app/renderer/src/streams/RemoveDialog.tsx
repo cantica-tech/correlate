@@ -7,6 +7,7 @@
  */
 import { useEffect, useState } from "react";
 import { Button, Dialog } from "../components/index.js";
+import { useConfirmAbandon } from "../recording/Abandon.js";
 import type { ShellBridge } from "../shell/bridge.js";
 import { listStreams, removeStream, type Stream } from "./api.js";
 
@@ -21,6 +22,7 @@ export interface RemoveDialogProps {
 
 /** The Remove dialog. */
 export function RemoveDialog({ bridge, open, onClose, onRemoved }: RemoveDialogProps) {
+  const confirmAbandon = useConfirmAbandon();
   const [streams, setStreams] = useState<Stream[]>([]);
   const [chosen, setChosen] = useState("");
   const [status, setStatus] = useState("");
@@ -39,6 +41,12 @@ export function RemoveDialog({ bridge, open, onClose, onRemoved }: RemoveDialogP
   const remove = async () => {
     const stream = streams.find((s) => s.id === chosen);
     if (!stream) return;
+    // Removing the recording's stream abandons it (REQ-000039-sJpO9KMY).
+    const go = await confirmAbandon(
+      `Removing data stream ${stream.label}`,
+      (recording) => recording.target?.stream === stream.id,
+    );
+    if (!go) return;
     setBusy(true);
     const r = await removeStream(bridge.sump.request, stream.id);
     setBusy(false);

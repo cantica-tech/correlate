@@ -18,6 +18,7 @@ import { Button, ContextMenu, Dialog, SegControl, Switch } from "../components/i
 import { Lanes } from "../logs/Lanes.js";
 import { Panels, useLogPrefs } from "../logs/Panels.js";
 import { MenuBar } from "../menubar/MenuBar.js";
+import { AbandonProvider, useConfirmAbandon } from "../recording/Abandon.js";
 import { RecoveryDialog } from "../recording/RecoveryDialog.js";
 import { Transport } from "../recording/Transport.js";
 import { StatusBar } from "../statusbar/StatusBar.js";
@@ -60,8 +61,18 @@ export interface ShellProps {
   detached?: boolean;
 }
 
-/** The shell. */
-export function Shell({ bridge, detached = false }: ShellProps) {
+/** The shell, asking before a recording is abandoned (REQ-000039-sJpO9KMY). */
+export function Shell(props: ShellProps) {
+  return (
+    <AbandonProvider bridge={props.bridge}>
+      <ShellBody {...props} />
+    </AbandonProvider>
+  );
+}
+
+/** The shell's body. */
+function ShellBody({ bridge, detached = false }: ShellProps) {
+  const confirmAbandon = useConfirmAbandon();
   const [layout, setLayout] = useState<SidebarLayout | null>(null);
   const [preferences, setPreferences] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("system");
@@ -220,6 +231,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   const switchToBound = useCallback(async () => {
     if (!offer) return;
     setOffer(null);
+    if (!(await confirmAbandon(`Switching to the project's Sump and data stream`))) return;
     const listed = await bridge.sump.list();
     if (!listed.some((s) => s.id === offer.sump)) {
       return void bridge.status.add(
@@ -228,9 +240,9 @@ export function Shell({ bridge, detached = false }: ShellProps) {
     }
     const r = await bridge.sump.switchTo({ id: offer.sump, confirmed: true });
     if (!r.ok) return void bridge.status.add(r.message);
-    await bridge.stream?.setActive(offer.stream);
+    await bridge.stream?.setActive(offer.stream, true);
     streamsChanged();
-  }, [bridge, offer, streamsChanged]);
+  }, [bridge, offer, streamsChanged, confirmAbandon]);
 
   // A bridge answering from the shown file: the views ask it as they ask a Sump,
   // and nothing of it reaches one (br-ANLYS-000001-sJpO9KMY). Its tracks'
