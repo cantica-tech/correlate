@@ -30,6 +30,22 @@ export function cttcChartBlock(): string {
   </div></section></main>`;
 }
 
+/**
+ * cttc's host block (`index.html:252-266`) for the Sump's own host, open or
+ * folded, loading or not; its style toggle and pop-out buttons hidden, as
+ * the app has neither yet (REQ-000032-sJpO9KMY).
+ */
+export function cttcHostBlock(open: boolean, loading: boolean): string {
+  return `<div id="host-block" class="graph-block">
+    <div id="host-head"><span id="host-title" class="panel-head-title">Host telemetry — localhost</span>
+      <div class="panel-head-right"><button id="btn-host-toggle" class="icon-btn" title="${open ? "Hide host telemetry" : "Show host telemetry"}">${open ? "\u25be" : "\u25b8"}</button><button id="btn-style-toggle-host" class="icon-btn" hidden></button><button id="btn-popout-host" class="icon-btn" hidden>⧉</button></div></div>
+    <div class="panel-head-divider"></div>
+    <div id="host-charts"${open && !loading ? "" : " hidden"}><canvas class="strip"></canvas><canvas class="strip"></canvas><canvas class="strip"></canvas></div>
+    <div id="host-loading" class="muted"${open && loading ? "" : " hidden"}><span class="hourglass">⏳</span> Loading host telemetry…</div>
+    ${cttcNav(true).replace('id="chart-nav"', `id="host-nav"${open && !loading ? "" : " hidden"}`)}
+  </div>`;
+}
+
 /** cttc's navigator (`index.html:240-245`), "now" live or not. */
 export function cttcNav(live: boolean): string {
   return `<div id="chart-nav" class="timeline-nav" title="Drag the thumb or click the track to pan · click “now” to jump to the present and resume following it"><div class="tl-track"><div class="tl-thumb"></div><span class="tl-now-label" data-live="${live}">now</span></div></div>`;

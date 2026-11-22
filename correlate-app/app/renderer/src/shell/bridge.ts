@@ -117,10 +117,11 @@ export interface ShellBridge {
   };
   /** The log panels' choices and Export .log (REQ-000029-sJpO9KMY). */
   logs?: {
-    prefs(): Promise<{ order: "newest" | "oldest"; lanesOpen: boolean }>;
+    prefs(): Promise<{ order: "newest" | "oldest"; lanesOpen: boolean; hostOpen?: boolean }>;
     setPrefs(change: {
       order?: "newest" | "oldest";
       lanesOpen?: boolean;
+      hostOpen?: boolean;
     }): Promise<{ ok: boolean }>;
     exportLog(request: {
       source: string;

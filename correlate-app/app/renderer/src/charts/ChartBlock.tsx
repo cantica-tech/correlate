@@ -1,12 +1,12 @@
 /**
  * The telemetry charts (REQ-000028-sJpO9KMY Requirement 2), in cttc's markup
- * (`index.html:214-245`, `#chart-block`, `#legend`, `#charts` of
- * `canvas.strip`, `#chart-nav`): CPU %, MEM % and NET on one timeline for the
- * window's active data stream (br-STREAM-000001-sJpO9KMY), one line per
- * followed container in a stable color, a legend that hides or shows a
- * container in every strip. The data comes from the Sump's buckets route, at
- * most a plot's width of maxima per series, read every 5 s; drawing is the
- * ported `drawChartStrip`.
+ * (`index.html:214-266`, `#chart-block`, `#svc-graph` with `#legend`,
+ * `#charts` and `#chart-nav`, then `#host-block`): CPU %, MEM % and NET on
+ * one timeline for the window's active data stream
+ * (br-STREAM-000001-sJpO9KMY), one line per followed container in a stable
+ * color, a legend that hides or shows a container in every strip. The data
+ * comes from the Sump's buckets route, at most a plot's width of maxima per
+ * series, read every 5 s; drawing is the ported `drawChartStrip`.
  *
  * The window's cursor (REQ-000030-sJpO9KMY): a click on a strip sets it, and
  * the log panels follow. The containers' order and hidden set are shared with
@@ -16,27 +16,23 @@
  * behind now and moved every second, the now line, live tracking's cursor; a
  * double-click or a row's click recentres and pauses, resuming after the
  * delay; a drag zooms; the navigator pans and its "now" goes live again.
+ *
+ * The host's own telemetry (REQ-000032-sJpO9KMY): cttc's host block under the
+ * container charts, titled for the active stream's host, its own strips on
+ * the same view and cursor, never mixed with the containers'.
  */
-import {
-  type MouseEvent as ReactMouseEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Viewport } from "../correlate/atoms.js";
-import { PLOT_MARGIN_LEFT, TIME_AXIS_HEIGHT } from "../correlate/axes.js";
-import { type ChartSeries, drawChartStrip } from "../correlate/chartDraw.js";
-import { assignSlots, colorForSlot, resolveColor, type SlotMap } from "../correlate/colorSlots.js";
-import { tToX, xToT } from "../correlate/timeMapping.js";
-import { isClick, panBy, rangeView } from "../correlate/zoom.js";
+import { PLOT_MARGIN_LEFT } from "../correlate/axes.js";
+import { assignSlots, colorForSlot, type SlotMap } from "../correlate/colorSlots.js";
+import { rangeView } from "../correlate/zoom.js";
 import type { LiveSettings, ShellBridge } from "../shell/bridge.js";
 import { listStreams, type Stream } from "../streams/api.js";
 import { type Arranged, arrange, DRAG_TYPE, moveBy, moveTo } from "./arrange.js";
-import { drawCursorMark, drawNowMark } from "./marks.js";
+import { HOST_NAME, hostCollected, hostTitle } from "./host.js";
+import { type Cursor, StripCanvases, type StripData } from "./StripCanvases.js";
 import { bucketsQuery, bucketsToPoints, STRIPS } from "./strips.js";
+import { TimelineNav } from "./TimelineNav.js";
 import {
   countdown,
   countdownText,
@@ -47,17 +43,14 @@ import {
   navBounds,
   recentred,
   TICK_MS,
-  thumbOf,
   tick,
   type ViewState,
-  viewAtTrack,
-  viewDragged,
 } from "./viewState.js";
+
+export { percentCeiling, timeAt, xAt } from "./StripCanvases.js";
 
 /** How often the charts are read again: cttc's poll, 5 s. */
 export const CHARTS_EVERY_MS = 5_000;
-/** A strip is never shorter than cttc's 44 px. */
-const STRIP_MIN_H = 44;
 /** Rows this close to the cursor are highlighted until the settings say: cttc's default, 5 s. */
 export const HIGHLIGHT_MS = 5_000;
 /** cttc's defaults, until the main process answers. */
@@ -67,35 +60,8 @@ const LIVE_DEFAULTS: LiveSettings = {
   liveTrackSecs: 0,
   resumeSecs: 10,
 };
-
-/**
- * A percentage strip runs from 0 to 100, or higher when the data does: Docker
- * gives CPU above 100% on a machine with several cores (101.5% was seen).
- */
-export function percentCeiling(series: readonly ChartSeries[]): number {
-  const top = Math.max(0, ...series.flatMap((s) => s.points.map((p) => p.v)));
-  return top > 100 ? Math.ceil(top / 10) * 10 : 100;
-}
-
-/** The time at `x` px of a canvas `width` px wide, or null left of the plot. */
-export function timeAt(x: number, view: Viewport, width: number): number | null {
-  if (x < PLOT_MARGIN_LEFT) return null;
-  return xToT(x - PLOT_MARGIN_LEFT, view, Math.max(1, width - PLOT_MARGIN_LEFT));
-}
-
-/** Where `t` is drawn on a canvas `width` px wide. */
-export function xAt(t: number, view: Viewport, width: number): number {
-  return PLOT_MARGIN_LEFT + tToX(t, view, Math.max(1, width - PLOT_MARGIN_LEFT));
-}
-
-/** What the charts show: per strip, per container, its points. */
-type Data = Record<string, Record<string, ChartSeries["points"]>>;
-
-/** The cursor, and whether live tracking put it there. */
-interface Cursor {
-  t: number;
-  live: boolean;
-}
+/** The host's one line, in the first series color: its block has no other. */
+const HOST_LINES = [{ name: HOST_NAME, slot: 0 }];
 
 /** What the charts show, for the lanes and log panels beside them (REQ-000029-sJpO9KMY). */
 export interface ChartsShown {
@@ -140,31 +106,68 @@ export interface ChartBlockProps {
   panels?: (shown: ChartsShown) => ReactNode;
   /** The status bar's persistent text: a pause's countdown, or "" (REQ-000031-sJpO9KMY). */
   onLiveStatus?: (text: string) => void;
+  /** The host block is open (cttc's ▾), kept by the shell (REQ-000032-sJpO9KMY). */
+  hostOpen?: boolean;
+  onHostToggle?: (open: boolean) => void;
+}
+
+/** The buckets of `names` within `stream` over `view`, per strip and name. */
+async function readStrips(
+  bridge: ShellBridge,
+  stream: string,
+  names: readonly string[],
+  view: Viewport,
+  plot: number,
+): Promise<StripData> {
+  const fetched: StripData = {};
+  await Promise.all(
+    STRIPS.flatMap((strip) =>
+      names.map(async (name) => {
+        const reply = await bridge.sump.request({
+          method: "GET",
+          path: "/records/buckets",
+          query: bucketsQuery(strip, `${stream}/${name}`, view, plot),
+        });
+        if (!reply.ok) return;
+        const values = (reply.value as { values: (number | null)[] }).values;
+        fetched[strip.key] = {
+          ...(fetched[strip.key] ?? {}),
+          [name]: bucketsToPoints(values, view, strip.scale),
+        };
+      }),
+    ),
+  );
+  return fetched;
 }
 
 /** The charts. */
-export function ChartBlock({ bridge, version = 0, lanes, panels, onLiveStatus }: ChartBlockProps) {
+export function ChartBlock({
+  bridge,
+  version = 0,
+  lanes,
+  panels,
+  onLiveStatus,
+  hostOpen = true,
+  onHostToggle,
+}: ChartBlockProps) {
   const [stream, setStream] = useState<Stream | null>(null);
   const [containers, setContainers] = useState<string[]>([]);
   const [slots, setSlots] = useState<SlotMap>({});
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
-  const [data, setData] = useState<Data>({});
+  const [data, setData] = useState<StripData>({});
+  const [hostData, setHostData] = useState<StripData>({});
   const [vs, setVsState] = useState<ViewState>(() => initialState(Date.now()));
   const [dataView, setDataView] = useState<Viewport>(() => vs.view);
   const [dataRange, setDataRange] = useState<{ from: number; to: number } | null>(null);
   const [nowT, setNowT] = useState(() => Date.now());
   const [cursor, setCursorState] = useState<Cursor | null>(null);
   const [live, setLive] = useState<LiveSettings>(LIVE_DEFAULTS);
-  const [size, setSize] = useState({ width: 0, height: 0 });
-  const chartsRef = useRef<HTMLDivElement>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
-  const canvases = useRef<(HTMLCanvasElement | null)[]>([]);
+  const chartsBox = useRef<HTMLDivElement>(null);
   const vsRef = useRef(vs);
   const liveRef = useRef(live);
   liveRef.current = live;
   const arrangedRef = useRef<Arranged>({ order: [], hidden: [] });
   const saving = useRef<Promise<unknown>>(Promise.resolve());
-  const downX = useRef<number | null>(null);
   const statusRef = useRef("");
   const onLiveStatusRef = useRef(onLiveStatus);
   onLiveStatusRef.current = onLiveStatus;
@@ -173,6 +176,7 @@ export function ChartBlock({ bridge, version = 0, lanes, panels, onLiveStatus }:
     vsRef.current = next;
     setVsState(next);
   }, []);
+  const currentView = useCallback(() => vsRef.current.view, []);
 
   const read = useCallback(async () => {
     const list = await listStreams(bridge.sump.request);
@@ -191,8 +195,14 @@ export function ChartBlock({ bridge, version = 0, lanes, panels, onLiveStatus }:
     setSlots((s) => assignSlots(s, names));
     const next = { ...vsRef.current.view };
     setDataView(next);
-    const plot = Math.max(1, (chartsRef.current?.clientWidth ?? 600) - PLOT_MARGIN_LEFT);
-    const sources = names.map((name) => `${active?.id}/${name}`);
+    if (!active) {
+      setData({});
+      setHostData({});
+      return;
+    }
+    const plot = Math.max(1, (chartsBox.current?.clientWidth ?? 600) - PLOT_MARGIN_LEFT);
+    const withHost = hostCollected(active);
+    const sources = [...names, ...(withHost ? [HOST_NAME] : [])].map((n) => `${active.id}/${n}`);
     if (sources.length > 0) {
       void bridge.sump
         .request({ method: "GET", path: "/records/range", query: { sources: sources.join(",") } })
@@ -201,25 +211,12 @@ export function ChartBlock({ bridge, version = 0, lanes, panels, onLiveStatus }:
           setDataRange(r?.from && r.to ? { from: Date.parse(r.from), to: Date.parse(r.to) } : null);
         });
     }
-    const fetched: Data = {};
-    await Promise.all(
-      STRIPS.flatMap((strip) =>
-        names.map(async (name) => {
-          const reply = await bridge.sump.request({
-            method: "GET",
-            path: "/records/buckets",
-            query: bucketsQuery(strip, `${active?.id}/${name}`, next, plot),
-          });
-          if (!reply.ok) return;
-          const values = (reply.value as { values: (number | null)[] }).values;
-          fetched[strip.key] = {
-            ...(fetched[strip.key] ?? {}),
-            [name]: bucketsToPoints(values, next, strip.scale),
-          };
-        }),
-      ),
-    );
-    setData(fetched);
+    const [containerData, host] = await Promise.all([
+      readStrips(bridge, active.id, names, next, plot),
+      withHost ? readStrips(bridge, active.id, [HOST_NAME], next, plot) : Promise.resolve({}),
+    ]);
+    setData(containerData);
+    setHostData(host);
   }, [bridge]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` asks for a read.
@@ -265,81 +262,6 @@ export function ChartBlock({ bridge, version = 0, lanes, panels, onLiveStatus }:
     return () => clearInterval(timer);
   }, [read, setVs]);
 
-  // The strips share the block's height, as cttc's computeStripH.
-  useEffect(() => {
-    const el = chartsRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() =>
-      setSize({ width: el.clientWidth, height: el.clientHeight }),
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  const view = vs.view;
-  useEffect(() => {
-    if (!size.width) return;
-    const style = getComputedStyle(document.documentElement);
-    const readVar = (name: string) => style.getPropertyValue(name).trim();
-    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
-    const stripH = Math.max(
-      STRIP_MIN_H,
-      Math.floor((size.height - TIME_AXIS_HEIGHT) / STRIPS.length),
-    );
-    const ratio = window.devicePixelRatio || 1;
-    const inView = (t: number) => t >= view.t0 && t <= view.t1;
-    STRIPS.forEach((strip, i) => {
-      const canvas = canvases.current[i];
-      const ctx = canvas?.getContext("2d");
-      if (!canvas || !ctx) return;
-      const last = i === STRIPS.length - 1;
-      const height = stripH + (last ? TIME_AXIS_HEIGHT : 0);
-      canvas.width = Math.round(size.width * ratio);
-      canvas.height = Math.round(height * ratio);
-      canvas.style.height = `${height}px`;
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      ctx.font = "10px system-ui, sans-serif";
-      const series = containers
-        .filter((name) => !hidden.has(name))
-        .map((name) => ({
-          points: data[strip.key]?.[name] ?? [],
-          color: resolveColor(colorForSlot(slots[name] ?? 0, dark), readVar),
-        }));
-      drawChartStrip(ctx, {
-        view,
-        series,
-        cursorT: null,
-        plotWidth: size.width,
-        height,
-        marginLeft: PLOT_MARGIN_LEFT,
-        axisHeight: last ? TIME_AXIS_HEIGHT : 0,
-        unit: strip.unit,
-        gridColor: readVar("--border"),
-        labelColor: readVar("--muted"),
-        minValue: 0,
-        maxValue: strip.percent ? percentCeiling(series) : undefined,
-      });
-      // cttc's drawVerticals: the cursor, then the now line, over the plot.
-      const plotH = height - (last ? TIME_AXIS_HEIGHT : 0);
-      if (cursor && inView(cursor.t)) {
-        drawCursorMark(
-          ctx,
-          xAt(cursor.t, view, size.width),
-          plotH,
-          cursor.live,
-          readVar("--accent"),
-        );
-      }
-      if (inView(nowT)) drawNowMark(ctx, xAt(nowT, view, size.width), plotH);
-      // The strip's title at its top left, as cttc's strips.
-      ctx.fillStyle = readVar("--text-secondary");
-      ctx.font = "600 10px system-ui, sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(strip.title, PLOT_MARGIN_LEFT + 6, 4);
-    });
-  }, [size, data, containers, hidden, slots, view, cursor, nowT]);
-
   /** Keep the arrangement for this stream, here at once and in the settings. */
   const keep = useCallback(
     (arranged: Arranged) => {
@@ -381,6 +303,14 @@ export function ChartBlock({ bridge, version = 0, lanes, panels, onLiveStatus }:
     },
     [read, setVs],
   );
+  /** A thumb drag in progress: moved, read when it ends. */
+  const drag = useCallback(
+    (next: Viewport) => {
+      const state = moved(next);
+      if (state) setVs(state);
+    },
+    [setVs],
+  );
   const recenterAt = useCallback(
     (t: number) => {
       setVs(recentred(vsRef.current, t, Date.now(), liveRef.current.resumeSecs));
@@ -407,48 +337,50 @@ export function ChartBlock({ bridge, version = 0, lanes, panels, onLiveStatus }:
     void read();
   };
 
-  // The navigator's thumb, placed by script (the page's CSP forbids style attributes).
+  const view = vs.view;
   const bounds = navBounds(view, dataRange, nowT);
-  const placeThumb = (el: HTMLDivElement | null) => {
-    const width = trackRef.current?.clientWidth ?? 0;
-    if (!el || !width) return;
-    const thumb = thumbOf(view, bounds, width);
-    el.style.left = `${thumb.left}px`;
-    el.style.width = `${thumb.width}px`;
-  };
-  const dragThumb = (e: ReactMouseEvent) => {
-    e.stopPropagation();
-    const startX = e.clientX;
-    const start = vsRef.current.view;
-    const width = trackRef.current?.clientWidth ?? 1;
-    const fixed = bounds;
-    const move = (ev: MouseEvent) => {
-      const next = moved(viewDragged(start, fixed, ev.clientX - startX, width));
-      if (next) setVs(next);
-    };
-    const up = () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-      void read();
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-  };
-
   const windowMs = live.windowSecs * 1000;
   const cursorT = cursor?.t ?? null;
   const cursorLive = cursor?.live ?? false;
+  const shownNames = useMemo(() => containers.filter((n) => !hidden.has(n)), [containers, hidden]);
+  const lines = useMemo(
+    () => shownNames.map((name) => ({ name, slot: slots[name] ?? 0 })),
+    [shownNames, slots],
+  );
   const empty = !stream
     ? "No data stream: New Data Stream… adds one."
     : containers.length === 0
       ? `Nothing followed on ${stream.label}: Edit Data Streams… picks containers.`
       : null;
+  const withHost = hostCollected(stream);
+  const hostLoading =
+    withHost && !Object.values(hostData).some((byName) => byName[HOST_NAME]?.length);
+  const strips = {
+    view,
+    currentView,
+    cursor,
+    nowT,
+    onCursor: setCursor,
+    onZoom: zoomTo,
+    onRecenter: recenterAt,
+  };
+  const nav = {
+    view,
+    currentView,
+    bounds,
+    live: vs.live,
+    resuming: vs.resumeAt !== null,
+    onPan: pan,
+    onDrag: drag,
+    onPanned: () => void read(),
+    onNow: nowLive,
+  };
   const shown = useMemo<ChartsShown | null>(
     () =>
       stream
         ? {
             stream,
-            containers: containers.filter((n) => !hidden.has(n)),
+            containers: shownNames,
             slots,
             view: dataView,
             shownView: view,
@@ -466,8 +398,7 @@ export function ChartBlock({ bridge, version = 0, lanes, panels, onLiveStatus }:
         : null,
     [
       stream,
-      containers,
-      hidden,
+      shownNames,
       slots,
       dataView,
       view,
@@ -486,7 +417,7 @@ export function ChartBlock({ bridge, version = 0, lanes, panels, onLiveStatus }:
   return (
     <main id="layout">
       <section id="chart-block">
-        <div id="svc-graph" className="graph-block">
+        <div id="svc-graph" className="graph-block" ref={chartsBox}>
           <div id="chart-head">
             <span className="panel-head-title">Telemetry</span>
           </div>
@@ -543,117 +474,57 @@ export function ChartBlock({ bridge, version = 0, lanes, panels, onLiveStatus }:
               );
             })}
           </div>
-          <div id="charts" ref={chartsRef}>
+          <StripCanvases
+            id="charts"
+            lines={lines}
+            data={data}
+            empty={empty !== null}
+            label={shownNames.join(", ") || "nothing"}
+            {...strips}
+          >
             {empty ? (
               <div id="empty-state" className="muted">
                 {empty}
               </div>
             ) : null}
-            {STRIPS.map((strip, i) => (
-              <canvas
-                key={strip.key}
-                className="strip"
-                data-strip={i}
-                hidden={empty !== null}
-                role="img"
-                aria-label={`${strip.title}: ${containers.filter((n) => !hidden.has(n)).join(", ") || "nothing"}`}
-                ref={(el) => {
-                  canvases.current[i] = el;
-                }}
-                onMouseDown={(e) => {
-                  downX.current = e.nativeEvent.offsetX;
-                }}
-                onMouseUp={(e) => {
-                  const x = e.nativeEvent.offsetX;
-                  const from = downX.current;
-                  downX.current = null;
-                  if (from === null) return;
-                  const width = e.currentTarget.clientWidth;
-                  const current = vsRef.current.view;
-                  // cttc's timelineUp: a drag zooms to its range, a click sets the cursor.
-                  if (!isClick(from, x)) {
-                    const ta = timeAt(Math.max(PLOT_MARGIN_LEFT, from), current, width);
-                    const tb = timeAt(Math.max(PLOT_MARGIN_LEFT, x), current, width);
-                    if (ta !== null && tb !== null) zoomTo(ta, tb);
-                    return;
-                  }
-                  const t = timeAt(x, current, width);
-                  if (t !== null) setCursor(t);
-                }}
-                onDoubleClick={(e) => {
-                  const t = timeAt(
-                    e.nativeEvent.offsetX,
-                    vsRef.current.view,
-                    e.currentTarget.clientWidth,
-                  );
-                  if (t !== null) recenterAt(t);
-                }}
-              />
-            ))}
-          </div>
-          <div
-            id="chart-nav"
-            className="timeline-nav"
-            title="Drag the thumb or click the track to pan · click “now” to jump to the present and resume following it"
-          >
-            {/* biome-ignore lint/a11y/useKeyWithClickEvents: the thumb's arrow keys pan from the keyboard. */}
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: cttc's track; the thumb is the slider. */}
-            <div
-              className="tl-track"
-              ref={trackRef}
-              onClick={(e) => {
-                if (e.target !== e.currentTarget) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                pan(viewAtTrack(view, bounds, (e.clientX - rect.left) / rect.width));
-              }}
-            >
-              <div
-                className="tl-thumb"
-                ref={placeThumb}
-                role="slider"
-                tabIndex={0}
-                aria-label="The view in time"
-                aria-valuemin={bounds.lo}
-                aria-valuemax={bounds.hi}
-                aria-valuenow={view.t0}
-                aria-valuetext={`${new Date(view.t0).toLocaleTimeString()} to ${new Date(view.t1).toLocaleTimeString()}`}
-                onMouseDown={dragThumb}
-                onKeyDown={(e) => {
-                  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-                  e.preventDefault();
-                  pan(panBy(view, e.key === "ArrowLeft" ? -0.1 : 0.1));
-                }}
-              />
-              {/* biome-ignore lint/a11y/useSemanticElements: cttc's now label is a span; a button to assistive technology. */}
-              <span
-                className="tl-now-label"
-                data-live={String(vs.live)}
-                role="button"
-                tabIndex={0}
-                title={
-                  !vs.live && vs.resumeAt
-                    ? "Live tracking paused -- see the status bar for the resume countdown, or click to jump now"
-                    : vs.live
-                      ? "Following the present -- click to jump anyway"
-                      : "Jump back to the present and resume following it"
-                }
-                onClick={(e) => {
-                  e.stopPropagation();
-                  nowLive();
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    nowLive();
-                  }
-                }}
-              >
-                now
-              </span>
-            </div>
-          </div>
+          </StripCanvases>
+          <TimelineNav id="chart-nav" {...nav} />
         </div>
         {shown && lanes ? lanes(shown) : null}
+        {stream && withHost ? (
+          <div id="host-block" className="graph-block">
+            <div id="host-head">
+              <span id="host-title" className="panel-head-title">
+                {hostTitle(stream)}
+              </span>
+              <div className="panel-head-right">
+                <button
+                  type="button"
+                  id="btn-host-toggle"
+                  className="icon-btn"
+                  title={hostOpen ? "Hide host telemetry" : "Show host telemetry"}
+                  aria-expanded={hostOpen}
+                  onClick={() => onHostToggle?.(!hostOpen)}
+                >
+                  {hostOpen ? "▾" : "▸"}
+                </button>
+              </div>
+            </div>
+            <div className="panel-head-divider" />
+            <StripCanvases
+              id="host-charts"
+              lines={HOST_LINES}
+              data={hostData}
+              hidden={!hostOpen || hostLoading}
+              label={hostTitle(stream)}
+              {...strips}
+            />
+            <div id="host-loading" className="muted" hidden={!(hostOpen && hostLoading)}>
+              <span className="hourglass">⏳</span> Loading host telemetry…
+            </div>
+            <TimelineNav id="host-nav" hidden={!hostOpen || hostLoading} {...nav} />
+          </div>
+        ) : null}
       </section>
       {shown && panels ? panels(shown) : null}
     </main>

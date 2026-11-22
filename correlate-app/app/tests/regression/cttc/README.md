@@ -34,7 +34,7 @@ Rule IDs omit their `-sJpO9KMY` suffix; Roadmap gives the item numbers in
 | 9 | vault-setup can re-key an already initialized vault | Critical | `br-VAULT-000004` | 10 | passing |
 | 10 | API token file is written with default permissions | Critical | `br-VAULT-000006` | 10 | passing |
 | 12 | Switching to a known remote gateway collides with the local gateway's port | Medium | `br-SUMP-000008` | 16, 17 | passing |
-| 13 | Host telemetry block shows for the wrong host or view | Medium | `br-STREAM-000001` | 28 | placeholder |
+| 13 | Host telemetry block shows for the wrong host or view | Medium | `br-STREAM-000001` | 33 | passing |
 | 14 | Snapshots mix live and loaded-file telemetry | High | `br-ANLYS-000001` | 43 | placeholder |
 | 16 | 'now' label moves the analysis view to the present | Medium | `br-ANLYS-000002` | 34 | placeholder |
 | 17 | Multi-file load centres on the union, not the active file | Medium | `br-ANLYS-000004` | 35 | placeholder |

@@ -18,7 +18,13 @@ import { build } from "esbuild";
 import { _electron, type ElectronApplication, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COMPONENT_LIMIT, compare, type Mask, readPng, writePng } from "./compare.js";
-import { cttcChartBlock, cttcNav, cttcNavScript, cttcSwatchScript } from "./cttcCharts.js";
+import {
+  cttcChartBlock,
+  cttcHostBlock,
+  cttcNav,
+  cttcNavScript,
+  cttcSwatchScript,
+} from "./cttcCharts.js";
 import { cttcLivePrefs } from "./cttcLive.js";
 import { cttcLanesHead, cttcPanels, cttcRowsScript } from "./cttcLogs.js";
 import { cttcMenuBar } from "./cttcMenuBar.js";
@@ -324,14 +330,41 @@ async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer
       await page.goto(paused ? `${url}?paused` : url);
       if (side === "cttc") {
         await page.evaluate(
-          `(() => { document.getElementById("stage").innerHTML = ${JSON.stringify(cttcChartBlock())}; document.getElementById("charts").insertAdjacentHTML("afterend", ${JSON.stringify(cttcNav(!paused))}); ${cttcSwatchScript()} ${cttcNavScript(!paused)} })()`,
+          `(() => { document.getElementById("stage").innerHTML = ${JSON.stringify(cttcChartBlock())}; document.getElementById("charts").insertAdjacentHTML("afterend", ${JSON.stringify(cttcNav(!paused))}); document.getElementById("chart-block").insertAdjacentHTML("beforeend", ${JSON.stringify(cttcHostBlock(true, false))}); ${cttcSwatchScript()} ${cttcNavScript(!paused)} })()`,
         );
       }
       await page.waitForSelector(`.tl-now-label[data-live="${!paused}"]`);
       await page.waitForTimeout(100);
       await page.mouse.move(1, 1);
       await page.evaluate("document.fonts.ready.then(() => true)");
+      // Our page's stream collects, so its host block is there too, as on cttc's.
       pictures.set(`charts-nav${paused ? "-paused" : ""}-${theme}`, await shoot("#chart-nav"));
+    }
+    // The host block: open, folded, loading (REQ-000032-sJpO9KMY).
+    for (const [name, open, loading] of [
+      ["host-head", true, false],
+      ["host-head-folded", false, false],
+      ["host-loading", true, true],
+    ] as const) {
+      const flag = !open ? "?host-folded" : loading ? "?host-loading" : "";
+      await page.goto(`${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}${flag}`);
+      if (side === "cttc") {
+        await page.evaluate(
+          `(() => { document.getElementById("stage").innerHTML = ${JSON.stringify(cttcChartBlock())}; document.getElementById("chart-block").insertAdjacentHTML("beforeend", ${JSON.stringify(cttcHostBlock(open, loading))}); })()`,
+        );
+      }
+      await page.waitForSelector("#host-head");
+      if (loading) await page.waitForSelector("#host-loading:not([hidden])");
+      else if (open) await page.waitForSelector("#host-charts:not([hidden])");
+      await page.mouse.move(1, 1);
+      await page.evaluate("document.fonts.ready.then(() => true)");
+      pictures.set(`${name}-${theme}`, await shoot("#host-head"));
+      if (loading) {
+        await page.evaluate(
+          'document.querySelectorAll(".hourglass").forEach((el) => { el.style.animation = "none"; })',
+        );
+        pictures.set(`host-loading-line-${theme}`, await shoot("#host-loading"));
+      }
     }
     // The live settings' fieldsets (REQ-000031-sJpO9KMY).
     const prefsUrl = pathToFileURL(path.join(here, `page/${side}-charts.html`)).href;
@@ -434,6 +467,9 @@ describe.skipIf(process.platform !== "darwin")(
       "charts-legend",
       "charts-nav",
       "charts-nav-paused",
+      "host-head",
+      "host-head-folded",
+      "host-loading-line",
       "live-prefs-window",
       "live-prefs-tracking",
       "logs-panel",

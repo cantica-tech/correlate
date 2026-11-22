@@ -2,8 +2,9 @@
  * The log panels' main-process side (REQ-000029-sJpO9KMY Requirements 2-4,
  * br-LOGV-000001-sJpO9KMY):
  *
- * - `logs:prefs`, `logs:setPrefs`: the panels' order (newest or oldest first)
- *   and whether the lanes are open, kept in the settings file under `logs`.
+ * - `logs:prefs`, `logs:setPrefs`: the panels' order (newest or oldest first),
+ *   whether the lanes are open, and whether the host block is
+ *   (REQ-000032-sJpO9KMY), kept in the settings file under `logs`.
  * - `logs:export`: Export .log. The save dialog comes first; only once a file
  *   is chosen are the container's rows over the view fetched, page by page
  *   through the window's Sump, and written as `time text` lines, owner-only.
@@ -29,14 +30,17 @@ const SOURCE = /^[\x21-\x7e]{1,400}$/;
 export interface LogPrefs {
   order: "newest" | "oldest";
   lanesOpen: boolean;
+  /** The host telemetry block is open (cttc's ▾), as it is by default. */
+  hostOpen: boolean;
 }
 
-/** What is remembered, or the defaults: newest first, lanes folded (cttc's). */
+/** What is remembered, or the defaults: newest first, lanes folded, host open (cttc's). */
 export function logPrefs(settings: Settings): LogPrefs {
   const part = settings.part(PART) as Partial<LogPrefs> | undefined;
   return {
     order: part?.order === "oldest" ? "oldest" : "newest",
     lanesOpen: part?.lanesOpen === true,
+    hostOpen: part?.hostOpen !== false,
   };
 }
 
@@ -47,6 +51,7 @@ export function setLogPrefs(settings: Settings, change: unknown): LogPrefs {
   for (const [key, value] of Object.entries(c)) {
     if (key === "order" && (value === "newest" || value === "oldest")) next.order = value;
     else if (key === "lanesOpen" && typeof value === "boolean") next.lanesOpen = value;
+    else if (key === "hostOpen" && typeof value === "boolean") next.hostOpen = value;
     else throw new Error(`no log preference ${key} of that value`);
   }
   settings.setPart(PART, next);

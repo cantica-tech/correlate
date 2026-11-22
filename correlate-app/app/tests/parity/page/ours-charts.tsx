@@ -25,10 +25,12 @@ const stream = {
 };
 const bridge = {
   sump: {
-    request: async ({ path }: { path: string }) =>
+    request: async ({ path, query }: { path: string; query?: Record<string, unknown> }) =>
       path === "/streams"
         ? { ok: true, value: { streams: [stream] } }
-        : { ok: true, value: { values: [1, 2, 3, null, 5] } },
+        : hostLoading && String(query?.source ?? "").endsWith("/__host__")
+          ? { ok: true, value: { values: [null, null, null, null, null] } }
+          : { ok: true, value: { values: [1, 2, 3, null, 5] } },
   },
   stream: { active: async () => "self", setActive: async () => ({ ok: true }) },
 } as unknown as ShellBridge;
@@ -41,6 +43,9 @@ function RecentreOnce({ shown }: { shown: ChartsShown }) {
 }
 
 const paused = location.search.includes("paused");
+// `?host-loading`: the host has no figures yet; `?host-folded`: its block folded (REQ-000032-sJpO9KMY).
+const hostLoading = location.search.includes("host-loading");
+const hostFolded = location.search.includes("host-folded");
 // A paused view's thumb depends on now: the page's clock is frozen so both
 // sides draw it at the same place, a sixth of the track.
 if (paused) {
@@ -63,6 +68,7 @@ if (root)
         <ChartBlock
           bridge={bridge}
           panels={paused ? (shown) => <RecentreOnce shown={shown} /> : undefined}
+          hostOpen={!hostFolded}
         />
       </div>
     ),

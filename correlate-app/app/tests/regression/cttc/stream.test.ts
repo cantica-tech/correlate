@@ -8,10 +8,32 @@
  * moved to the server's corpus with Item 27, and 30 with Item 28: the Sump
  * keeps the selections and runs collection.
  */
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
+import { hostCollected, hostTitle } from "../../../renderer/src/charts/host.js";
+import type { Stream } from "../../../renderer/src/streams/api.js";
 
 describe("br-STREAM-000001-sJpO9KMY", () => {
-  // BUG-000013-uKKrzikI, Medium: becomes a real test with roadmap Item 28
-  // (RM-000029-sJpO9KMY).
-  it.todo("cttc BUG-000013: Host telemetry block shows for the wrong host or view");
+  // BUG-000013-uKKrzikI, Medium: built with roadmap Item 33 (RM-000034-sJpO9KMY).
+  it("cttc BUG-000013: Host telemetry block shows for the wrong host or view", () => {
+    const followed = { containers: ["web"], services: [] };
+    const self: Stream = { id: "self", kind: "self", label: "This Sump's host", followed };
+    const lab: Stream = {
+      id: "ssh:ops@lab:22",
+      kind: "ssh",
+      label: "ops@lab:22",
+      host: "lab",
+      followed,
+    };
+    // cttc titled the block for the first host source it found, so another
+    // host's block read "localhost": the title is the active stream's host.
+    expect(hostTitle(self)).toBe("Host telemetry — localhost");
+    expect(hostTitle(lab)).toBe("Host telemetry — lab");
+    expect(hostTitle(lab)).not.toContain("localhost");
+    // cttc kept the block up for a host that was no longer collected: it
+    // shows only while the active stream collects.
+    expect(hostCollected(lab)).toBe(true);
+    expect(hostCollected({ ...lab, paused: true })).toBe(false);
+    expect(hostCollected({ ...lab, followed: { containers: [], services: [] } })).toBe(false);
+    expect(hostCollected(null)).toBe(false);
+  });
 });

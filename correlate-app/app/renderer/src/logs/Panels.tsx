@@ -11,16 +11,18 @@ import type { ShellBridge } from "../shell/bridge.js";
 import type { Order } from "./api.js";
 import { LogPanel } from "./LogPanel.js";
 
-/** The panels' choices: newest first and lanes folded until changed (cttc's). */
+/** The panels' choices: newest first, lanes folded and the host block open until changed (cttc's). */
 export function useLogPrefs(bridge: ShellBridge) {
   const [order, setOrderState] = useState<Order>("newest");
   const [lanesOpen, setLanesState] = useState(false);
+  const [hostOpen, setHostState] = useState(true);
   useEffect(() => {
     let live = true;
     void bridge.logs?.prefs().then((p) => {
       if (!live) return;
       setOrderState(p.order);
       setLanesState(p.lanesOpen);
+      setHostState(p.hostOpen !== false);
     });
     return () => {
       live = false;
@@ -40,7 +42,14 @@ export function useLogPrefs(bridge: ShellBridge) {
     },
     [bridge],
   );
-  return { order, setOrder, lanesOpen, setLanesOpen };
+  const setHostOpen = useCallback(
+    (open: boolean) => {
+      setHostState(open);
+      void bridge.logs?.setPrefs({ hostOpen: open });
+    },
+    [bridge],
+  );
+  return { order, setOrder, lanesOpen, setLanesOpen, hostOpen, setHostOpen };
 }
 
 /** The panels' props. */

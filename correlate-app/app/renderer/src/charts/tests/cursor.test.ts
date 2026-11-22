@@ -52,3 +52,13 @@ describe("REQ-000030-sJpO9KMY: the containers' order and hidden set", () => {
     expect(moveBy(["a", "b", "c"], "c", 1)).toEqual(["a", "b", "c"]);
   });
 });
+
+describe("REQ-000032-sJpO9KMY: the host block", () => {
+  it("is titled for an SSH stream's host, or its label", async () => {
+    const { hostTitle, HOST_NAME } = await import("../host.js");
+    expect(HOST_NAME).toBe("__host__");
+    expect(hostTitle({ id: "ssh:x", kind: "ssh", label: "ops@lab:22", host: null })).toBe(
+      "Host telemetry — ops@lab:22",
+    );
+  });
+});

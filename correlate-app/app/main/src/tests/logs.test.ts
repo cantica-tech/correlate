@@ -50,10 +50,11 @@ function sump(n: number) {
 
 describe("REQ-000029-sJpO9KMY: the panels' choices", () => {
   it("are newest first and lanes folded until changed, then kept across restarts", () => {
-    expect(logPrefs(settings())).toEqual({ order: "newest", lanesOpen: false });
+    expect(logPrefs(settings())).toEqual({ order: "newest", lanesOpen: false, hostOpen: true });
     setLogPrefs(settings(), { order: "oldest" });
     setLogPrefs(settings(), { lanesOpen: true });
-    expect(logPrefs(settings())).toEqual({ order: "oldest", lanesOpen: true });
+    setLogPrefs(settings(), { hostOpen: false });
+    expect(logPrefs(settings())).toEqual({ order: "oldest", lanesOpen: true, hostOpen: false });
   });
 
   it("refuse anything else", () => {
@@ -125,6 +126,7 @@ describe("br-LOGV-000001-sJpO9KMY: Export .log", () => {
     expect(await handlers.get(LOGS_PREFS_CHANNEL)?.(event, undefined)).toEqual({
       order: "newest",
       lanesOpen: false,
+      hostOpen: true,
     });
     expect(await handlers.get(LOGS_SET_PREFS_CHANNEL)?.(event, { order: 3 })).toMatchObject({
       ok: false,

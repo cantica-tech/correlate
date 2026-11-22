@@ -10,6 +10,8 @@ export interface Stream {
   id: string;
   kind: "self" | "ssh";
   label: string;
+  /** An SSH stream's host (REQ-000032-sJpO9KMY: the host block's title). */
+  host?: string | null;
   /** Paused by Close Data Streams (REQ-000027-sJpO9KMY). */
   paused?: boolean;
   /** How many containers and services it follows. */

@@ -161,6 +161,8 @@ export function Shell({ bridge, detached = false }: ShellProps) {
             bridge={bridge}
             version={streamsVersion}
             onLiveStatus={setLiveStatus}
+            hostOpen={logs.hostOpen}
+            onHostToggle={logs.setHostOpen}
             lanes={(shown) => (
               <Lanes
                 request={bridge.sump.request}
