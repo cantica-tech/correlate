@@ -34,6 +34,7 @@ DEFINITION = frozenset(
         "stream",
         "conditions",
         "match",
+        "action",
         "containers",
         "host",
         "enabled",
@@ -68,6 +69,38 @@ class LogCondition:
 
 Condition = MetricCondition | LogCondition
 
+#: An action's minutes, by kind: (default, most) (decided in FEAT-000047-sJpO9KMY).
+ACTION_MINUTES = {"snapshot": (5.0, 60.0), "recording": (10.0, 120.0)}
+
+
+@dataclass
+class Action:
+    """What a firing does on the Sump (REQ-000045-sJpO9KMY): nothing, a snapshot
+    of the minutes before it, or a recording of the minutes after."""
+
+    kind: Literal["none", "snapshot", "recording"] = "none"
+    minutes: float = 0.0
+
+
+def parse_action(raw: Any) -> Action:
+    """An action from its JSON (none when absent), or why it is refused."""
+    if raw is None:
+        return Action()
+    if not isinstance(raw, dict):
+        raise InvalidEvent("an action is an object")
+    kind = raw.get("kind", "none")
+    if kind == "none":
+        return Action()
+    if kind not in ACTION_MINUTES:
+        raise InvalidEvent(f"unknown action: {kind!r}")
+    default, most = ACTION_MINUTES[kind]
+    minutes = raw.get("minutes", default)
+    if isinstance(minutes, bool) or not isinstance(minutes, int | float):
+        raise InvalidEvent("an action's minutes must be a number")
+    if not 0 < minutes <= most:
+        raise InvalidEvent(f"a {kind}'s minutes are more than 0 and at most {most:g}")
+    return Action(kind=kind, minutes=float(minutes))
+
 
 @dataclass
 class Event:
@@ -80,6 +113,8 @@ class Event:
     conditions: list[Condition]
     #: `any` condition met is enough, or `all` at once.
     match: Literal["any", "all"] = "any"
+    #: What a firing does (Item 47).
+    action: Action = field(default_factory=Action)
     #: The containers watched; empty, all of the stream's.
     containers: list[str] = field(default_factory=list)
     #: The stream's host is watched by its metric conditions too.
@@ -123,6 +158,7 @@ class Event:
             stream=str(data.get("stream", "")),
             conditions=[parse_condition(c) for c in data.get("conditions", [])],
             match="all" if data.get("match") == "all" else "any",
+            action=parse_action(data.get("action")),
             containers=[str(c) for c in data.get("containers", [])],
             host=data.get("host") is True,
             enabled=data.get("enabled") is not False,

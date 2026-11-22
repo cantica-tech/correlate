@@ -28,7 +28,7 @@ import secrets
 import time
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from redis.exceptions import WatchError
 
@@ -37,9 +37,13 @@ from sump_plugin_events.model import (
     Event,
     LogCondition,
     MetricCondition,
+    parse_action,
     parse_condition,
     validate,
 )
+
+if TYPE_CHECKING:
+    from sump_plugin_events.artifacts import Artifacts
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +98,26 @@ def _ts_ms(record: dict[str, Any]) -> int | None:
         return None
 
 
+async def watched_sources(
+    redis: Any, stream: str, containers: list[str], host: bool, kind: str
+) -> list[str]:
+    """The sources of `kind` with a stream in `stream`: all its containers, or
+    `containers`; its host (`__host__`) for metrics when `host`."""
+    prefix = f"sump:records:{stream}/"
+    suffix = f":{kind}"
+    found = []
+    async for key in redis.scan_iter(match=f"{prefix}*{suffix}"):
+        name = _text(key)[len(prefix) : -len(suffix)]
+        if "/" in name:
+            continue
+        if name == HOST_NAME:
+            if host and kind == "metric":
+                found.append(name)
+        elif not containers or name in containers:
+            found.append(name)
+    return [f"{stream}/{name}" for name in sorted(found)]
+
+
 class EventRefused(Exception):
     """An API call the store refuses: its HTTP status and why."""
 
@@ -115,7 +139,7 @@ class EventConflict(EventRefused):
 
 
 #: The definition fields an edit may change.
-EDITABLE = ("name", "stream", "conditions", "match", "containers", "host", "enabled")
+EDITABLE = ("name", "stream", "conditions", "match", "action", "containers", "host", "enabled")
 
 
 def state_key(event_id: str) -> str:
@@ -197,6 +221,7 @@ class EventStore:
             stream=str(spec.get("stream", "")),
             conditions=conditions,
             match=spec.get("match", "any"),
+            action=parse_action(spec.get("action")),
             containers=list(spec.get("containers") or []),
             host=spec.get("host") is True,
             enabled=spec.get("enabled") is not False,
@@ -241,6 +266,8 @@ class EventStore:
                     value = spec[name]
                     if name == "conditions":
                         value = [parse_condition(c) for c in value or []]
+                    elif name == "action":
+                        value = parse_action(value)
                     elif name in ("host", "enabled"):
                         value = value is True
                     elif name == "containers":
@@ -307,26 +334,17 @@ class Engine:
         redis: Any,
         store: EventStore | None = None,
         now: Callable[[], float] = lambda: time.time() * 1000,
+        artifacts: Artifacts | None = None,
     ) -> None:
         self.redis = redis
         self.store = store or EventStore(redis)
         self.now = now
+        #: Where a firing's action makes its artifact (Item 47); none, no action.
+        self.artifacts = artifacts
 
     async def sources(self, event: Event, kind: str) -> list[str]:
         """The watched sources of `kind` that have a stream: `<stream>/<container>`."""
-        prefix = f"sump:records:{event.stream}/"
-        suffix = f":{kind}"
-        found = []
-        async for key in self.redis.scan_iter(match=f"{prefix}*{suffix}"):
-            name = _text(key)[len(prefix) : -len(suffix)]
-            if "/" in name:
-                continue
-            if name == HOST_NAME:
-                if event.host and kind == "metric":
-                    found.append(name)
-            elif not event.containers or name in event.containers:
-                found.append(name)
-        return [f"{event.stream}/{name}" for name in sorted(found)]
+        return await watched_sources(self.redis, event.stream, event.containers, event.host, kind)
 
     async def tick(self) -> list[dict[str, Any]]:
         """Evaluate every enabled event once; the firings made."""
@@ -341,6 +359,11 @@ class Engine:
                 continue
             if firing is not None:
                 fired.append(firing)
+        if self.artifacts is not None:
+            try:
+                await self.artifacts.tick(int(self.now()))
+            except Exception:
+                logger.exception("artifacts could not be completed or swept")
         return fired
 
     async def evaluate(self, event: Event) -> dict[str, Any] | None:
@@ -374,6 +397,16 @@ class Engine:
         if not await self.store.save_state(event):
             return None
         if firing is not None:
+            # The action, on the Sump; the firing names what it made (REQ-000045).
+            artifact, note = None, None
+            if self.artifacts is not None:
+                try:
+                    artifact, note = await self.artifacts.on_firing(event, now)
+                except Exception as error:
+                    logger.exception("event %s's action failed", event.id)
+                    note = f"the action failed: {error}"
+            firing["artifact"] = artifact or ""
+            firing["note"] = note or ""
             await self.redis.xadd(FIRINGS, firing, maxlen=FIRINGS_MAXLEN, approximate=True)
         return firing
 
@@ -413,7 +446,7 @@ class Engine:
                 for entry_id, fields in page or []:
                     position = _text(entry_id)
                     record = _record(fields)
-                    line = str(record.get("message", "")) if record else ""
+                    line = log_text(record) if record else ""
                     if hit is None and regex.search(line):
                         first = line.splitlines()[0][:200] if line else ""
                         hit = f"{source.split('/', 1)[1]}: {first}"
@@ -421,6 +454,11 @@ class Engine:
                     break
             positions[source] = position
         return hit
+
+
+def log_text(record: dict[str, Any]) -> str:
+    """A log record's line: `text`, as the SSH plugin writes it, or `message`."""
+    return str(record.get("text", record.get("message", "")))
 
 
 def metric_value(

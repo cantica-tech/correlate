@@ -18,6 +18,7 @@ from typing import Any
 from correlate_sump.plugins import hookimpl
 from correlate_sump.users import UserStore, data_dir_from_env
 from sump_plugin_events import __version__
+from sump_plugin_events.artifacts import Artifacts
 from sump_plugin_events.engine import Engine, EventStore
 from sump_plugin_events.routes import add_event_routes
 
@@ -45,6 +46,7 @@ class SumpPluginEvents:
     def __init__(self, env: dict[str, str] | None = None) -> None:
         self.env = env if env is not None else dict(os.environ)
         self.store: EventStore | None = None
+        self.artifacts: Artifacts | None = None
 
     def sump_owner(self) -> str | None:
         """The Sump's owner, who sees every event."""
@@ -59,18 +61,21 @@ class SumpPluginEvents:
         adapter = manager.ingest_adapter
         if adapter is not None:
             self.store = EventStore(adapter.redis)
+            # Artifacts in the Sump's data folder, never named by a request.
+            folder = data_dir_from_env(self.env) / "artifacts"
+            self.artifacts = Artifacts(adapter.redis, folder, getattr(adapter, "maxlen", None))
 
         async def evaluate() -> None:
             if self.store is None:
                 logger.warning("no ingest adapter: events are not evaluated")
                 return
-            await run(Engine(self.store.redis, self.store))
+            await run(Engine(self.store.redis, self.store, artifacts=self.artifacts))
 
         manager.add_background_task("evaluation", evaluate)
 
     @hookimpl
     def contribute_routes(self, app: Any) -> None:
-        add_event_routes(app, lambda: self.store, self.sump_owner)
+        add_event_routes(app, lambda: self.store, self.sump_owner, artifacts=lambda: self.artifacts)
 
 
 plugin = SumpPluginEvents()

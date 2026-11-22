@@ -11,6 +11,12 @@ Behind the Sump's session guard: every call has a user, the D3 identity.
 - `DELETE /events/{id}?version=N`: the event's owner, or the Sump's owner;
   its firings stay.
 - `POST /events/{id}/reset`: re-arm it; the event's owner only.
+- `GET /events/{id}/artifacts`: its firings' artifacts, newest first
+  (REQ-000045-sJpO9KMY).
+- `GET /artifacts/{id}`: an artifact's `.recording`, only once complete
+  (409 while pending, or failed); its event's owner or the Sump's owner.
+- `POST /artifacts/{id}/keep` (`{ "days": n }`): kept n days from now, at
+  most 30; its event's owner only.
 
 An event another user owns is answered as not found (404), unless the caller
 is the Sump's owner.
@@ -23,7 +29,9 @@ from collections.abc import Callable
 from typing import Annotated, Any
 
 from fastapi import Body, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 
+from sump_plugin_events.artifacts import ArtifactRefused, Artifacts
 from sump_plugin_events.engine import EventRefused, EventStore, visible
 from sump_plugin_events.model import InvalidEvent
 
@@ -41,8 +49,22 @@ def add_event_routes(
     store: Callable[[], EventStore | None],
     sump_owner: Callable[[], str | None],
     now_ms: Callable[[], int] = lambda: int(time.time() * 1000),
+    artifacts: Callable[[], Artifacts | None] = lambda: None,
 ) -> None:
-    """Add the events' routes to `app`; `store` is None until the plugin runs."""
+    """Add the events' routes to `app`; `store` (and `artifacts`) None until the plugin runs."""
+
+    def the_artifacts() -> Artifacts:
+        found = artifacts()
+        if found is None:
+            raise HTTPException(status_code=503, detail="the event engine is not running")
+        return found
+
+    async def seen_artifact(artifact_id: str, caller: str) -> dict[str, Any]:
+        record = await the_artifacts().get(artifact_id)
+        owner = sump_owner()
+        if record is None or not (record["owner"] == caller or caller == owner):
+            raise HTTPException(status_code=404, detail=f"no artifact {artifact_id}")
+        return record
 
     def the_store() -> EventStore:
         found = store()
@@ -116,3 +138,45 @@ def add_event_routes(
         except EventRefused as error:
             raise refused(error) from error
         return event.to_json()
+
+    @app.get("/events/{event_id}/artifacts")
+    async def event_artifacts(event_id: str, request: Request) -> dict[str, Any]:
+        caller = _caller(request)
+        event = await the_store().get(event_id)
+        if event is None or not visible(event, caller, sump_owner()):
+            raise HTTPException(status_code=404, detail=f"no event {event_id}")
+        return {"artifacts": await the_artifacts().of_event(event_id)}
+
+    @app.get("/artifacts/{artifact_id}")
+    async def download_artifact(artifact_id: str, request: Request) -> FileResponse:
+        record = await seen_artifact(artifact_id, _caller(request))
+        if record["status"] != "complete":
+            why = record["reason"] if record["status"] == "failed" else "it is still being made"
+            raise HTTPException(
+                status_code=409, detail=f"the artifact is {record['status']}: {why}"
+            )
+        try:
+            path = the_artifacts().path(artifact_id)
+        except ArtifactRefused as error:
+            raise HTTPException(status_code=error.status, detail=str(error)) from error
+        if not path.exists():
+            raise HTTPException(status_code=404, detail=f"artifact {artifact_id} has no file")
+        return FileResponse(
+            path, media_type="application/zip", filename=f"event-{artifact_id}.recording"
+        )
+
+    @app.post("/artifacts/{artifact_id}/keep")
+    async def keep_artifact(
+        artifact_id: str, request: Request, body: Annotated[dict[str, Any], Body()]
+    ) -> dict[str, Any]:
+        caller = _caller(request)
+        await seen_artifact(artifact_id, caller)
+        days = body.get("days")
+        if isinstance(days, bool) or not isinstance(days, int | float):
+            raise HTTPException(status_code=422, detail="days must be a number")
+        try:
+            return await the_artifacts().keep(
+                artifact_id, int(days * 24 * 3600 * 1000), caller, now_ms()
+            )
+        except ArtifactRefused as error:
+            raise HTTPException(status_code=error.status, detail=str(error)) from error

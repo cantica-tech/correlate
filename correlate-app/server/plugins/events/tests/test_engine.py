@@ -36,7 +36,8 @@ class Sump:
         await self.redis.xadd(stream_key(source, "metric"), {"json": json.dumps(record)})
 
     async def log(self, source: str, message: str) -> None:
-        record = {"kind": "log", "source": source, "ts": _iso(self.now), "message": message}
+        # As the SSH plugin writes them (`collect.py`): the line in `text`.
+        record = {"kind": "log", "source": source, "ts": _iso(self.now), "text": message}
         await self.redis.xadd(stream_key(source, "log"), {"json": json.dumps(record)})
 
     async def event(self, **spec: Any) -> Any:
