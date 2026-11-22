@@ -83,6 +83,12 @@ export interface LanesProps {
   onRecenter?: (t: number) => void;
   /** A drag zooms to its range. */
   onZoom?: (ta: number, tb: number) => void;
+  /** Capture mode is armed: a drag captures instead of zooming (REQ-000041-sJpO9KMY). */
+  captureArmed?: boolean;
+  /** A Shift, Ctrl or Cmd drag, or any drag while armed: capture the range. */
+  onCapture?: (ta: number, tb: number) => void;
+  /** A right-click at time `t`: cttc's time menu. */
+  onTimeMenu?: (x: number, y: number, t: number) => void;
   /** What the recording has captured, banded behind the ticks (REQ-000040-sJpO9KMY). */
   bands?: readonly { t0: number; t1: number }[];
 }
@@ -107,6 +113,9 @@ export function Lanes({
   onRecenter,
   onZoom,
   bands = NO_BANDS,
+  captureArmed = false,
+  onCapture,
+  onTimeMenu,
 }: LanesProps) {
   const drawn = shownView ?? view;
   const downX = useRef<number | null>(null);
@@ -216,11 +225,20 @@ export function Lanes({
               if (!isClick(from, x)) {
                 const ta = timeAt(Math.max(PLOT_MARGIN_LEFT, from), drawn, w);
                 const tb = timeAt(Math.max(PLOT_MARGIN_LEFT, x), drawn, w);
-                if (ta !== null && tb !== null) onZoom?.(ta, tb);
+                if (ta === null || tb === null) return;
+                const capturing = e.shiftKey || e.ctrlKey || e.metaKey || captureArmed;
+                if (capturing && onCapture) onCapture(ta, tb);
+                else onZoom?.(ta, tb);
                 return;
               }
               const t = timeAt(x, drawn, w);
               if (t !== null) onCursor?.(t);
+            }}
+            onContextMenu={(e) => {
+              const t = timeAt(e.nativeEvent.offsetX, drawn, e.currentTarget.clientWidth);
+              if (t === null || !onTimeMenu) return;
+              e.preventDefault();
+              onTimeMenu(e.clientX, e.clientY, t);
             }}
             onDoubleClick={(e) => {
               const t = timeAt(e.nativeEvent.offsetX, drawn, e.currentTarget.clientWidth);

@@ -57,6 +57,8 @@ export interface StatusBarProps {
    * cttc wrote it to the bar directly.
    */
   persistent?: string;
+  /** The persistent text blinks, as cttc's "capture mode ✂️" (REQ-000041-sJpO9KMY). */
+  blink?: boolean;
   /**
    * Which view the window shows (REQ-000033-sJpO9KMY): cttc's mode icon at
    * the bar's start, live or analysis; in analysis, a click goes back to live.
@@ -74,6 +76,7 @@ export function StatusBar({
   onStreamAction,
   streamsVersion,
   persistent = "",
+  blink = false,
   mode = "live",
   onBackToLive,
   recording = "idle",
@@ -254,7 +257,12 @@ export function StatusBar({
       <span id="status-bar-recording-text" hidden={recording === "idle"}>
         {recordingText(recording)}
       </span>
-      <span id="app-status-bar-text">{persistent || message}</span>
+      <span
+        id="app-status-bar-text"
+        className={blink && persistent ? "status-bar-blink" : undefined}
+      >
+        {persistent || message}
+      </span>
       <span className="status-bar-divider" />
       <div
         id="server-status"

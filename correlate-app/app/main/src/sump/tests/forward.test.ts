@@ -88,9 +88,11 @@ describe("br-SUMP-000008-sJpO9KMY: the SSH forward", () => {
     forward.start();
     expect(await forward.waitUp(5_000)).toBe(true);
     host.dropAll();
-    await new Promise((r) => setTimeout(r, 30));
-    expect(forward.up).toBe(false);
-    expect(lifecycle.get("remote-1")?.state).toBe("unreachable");
+    // Wait for the drop to be told, not a fixed time: a loaded machine notices
+    // it later than 30 ms, and the forward may already be back up by then.
+    const deadline = Date.now() + 5_000;
+    while (states.length < 3 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
+    expect(states[2]).toBe("unreachable");
     expect(await forward.waitUp(5_000)).toBe(true);
     expect(states).toEqual(["unreachable", "active", "unreachable", "active"]);
   });

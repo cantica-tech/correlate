@@ -32,6 +32,7 @@
  * `window.correlate.project` the window's project (REQ-000035-sJpO9KMY);
  * `window.correlate.opened` the files the OS hands the app (REQ-000036-sJpO9KMY);
  * `window.correlate.recording` the recording session (REQ-000037-sJpO9KMY).
+ * `window.correlate.exports` captures and snapshots (REQ-000041-sJpO9KMY).
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -93,6 +94,9 @@ const PROJECT_CHANNELS = {
 /** Must match the channels in `main/src/opened.ts`. */
 const OPEN_TAKE_CHANNEL = "open:take";
 const OPEN_FILES_EVENT = "open:files";
+/** Must match the channels in `main/src/exports/ipc.ts`. */
+const EXPORT_CAPTURE_CHANNEL = "export:capture";
+const EXPORT_SAVE_SNAPSHOT_CHANNEL = "export:saveSnapshot";
 /** Must match the channels in `main/src/recording/ipc.ts`. */
 const RECORDING_CHANNELS = {
   get: "recording:get",
@@ -246,6 +250,12 @@ contextBridge.exposeInMainWorld("correlate", {
     change: (change) => ipcRenderer.invoke(PROJECT_CHANNELS.change, change),
     /** The shown file's tracks: `{ item, tracks }`. */
     tracks: () => ipcRenderer.invoke(PROJECT_CHANNELS.tracks),
+  },
+  exports: {
+    /** Save `{ view, stream, containers, host, from, to }` as a `.recording`, where the user chooses. */
+    capture: (request) => ipcRenderer.invoke(EXPORT_CAPTURE_CHANNEL, request),
+    /** Save a snapshot `{ name, content, kind: "txt" | "json" }`, where the user chooses. */
+    saveSnapshot: (snapshot) => ipcRenderer.invoke(EXPORT_SAVE_SNAPSHOT_CHANNEL, snapshot),
   },
   recording: {
     /** The recording session's state. */

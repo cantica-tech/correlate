@@ -103,6 +103,44 @@ export function cttcAbandonDialog(): string {
   </dialog>`;
 }
 
+/**
+ * cttc's snapshot dialog (`index.html:731-761`) as `renderSnapshot` fills it
+ * (`app.js:1457`) for `SNAPSHOT_FIXTURE`'s values (REQ-000041-sJpO9KMY).
+ */
+export function cttcSnapshotDialog(): string {
+  return `<dialog id="dlg-snapshot">
+    <h2>Snapshot</h2>
+    <div id="snapshot-meta" class="muted">t = 2026-11-22 12:00:30.000 UTC · 2 series · 0 log entries</div>
+    <label class="ctl">
+      <input id="snap-logs" type="checkbox" checked />
+      Include nearby log entries
+    </label>
+    <label class="ctl switch-row" title="Enlarge the snapshot around the selected time: widen the log context by N entries, or add extra telemetry/log slices N seconds before and after">
+      <span class="switch">
+        <input id="snap-panorama-on" type="checkbox" />
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+      </span>
+      panorama
+      <input id="snap-panorama-value" type="number" min="0" step="1" value="3" disabled />
+      <select id="snap-panorama-unit" disabled>
+        <option value="entries" selected>entries</option>
+        <option value="seconds">seconds</option>
+      </select>
+    </label>
+    <div class="btn-group" id="snapshot-view-switch">
+      <button id="snap-view-raw" class="primary" title="Show a human-readable table">Raw</button>
+      <button id="snap-view-json" title="Show the raw JSON payload">JSON</button>
+    </div>
+    <div id="snapshot-props" class="snapshot-body"><table class="snapshot-table"><tr><th>source</th><th>cpu</th><th>mem</th><th>net</th><th>at</th></tr><tr><td>\u{1F5A5} localhost</td><td>80.0%</td><td>\u2013</td><td>\u2013</td><td>\u2013</td></tr><tr><td>web</td><td>12.3%</td><td>50.0%</td><td>2.5 kB/s</td><td>\u2013</td></tr></table></div>
+    <pre id="snapshot-json" class="snapshot-body" hidden></pre>
+    <div class="dlg-actions">
+      <button id="dlg-snapshot-close" title="Close this snapshot">Close</button>
+      <button id="dlg-snapshot-save-txt" title="Save this snapshot as a plain-text file">💾 Save as TXT…</button>
+      <button id="dlg-snapshot-save" class="primary" hidden title="Save this snapshot as a JSON file">💾 Save as JSON…</button>
+    </div>
+  </dialog>`;
+}
+
 /** cttc's navigator (`index.html:240-245`), "now" live or not. */
 export function cttcNav(live: boolean): string {
   return `<div id="chart-nav" class="timeline-nav" title="Drag the thumb or click the track to pan · click “now” to jump to the present and resume following it"><div class="tl-track"><div class="tl-thumb"></div><span class="tl-now-label" data-live="${live}">now</span></div></div>`;

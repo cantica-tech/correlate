@@ -28,13 +28,16 @@
  * (br-ANLYS-000003-sJpO9KMY); "Back to live tracking" leaves it.
  */
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ContextMenu } from "../components/index.js";
 import type { Viewport } from "../correlate/atoms.js";
 import { PLOT_MARGIN_LEFT } from "../correlate/axes.js";
 import { assignSlots, colorForSlot, type SlotMap } from "../correlate/colorSlots.js";
 import { rangeView } from "../correlate/zoom.js";
+import { SnapshotDialog } from "../exports/SnapshotDialog.js";
+import { type SnapshotOptions, takeSnapshot } from "../exports/snapshot.js";
 import { Icon } from "../icons/Icon.js";
 import { bandsAt, type Recorded } from "../recording/bands.js";
-import type { LiveSettings, ShellBridge } from "../shell/bridge.js";
+import type { CaptureRequest, LiveSettings, ShellBridge } from "../shell/bridge.js";
 import { listStreams, type Stream } from "../streams/api.js";
 import { type Arranged, arrange, DRAG_TYPE, moveBy, moveTo } from "./arrange.js";
 import { HOST_NAME, hostCollected, hostTitle } from "./host.js";
@@ -104,6 +107,12 @@ export interface ChartsShown {
   hide: (name: string) => void;
   /** Move a container to where `target` is, in the legend and the panels. */
   reorder: (name: string, target: string) => void;
+  /** Capture mode is armed: the next drag captures (REQ-000041-sJpO9KMY). */
+  captureArmed: boolean;
+  /** Capture a dragged range (br-EXPORT-000003-sJpO9KMY). */
+  capture: (ta: number, tb: number) => void;
+  /** cttc's time menu at `x`, `y` for time `t`: Capture metrics, Take snapshot. */
+  timeMenu: (x: number, y: number, t: number) => void;
 }
 
 /** The chart block's props. */
@@ -130,6 +139,10 @@ export interface ChartBlockProps {
    * containers, and whether its host is read.
    */
   transport?: (target: { stream: string; containers: string[]; host: boolean } | null) => ReactNode;
+  /** Capture a range of what the view shows (REQ-000041-sJpO9KMY): the Shell saves and adds it. */
+  onCapture?: (request: CaptureRequest) => void;
+  /** Capture mode armed or not: the status bar says it (REQ-000041-sJpO9KMY). */
+  onCaptureMode?: (armed: boolean) => void;
   /** What the recording has captured, banded on the live view (REQ-000040-sJpO9KMY). */
   recorded?: Recorded | null;
   /** A legend entry's right-click: the track's menu (REQ-000035-sJpO9KMY). */
@@ -183,6 +196,8 @@ export function ChartBlock({
   onLegendMenu,
   transport,
   recorded = null,
+  onCapture,
+  onCaptureMode,
   initialView = null,
   onViewState,
 }: ChartBlockProps) {
@@ -412,6 +427,68 @@ export function ChartBlock({
   const withHost = hostCollected(stream);
   const hostLoading =
     withHost && !Object.values(hostData).some((byName) => byName[HOST_NAME]?.length);
+  // Snapshots and capture (REQ-000041-sJpO9KMY): cttc's time menu, capture
+  // mode, and the snapshot dialog, all of what this view shows.
+  const [armed, setArmed] = useState(false);
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number; t: number } | null>(null);
+  const [snapAt, setSnapAt] = useState<number | null>(null);
+  const hostShown = withHost && hostOpen;
+  const onCaptureRef = useRef(onCapture);
+  onCaptureRef.current = onCapture;
+  const onCaptureModeRef = useRef(onCaptureMode);
+  onCaptureModeRef.current = onCaptureMode;
+  useEffect(() => {
+    onCaptureModeRef.current?.(armed);
+    document.body.classList.toggle("sample-armed", armed);
+    if (!armed) return;
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setArmed(false);
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [armed]);
+  const captureRange = useCallback(
+    (ta: number, tb: number) => {
+      setArmed(false);
+      if (!stream) return;
+      onCaptureRef.current?.({
+        view: analysis ? "file" : "live",
+        stream: stream.id,
+        containers: shownNames,
+        host: hostShown,
+        from: Math.min(ta, tb),
+        to: Math.max(ta, tb),
+      });
+    },
+    [stream, analysis, shownNames, hostShown],
+  );
+  const timeMenu = useCallback((x: number, y: number, t: number) => setMenuAt({ x, y, t }), []);
+  const takeAt = useCallback(
+    (t: number, options: SnapshotOptions) => {
+      if (!stream) return Promise.reject(new Error("no data stream"));
+      return takeSnapshot(
+        {
+          request: bridge.sump.request,
+          stream: stream.id,
+          containers: shownNames,
+          host: hostShown ? { label: hostTitle(stream).replace(/^Host telemetry — /, "") } : null,
+          view: currentView(),
+        },
+        t,
+        options,
+      );
+    },
+    [bridge, stream, shownNames, hostShown, currentView],
+  );
+  const saveSnapshot = useCallback(
+    (snapshot: { name: string; content: string; kind: "txt" | "json" }) => {
+      void bridge.exports?.saveSnapshot(snapshot).then((r) => {
+        if (r.ok) void bridge.status.add(`snapshot saved: ${r.file}`);
+        else if (!r.cancelled) void bridge.status.add(`snapshot save failed: ${r.message}`);
+      });
+    },
+    [bridge],
+  );
   const strips = {
     view,
     currentView,
@@ -421,6 +498,9 @@ export function ChartBlock({
     onCursor: setCursor,
     onZoom: zoomTo,
     onRecenter: recenterAt,
+    captureArmed: armed,
+    onCapture: captureRange,
+    onTimeMenu: timeMenu,
   };
   const nav = {
     view,
@@ -453,6 +533,9 @@ export function ChartBlock({
             zoomTo,
             hide,
             reorder,
+            captureArmed: armed,
+            capture: captureRange,
+            timeMenu,
           }
         : null,
     [
@@ -471,6 +554,9 @@ export function ChartBlock({
       zoomTo,
       hide,
       reorder,
+      armed,
+      captureRange,
+      timeMenu,
     ],
   );
   return (
@@ -621,6 +707,24 @@ export function ChartBlock({
         ) : null}
       </section>
       {shown && panels ? panels(shown) : null}
+      {menuAt ? (
+        <ContextMenu
+          x={menuAt.x}
+          y={menuAt.y}
+          label="Time"
+          entries={[
+            { label: "✂ Capture metrics", onSelect: () => setArmed(true) },
+            { label: "📸 Take snapshot at this time", onSelect: () => setSnapAt(menuAt.t) },
+          ]}
+          onClose={() => setMenuAt(null)}
+        />
+      ) : null}
+      <SnapshotDialog
+        at={snapAt}
+        take={takeAt}
+        save={saveSnapshot}
+        onClose={() => setSnapAt(null)}
+      />
     </main>
   );
 }

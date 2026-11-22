@@ -109,6 +109,10 @@ describe("main.cjs starts", () => {
       "recording:get",
       "recording:start",
       "recording:stop",
+      "recording:resume",
+      "recording:discard",
+      "export:capture",
+      "export:saveSnapshot",
     ]) {
       expect(channels).toContain(channel);
     }

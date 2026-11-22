@@ -1090,6 +1090,17 @@ button:disabled:hover {
   border-color: var(--border-strong);
 }
 
+/* exports/exports.css: cttc style.css:1018-1023 */
+/* Scissors cursor only over a graph (the thing a capture-mode drag actually
+   acts on) -- everywhere else in capture mode keeps the ordinary pointer,
+   since dragging there wouldn't start a capture. */
+body.sample-armed .strip {
+  cursor:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><text x="0" y="22" font-size="22">%E2%9C%82%EF%B8%8F</text></svg>')
+    4 20,
+    crosshair;
+}
+
 /* charts/charts.css: cttc style.css:1025-1106 */
 #layout {
   flex: 1 1 auto;
@@ -1785,6 +1796,66 @@ dialog h2 {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 10px;
+}
+
+/* exports/exports.css: cttc style.css:1767-1802 */
+#dlg-snapshot {
+  min-width: 560px;
+  max-width: 760px;
+}
+#snapshot-view-switch {
+  margin: 8px 0 6px;
+}
+.snapshot-body {
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+pre.snapshot-body {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.snapshot-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+}
+.snapshot-table th,
+.snapshot-table td {
+  text-align: left;
+  padding: 2px 8px 2px 0;
+  font-variant-numeric: tabular-nums;
+}
+.snapshot-table th {
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.snapshot-slice-head {
+  font-weight: 700;
+  margin: 10px 0 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+.snapshot-slice-head:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.snapshot-log-head {
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 6px 0 2px;
+}
+.snapshot-log-row {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* shell/shell.css: cttc style.css:1805-1805 */

@@ -32,6 +32,7 @@ export {
   registerAnalysisIpc,
 } from "./analysis/ipc.js";
 export { Auditor } from "./catalog/audit.js";
+export { registerExportIpc } from "./exports/ipc.js";
 export { identityPublicKey, importIdentity, userName } from "./identity/identity.js";
 export { registerLiveIpc } from "./live.js";
 export { registerLogsIpc } from "./logs.js";
@@ -41,7 +42,7 @@ export { filesFromArgv, Inbox, OPEN_FILES_EVENT, registerOpenIpc } from "./opene
 export { registerPickerIpc } from "./picker.js";
 export { registerProjectIpc, shownTracks } from "./projects/ipc.js";
 export { addFiles } from "./projects/project.js";
-export { Projects } from "./projects/store.js";
+export { Projects, writeAtomic } from "./projects/store.js";
 export { registerProvisionIpc } from "./provision/ipc.js";
 export { runCommand } from "./provision/runner.js";
 export { connectSsh } from "./provision/ssh.js";

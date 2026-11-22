@@ -79,6 +79,12 @@ export interface StripCanvasesProps {
   onCursor: (t: number) => void;
   onZoom: (ta: number, tb: number) => void;
   onRecenter: (t: number) => void;
+  /** Capture mode is armed: a drag captures instead of zooming (REQ-000041-sJpO9KMY). */
+  captureArmed?: boolean;
+  /** A Shift, Ctrl or Cmd drag, or any drag while armed: capture the range (br-EXPORT-000003-sJpO9KMY). */
+  onCapture?: (ta: number, tb: number) => void;
+  /** A right-click at time `t`: cttc's time menu. */
+  onTimeMenu?: (x: number, y: number, t: number) => void;
   children?: ReactNode;
 }
 
@@ -185,15 +191,28 @@ export function StripCanvases(props: StripCanvasesProps) {
             if (from === null) return;
             const width = e.currentTarget.clientWidth;
             const current = props.currentView();
-            // cttc's timelineUp: a drag zooms to its range, a click sets the cursor.
+            // cttc's timelineUp: a drag zooms to its range (or captures it), a click sets the cursor.
             if (!isClick(from, x)) {
               const ta = timeAt(Math.max(PLOT_MARGIN_LEFT, from), current, width);
               const tb = timeAt(Math.max(PLOT_MARGIN_LEFT, x), current, width);
-              if (ta !== null && tb !== null) props.onZoom(ta, tb);
+              if (ta === null || tb === null) return;
+              const capturing = e.shiftKey || e.ctrlKey || e.metaKey || props.captureArmed;
+              if (capturing && props.onCapture) props.onCapture(ta, tb);
+              else props.onZoom(ta, tb);
               return;
             }
             const t = timeAt(x, current, width);
             if (t !== null) props.onCursor(t);
+          }}
+          onContextMenu={(e) => {
+            const t = timeAt(
+              e.nativeEvent.offsetX,
+              props.currentView(),
+              e.currentTarget.clientWidth,
+            );
+            if (t === null || !props.onTimeMenu) return;
+            e.preventDefault();
+            props.onTimeMenu(e.clientX, e.clientY, t);
           }}
           onDoubleClick={(e) => {
             const width = e.currentTarget.clientWidth;

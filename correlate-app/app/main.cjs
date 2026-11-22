@@ -53,6 +53,7 @@ const {
   registerLiveIpc,
   registerLogsIpc,
   registerPickerIpc,
+  registerExportIpc,
   registerRecordingIpc,
   registerProjectIpc,
   registerSeriesIpc,
@@ -69,6 +70,7 @@ const {
   Settings,
   SidebarHost,
   startForwards,
+  writeAtomic,
 } = require("./main/dist/main.cjs");
 
 /** Each window's active Sump (br-SUMP-000010); set once the app is ready. */
@@ -409,6 +411,53 @@ app.whenReady().then(() => {
     changed: (state) => broadcast(RECORDING_CHANGED_EVENT, state),
   });
   registerRecordingIpc(ipcMain, recording, (event) => activeSumps.get(event.sender.id));
+  // Captures and snapshots (REQ-041): the destination asked first, then the
+  // window's Sump or its shown file read, written atomically.
+  const askSaveIn = async (event, options) => {
+    const owner = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+    const file = projects.view(event.sender.id).file;
+    const defaultPath = path.join(file ? path.dirname(file) : dataDir, options.name);
+    const r = owner
+      ? await dialog.showSaveDialog(owner, { ...options, defaultPath })
+      : await dialog.showSaveDialog({ ...options, defaultPath });
+    return r.canceled || !r.filePath ? null : r.filePath;
+  };
+  registerExportIpc(ipcMain, {
+    capture: (event) => ({
+      askSave: (name) =>
+        askSaveIn(event, {
+          title: "Save Capture",
+          name,
+          filters: [{ name: "Recordings", extensions: ["recording"] }],
+        }),
+      fetchSegment: (query) => {
+        const sump = activeSumps.get(event.sender.id);
+        if (!sump)
+          return Promise.resolve({ ok: false, error: { message: "this window has no Sump" } });
+        return handleSumpRequest(
+          { sump, method: "GET", path: "/records/segment", query },
+          sumps,
+          tokens,
+          relogin,
+          undefined,
+          lifecycle,
+        );
+      },
+      shownFile: () => openFiles.get(event.sender.id),
+      write: (file, bytes) => writeAtomic(file, bytes),
+    }),
+    askSaveSnapshot: (event, name, kind) =>
+      askSaveIn(event, {
+        title: "Save Snapshot",
+        name,
+        filters: [
+          kind === "json"
+            ? { name: "JSON", extensions: ["json"] }
+            : { name: "Text", extensions: ["txt"] },
+        ],
+      }),
+    write: (file, content) => writeAtomic(file, content),
+  });
   recording.startTicking();
   // A recording interrupted by a crash comes back paused, its choice offered
   // to the main window; its Sump known only if still in the catalog (REQ-038).

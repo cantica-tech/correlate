@@ -41,6 +41,9 @@ const shown = {
   zoomTo: none,
   hide: none,
   reorder: none,
+  captureArmed: false,
+  capture: none,
+  timeMenu: none,
 };
 
 const root = document.getElementById("root");

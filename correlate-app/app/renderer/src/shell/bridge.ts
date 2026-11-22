@@ -92,6 +92,24 @@ export interface OpenList {
   active: string | null;
 }
 
+/** A range to capture: the view it is of, what it shows, from and to (ms) (REQ-000041-sJpO9KMY). */
+export interface CaptureRequest {
+  view: "live" | "file";
+  stream: string;
+  containers: string[];
+  /** The host's block is shown. */
+  host: boolean;
+  from: number;
+  to: number;
+}
+
+/** An export not written: cancelled, or why it failed (REQ-000041-sJpO9KMY). */
+export interface SaveFailure {
+  ok: false;
+  cancelled?: true;
+  message?: string;
+}
+
 /** The recording session, as the main process tells it (REQ-000037-sJpO9KMY). */
 export interface RecordingState {
   status: "idle" | "recording" | "paused" | "stopped";
@@ -176,6 +194,17 @@ export interface ShellBridge {
       item: string | null;
       tracks: Record<string, { delaySecs: number; hidden: boolean }>;
     }>;
+  };
+  /** Captures and snapshots, saved where the user chooses (REQ-000041-sJpO9KMY). */
+  exports?: {
+    capture(
+      request: CaptureRequest,
+    ): Promise<{ ok: true; file: string; empty: boolean } | SaveFailure>;
+    saveSnapshot(snapshot: {
+      name: string;
+      content: string;
+      kind: "txt" | "json";
+    }): Promise<{ ok: true; file: string } | SaveFailure>;
   };
   /** The recording session (REQ-000037-sJpO9KMY). */
   recording?: {

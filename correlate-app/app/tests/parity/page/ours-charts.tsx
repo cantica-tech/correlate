@@ -12,6 +12,7 @@ import { createRoot } from "react-dom/client";
 import "../../../renderer/src/theme/tokens.css";
 import "../../../renderer/src/theme/cttc.generated.css";
 import { ChartBlock, type ChartsShown } from "../../../renderer/src/charts/ChartBlock.js";
+import { SnapshotDialog } from "../../../renderer/src/exports/SnapshotDialog.js";
 import { AbandonDialog } from "../../../renderer/src/recording/Abandon.js";
 import { RecoveryDialog } from "../../../renderer/src/recording/RecoveryDialog.js";
 import { Transport } from "../../../renderer/src/recording/Transport.js";
@@ -68,10 +69,38 @@ const prefs = location.search.includes("prefs");
 const recovery = location.search.includes("recovery");
 // `?abandon`: the "Abandon the recording?" dialog alone (REQ-000039-sJpO9KMY).
 const abandon = location.search.includes("abandon");
+// `?snapshot`: the snapshot dialog alone, cttcSnapshotDialog's values (REQ-000041-sJpO9KMY).
+const snapshot = location.search.includes("snapshot");
+const SNAPSHOT_T = Date.UTC(2026, 10, 22, 12, 0, 30);
+const SNAPSHOT = {
+  t: SNAPSHOT_T,
+  panoramaOn: false,
+  panoramaUnit: "entries" as const,
+  panoramaValue: 0,
+  generated_at: new Date(SNAPSHOT_T).toISOString(),
+  slices: [
+    {
+      label: "at",
+      t: SNAPSHOT_T,
+      services: [
+        { name: "localhost", host: true, cpu: 80, mem: null, net: null, ts: null },
+        { name: "web", host: false, cpu: 12.34, mem: 50, net: 2500, ts: null },
+      ],
+      logs: [],
+    },
+  ],
+};
 const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
-    abandon ? (
+    snapshot ? (
+      <SnapshotDialog
+        at={SNAPSHOT_T}
+        take={async () => SNAPSHOT}
+        save={() => {}}
+        onClose={() => {}}
+      />
+    ) : abandon ? (
       <AbandonDialog
         asking={{ action: "Switching to Sump lab", status: "recording" }}
         onCancel={() => {}}

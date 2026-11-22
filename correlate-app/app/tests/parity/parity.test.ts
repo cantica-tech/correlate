@@ -26,6 +26,7 @@ import {
   cttcNav,
   cttcNavScript,
   cttcRecoveryDialog,
+  cttcSnapshotDialog,
   cttcSwatchScript,
   cttcTransport,
 } from "./cttcCharts.js";
@@ -410,6 +411,21 @@ async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer
     await page.mouse.move(1, 1);
     await page.evaluate("document.fonts.ready.then(() => true)");
     pictures.set(`recording-abandon-${theme}`, await shoot("#dlg-abandon-recording"));
+    // The snapshot dialog, filled (REQ-000041-sJpO9KMY).
+    await page.goto(`${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?snapshot`);
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.body.insertAdjacentHTML("beforeend", ${JSON.stringify(cttcSnapshotDialog())}); document.getElementById("dlg-snapshot").showModal(); })()`,
+      );
+    }
+    await page.waitForSelector("#dlg-snapshot[open]");
+    await page.waitForFunction(
+      'document.getElementById("snapshot-meta")?.textContent.startsWith("t = ")',
+    );
+    await page.evaluate("document.activeElement?.blur()");
+    await page.mouse.move(1, 1);
+    await page.evaluate("document.fonts.ready.then(() => true)");
+    pictures.set(`export-snapshot-${theme}`, await shoot("#dlg-snapshot"));
     // The analysis view's head: "Back to live tracking" (REQ-000033-sJpO9KMY).
     await page.goto(`${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?file`);
     if (side === "cttc") {
@@ -528,6 +544,7 @@ describe.skipIf(process.platform !== "darwin")(
       "recording-transport-paused",
       "recording-recovery",
       "recording-abandon",
+      "export-snapshot",
       "host-head",
       "host-head-folded",
       "host-loading-line",

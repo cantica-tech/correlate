@@ -27,6 +27,7 @@ import { pauseStream } from "../streams/api.js";
 import { RemoveDialog } from "../streams/RemoveDialog.js";
 import { StreamsDialog } from "../streams/StreamsDialog.js";
 import type {
+  CaptureRequest,
   LayoutChange,
   LiveSettings,
   ProjectState,
@@ -101,6 +102,8 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
   const [delaying, setDelaying] = useState<{ name: string; secs: number } | null>(null);
   // The recording session (REQ-000037-sJpO9KMY), and what Start would record.
   const [recording, setRecording] = useState<RecordingState["status"]>("idle");
+  // Capture mode, said in the status bar while armed (REQ-000041-sJpO9KMY).
+  const [captureArmed, setCaptureArmed] = useState(false);
   // What it has captured, banded on the live view (REQ-000040-sJpO9KMY).
   const [recorded, setRecorded] = useState<Recorded | null>(null);
   // A crash's interrupted recording, offered to resume until chosen or put off (REQ-000038-sJpO9KMY).
@@ -312,6 +315,25 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
     const target = recordTarget.current;
     void bridge.recording?.start(target ?? undefined);
   }, [bridge]);
+  // A captured range (br-EXPORT-000003-sJpO9KMY): saved where the user chooses,
+  // then added to the project, which shows it in the analysis view.
+  const capture = useCallback(
+    async (request: CaptureRequest) => {
+      const r = await bridge.exports?.capture(request);
+      if (!r) return;
+      if (!r.ok) {
+        if (!r.cancelled) void bridge.status.add(`metrics export failed: ${r.message}`);
+        return;
+      }
+      void bridge.status.add(
+        r.empty
+          ? `metrics saved, but no data in the selected range: ${r.file}`
+          : `metrics saved: ${r.file}`,
+      );
+      if (bridge.project) take(await bridge.project.addPaths([r.file]));
+    },
+    [bridge, take],
+  );
   const pauseRecording = useCallback(() => void bridge.recording?.pause(), [bridge]);
   const stopRecording = useCallback(() => void bridge.recording?.stop(), [bridge]);
 
@@ -501,6 +523,8 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
               );
             }}
             recorded={recorded}
+            onCapture={capture}
+            onCaptureMode={setCaptureArmed}
             onLegendMenu={analysis ? (name, x, y) => setTrackMenu({ name, x, y }) : undefined}
             analysis={analysis}
             onBackToLive={backToLive}
@@ -530,6 +554,9 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
                 onCursor={shown.setCursor}
                 onRecenter={shown.recenterAt}
                 onZoom={shown.zoomTo}
+                captureArmed={shown.captureArmed}
+                onCapture={shown.capture}
+                onTimeMenu={shown.timeMenu}
               />
             )}
             panels={(shown) => (
@@ -698,7 +725,8 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
         bridge={bridge}
         onStreamAction={action}
         streamsVersion={streamsVersion}
-        persistent={liveStatus}
+        persistent={captureArmed ? "capture mode ✂️" : liveStatus}
+        blink={captureArmed}
         mode={analysis ? "analysis" : "live"}
         recording={recording}
         onBackToLive={backToLive}
