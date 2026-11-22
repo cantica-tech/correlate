@@ -19,7 +19,9 @@
     "format": "biome format --write .",
     "test": "vitest run",
     "css": "node build/cttc-css.js",
-    "stamp": "node build/stamp.js"
+    "stamp": "node build/stamp.js",
+    "package": "npm run build && npm run stamp && electron-builder --publish never",
+    "icon": "node -e \"require('child_process').execFileSync(require('electron'), ['build/app-icon.cjs'], {stdio: 'inherit', env: {...process.env, ELECTRON_RUN_AS_NODE: ''}})\""
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.10",
@@ -29,6 +31,7 @@
     "@types/react-dom": "^19.2.7",
     "@types/ssh2": "^1.15.6",
     "electron": "^44.3.0",
+    "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
     "pixelmatch": "^8.0.0",
     "playwright-core": "^1.65.1",
@@ -48,6 +51,21 @@
   "build": {
     "appId": "com.correlate.app",
     "productName": "correlate-app",
+    "copyright": "Copyright © 2026 Olivier Steck",
+    "directories": {
+      "buildResources": "resources",
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "main/dist/**",
+      "renderer/index.html",
+      "renderer/dist/**",
+      "build-info.json",
+      "package.json"
+    ],
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "fileAssociations": [
       {
         "ext": "correlator",
@@ -67,6 +85,51 @@
         "description": "A correlate-app track",
         "role": "Editor"
       }
-    ]
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "resources/icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "writeUpdateInfo": false
+    },
+    "win": {
+      "icon": "resources/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "differentialPackage": false
+    },
+    "linux": {
+      "icon": "resources/icon.png",
+      "category": "Development",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "publish": null
   }
 }

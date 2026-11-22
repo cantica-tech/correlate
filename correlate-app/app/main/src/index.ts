@@ -46,7 +46,7 @@ export { Notifications, notifyLifecycle, registerStatusIpc } from "./notify.js";
 export { filesFromArgv, Inbox, OPEN_FILES_EVENT, registerOpenIpc } from "./opened.js";
 export { captureConsole, windowError } from "./ownlog/capture.js";
 export { dockerFollow, followLocalSump } from "./ownlog/follow.js";
-export { OwnLog, parseOwnLogSettings } from "./ownlog/ownlog.js";
+export { besideTheApp, OwnLog, parseOwnLogSettings } from "./ownlog/ownlog.js";
 export { fetchSumpLog, registerShipIpc } from "./ownlog/ship.js";
 export { registerPickerIpc } from "./picker.js";
 export { registerPreferencesIpc } from "./preferences.js";

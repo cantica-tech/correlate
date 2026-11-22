@@ -71,6 +71,13 @@ tasks:
       - task: typecheck
       - task: test
 
+  package:
+    desc: Build this system's installers into dist/ (br-BUILD-000010), unsigned unless signing secrets are set
+    cmd: npm run package
+    env:
+      # Signing only when its certificate is given (FEAT-000056-sJpO9KMY).
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
   clean:
     desc: Remove the bundles and node_modules (task install restores them)
     cmd: rm -rf main/dist renderer/dist dist node_modules

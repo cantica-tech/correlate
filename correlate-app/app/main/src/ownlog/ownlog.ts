@@ -46,6 +46,18 @@ export interface OwnLogDeps {
   remove?: (file: string) => void;
 }
 
+/**
+ * "Next to the app" for a packaged app: the folder holding the executable,
+ * or on macOS the folder holding `correlate-app.app`, never inside the
+ * bundle, whose signature a written file would break (REQ-000054-sJpO9KMY).
+ */
+export function besideTheApp(execPath: string, platform: NodeJS.Platform): string {
+  const dir = path.dirname(execPath);
+  const bundle = path.resolve(dir, "..", "..");
+  if (platform === "darwin" && bundle.endsWith(".app")) return path.dirname(bundle);
+  return dir;
+}
+
 /** The kept settings, or undefined when never configured (or unreadable). */
 export function parseOwnLogSettings(value: unknown): OwnLogSettings | undefined {
   const v = value as Partial<OwnLogSettings> | null | undefined;

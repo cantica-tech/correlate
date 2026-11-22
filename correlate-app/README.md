@@ -13,7 +13,7 @@ clickable timeline. It is a from-scratch rewrite of cttc; the plan is in
 | `app/` | The Electron and React client (TypeScript, Jotai, esbuild, Vitest, Biome, npm) |
 | `server/` | The Sump, the containerized collector (Python 3.13, uv, ruff, ty, pytest) |
 | `server/plugins/` | Sump plugin packages, discovered through the `sump.plugins` entry points |
-| `scripts/` | Repository checks, such as `check_layout.py` |
+| `scripts/` | Repository checks, such as `check_layout.py` and `check_versions.py` |
 
 Product code lives only in `app/` and `server/` (rule `br-BUILD-000001`).
 
@@ -31,11 +31,12 @@ Run these from the repository root. Each one runs in both `app/` and
 | Command | What it does |
 |---|---|
 | `task install` | Install both parts' dependencies from their lockfiles |
-| `task check` | Check the layout, then lint, type-check and test both parts |
+| `task check` | Check the layout and the version, then lint, type-check and test both parts |
 | `task lint` | Biome and ruff |
 | `task typecheck` | Strict TypeScript and ty |
 | `task test` | Vitest and pytest |
 | `task start` | Build the renderer and open the app |
+| `task app:package` | Build this system's installers into `app/dist/` (unsigned unless signing secrets are set) |
 
 `task app:<name>` or `task server:<name>` runs a task in one part only, and
 `task --list` shows every task. On a fresh clone, run `task install` and then
@@ -43,3 +44,11 @@ Run these from the repository root. Each one runs in both `app/` and
 `br-BUILD-000003`). CI runs the same checks on Linux, macOS and Windows on
 every push and pull request, and checks that every commit cites a catalyst ID
 or starts `chore:` (rules `br-BUILD-000004` and `br-BUILD-000005`).
+
+## Versions and releases
+
+The app and the Sump carry one version (`app/package.json` and
+`server/pyproject.toml`); `task versions` checks it (rule `br-BUILD-000007`).
+The app provisions the Sump image of its own version,
+`ghcr.io/oliben67/correlate-sump:<version>`. `app/resources/icon.png`, the
+installers' icon, is rendered from the app's icon by `npm run icon`.

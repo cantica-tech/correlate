@@ -36,6 +36,10 @@ tasks:
     desc: Check that each of cttc's 33 bugs has exactly one regression test (br-BUILD-000006)
     cmd: uv run --no-project --python 3.13 python scripts/check_cttc_corpus.py
 
+  versions:
+    desc: Check that the app and the Sump carry one version (br-BUILD-000007)
+    cmd: uv run --no-project --python 3.13 python scripts/check_versions.py
+
   lint:
     desc: Lint both parts (Biome, ruff)
     cmds:
@@ -59,6 +63,7 @@ tasks:
     cmds:
       - task: layout
       - task: corpus
+      - task: versions
       - task: lint
       - task: typecheck
       - task: test

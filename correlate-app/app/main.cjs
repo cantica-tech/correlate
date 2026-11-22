@@ -88,6 +88,7 @@ const {
   download,
   OwnLog,
   parseOwnLogSettings,
+  besideTheApp,
   captureConsole,
   windowError,
   followLocalSump,
@@ -307,7 +308,9 @@ app.whenReady().then(() => {
   ownLog = new OwnLog({
     read: () => parseOwnLogSettings(settings.part("ownLog")),
     write: (value) => settings.setPart("ownLog", value),
-    defaultDir: app.isPackaged ? path.dirname(process.execPath) : app.getAppPath(),
+    defaultDir: app.isPackaged
+      ? besideTheApp(process.execPath, process.platform)
+      : app.getAppPath(),
     fallbackDir: app.getPath("userData"),
     warn: (text) => console.warn(text),
   });

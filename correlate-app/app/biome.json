@@ -9,6 +9,7 @@
       "**",
       "!renderer/dist",
       "!main/dist",
+      "!dist",
       "!tests/parity/dist",
       "!node_modules",
       "!**/*.md",

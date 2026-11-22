@@ -6,6 +6,7 @@ import { captureConsole, windowError } from "../capture.js";
 import { isRoutineSumpLine } from "../classify.js";
 import { followLocalSump, sumpLine } from "../follow.js";
 import {
+  besideTheApp,
   KEEP_FILES,
   logFileName,
   OwnLog,
@@ -205,5 +206,18 @@ describe("br-DIAG-000003-sJpO9KMY: the Sump's lines, classified", () => {
     expect(timers).toHaveLength(2);
     stop();
     expect(read(s.log.current())).toContain(" ERROR sump: WARNING:correlate_sump.app:slow\n");
+  });
+});
+
+describe("REQ-000054-sJpO9KMY: next to a packaged app", () => {
+  it("is beside the .app bundle on macOS, never inside it", () => {
+    expect(
+      besideTheApp("/Applications/correlate-app.app/Contents/MacOS/correlate-app", "darwin"),
+    ).toBe("/Applications");
+  });
+
+  it("is the executable's folder elsewhere", () => {
+    expect(besideTheApp("/opt/correlate-app/correlate-app", "linux")).toBe("/opt/correlate-app");
+    expect(besideTheApp("/tmp/correlate-app", "darwin")).toBe("/tmp");
   });
 });

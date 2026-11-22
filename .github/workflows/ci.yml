@@ -51,8 +51,8 @@ jobs:
       - run: task app:check
       - run: task app:build
 
-  # The Sump server and the repository checks: ruff, ty, pytest, check_layout.py
-  # and check_cttc_corpus.py (br-BUILD-000006).
+  # The Sump server and the repository checks: ruff, ty, pytest, check_layout.py,
+  # check_cttc_corpus.py (br-BUILD-000006) and check_versions.py (br-BUILD-000007).
   server:
     name: server (${{ matrix.os }})
     strategy:
@@ -75,6 +75,7 @@ jobs:
           cache-dependency-glob: correlate-app/server/uv.lock
       - run: task layout
       - run: task corpus
+      - run: task versions
       - run: task server:install
       - run: task server:check
 
