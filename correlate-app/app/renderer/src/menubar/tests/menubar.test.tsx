@@ -38,6 +38,7 @@ describe("REQ-000023-sJpO9KMY: the menus", () => {
       "Pause Recording",
       "Stop Recording…",
       "Export Metrics…",
+      "Ship Logs…",
       "Restart",
       "Quit",
       "Undo",

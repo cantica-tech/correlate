@@ -83,6 +83,8 @@ const {
   windowError,
   followLocalSump,
   dockerFollow,
+  registerShipIpc,
+  fetchSumpLog,
 } = require("./main/dist/main.cjs");
 
 /** Each window's active Sump (br-SUMP-000010); set once the app is ready. */
@@ -585,6 +587,41 @@ app.whenReady().then(() => {
     },
     write: (file, bytes) => writeAtomic(file, bytes),
   });
+  // Ship Logs (REQ-049): the own log's files and the window's Sump's log,
+  // asked where first, the local files erased only on a yes.
+  registerShipIpc(ipcMain, (event) => ({
+    dir: () => {
+      const current = ownLog.current();
+      return current ? path.dirname(current) : ownLog.settings().dir;
+    },
+    current: () => ownLog.current(),
+    sumpLog: () => {
+      const id = activeSumps.get(event.sender.id);
+      return fetchSumpLog(id ? sumps(id) : undefined, download);
+    },
+    askSave: (name) =>
+      askSaveIn(event, {
+        title: "Ship Logs",
+        name,
+        filters: [{ name: "Zip archive", extensions: ["zip"] }],
+      }),
+    confirmErase: async (count) => {
+      const owner = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+      const options = {
+        type: "question",
+        buttons: ["Keep them", `Erase ${count} local log files`],
+        defaultId: 0,
+        cancelId: 0,
+        message: "The logs are shipped.",
+        detail: "Erase the local log files now in the zip? The file this run writes is kept.",
+      };
+      const r = owner
+        ? await dialog.showMessageBox(owner, options)
+        : await dialog.showMessageBox(options);
+      return r.response === 1;
+    },
+    write: (file, bytes) => writeAtomic(file, bytes),
+  }));
   app.on("will-quit", () => {
     firings.stopAll();
     probe.stop();

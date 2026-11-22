@@ -123,6 +123,7 @@ const SERIES_SET_CHANNEL = "series:set";
 const LOGS_PREFS_CHANNEL = "logs:prefs";
 const LOGS_SET_PREFS_CHANNEL = "logs:setPrefs";
 const LOGS_EXPORT_CHANNEL = "logs:export";
+const LOGS_SHIP_CHANNEL = "logs:ship";
 /** Must match the channels in `main/src/streams.ts`. */
 const STREAM_ACTIVE_CHANNEL = "stream:active";
 const STREAM_SET_ACTIVE_CHANNEL = "stream:setActive";
@@ -317,5 +318,7 @@ contextBridge.exposeInMainWorld("correlate", {
     setPrefs: (change) => ipcRenderer.invoke(LOGS_SET_PREFS_CHANNEL, change),
     /** Export .log `{ source, name, from, to, order }`: asks for the file first. */
     exportLog: (request) => ipcRenderer.invoke(LOGS_EXPORT_CHANNEL, request),
+    /** Ship Logs: the local log files and the Sump's in one zip, asked where first (REQ-000049). */
+    ship: () => ipcRenderer.invoke(LOGS_SHIP_CHANNEL),
   },
 });

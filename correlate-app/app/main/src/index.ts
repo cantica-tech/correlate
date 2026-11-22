@@ -44,6 +44,7 @@ export { filesFromArgv, Inbox, OPEN_FILES_EVENT, registerOpenIpc } from "./opene
 export { captureConsole, windowError } from "./ownlog/capture.js";
 export { dockerFollow, followLocalSump } from "./ownlog/follow.js";
 export { OwnLog, parseOwnLogSettings } from "./ownlog/ownlog.js";
+export { fetchSumpLog, registerShipIpc } from "./ownlog/ship.js";
 export { registerPickerIpc } from "./picker.js";
 export { registerProjectIpc, shownTracks } from "./projects/ipc.js";
 export { addFiles } from "./projects/project.js";

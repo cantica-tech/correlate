@@ -118,6 +118,7 @@ describe("main.cjs starts", () => {
       "export:saveSnapshot",
       "export:metrics",
       "events:download",
+      "logs:ship",
     ]) {
       expect(channels).toContain(channel);
     }

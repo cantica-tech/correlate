@@ -287,6 +287,11 @@ export interface ShellBridge {
     }): Promise<
       { ok: true; path: string; rows: number } | { ok: false; cancelled?: true; message?: string }
     >;
+    /** Ship Logs (REQ-000049-sJpO9KMY): asked where first; the local files erased on a yes. */
+    ship?(): Promise<
+      | { ok: true; file: string; local: number; erased: number }
+      | { ok: false; cancelled?: true; message?: string }
+    >;
   };
   /** The data-stream picker's last stream per Sump (REQ-000026-sJpO9KMY). */
   picker?: {

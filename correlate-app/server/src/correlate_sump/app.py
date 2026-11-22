@@ -30,6 +30,7 @@ from typing import Annotated, Any
 
 import redis.asyncio as redis
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -49,6 +50,8 @@ from correlate_sump.plugins import PluginManager
 from correlate_sump.records import DEFAULT_LIMIT, QueryError, query_records
 from correlate_sump.runtime import PluginRuntime, health_interval_from_env
 from correlate_sump.segment import segment
+from correlate_sump.selflog import install as keep_recent_lines
+from correlate_sump.selflog import own_log
 from correlate_sump.sessions import (
     CHALLENGE_SECONDS,
     CorruptSessionStore,
@@ -233,6 +236,8 @@ def create_app(
 
     sessions = SessionStore(redis_client, idle_seconds, max_seconds)
     users = UserStore(data_dir_from_env(env))
+    # The Sump's own recent lines, for Ship Logs when Docker cannot be read.
+    recent_lines = keep_recent_lines()
     app = FastAPI(title="correlate-sump", version=__version__, lifespan=lifespan)
     app.state.plugin_manager = plugin_manager
     app.state.adapter = adapter
@@ -300,6 +305,11 @@ def create_app(
 
     def _key_info(key) -> dict[str, str]:
         return {"type": key.type, "fingerprint": key.fingerprint, "comment": key.comment}
+
+    @app.get("/logs/sump")
+    async def sump_log(owner: Session = Depends(owner_only)) -> PlainTextResponse:
+        """The Sump's own log, for Ship Logs; its owner only (br-DIAG-000002, REQ-000049)."""
+        return PlainTextResponse(await own_log(recent_lines))
 
     @app.get("/users")
     async def list_users(owner: Session = Depends(owner_only)) -> dict[str, Any]:

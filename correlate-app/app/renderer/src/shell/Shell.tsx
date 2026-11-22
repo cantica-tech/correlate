@@ -465,6 +465,17 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
     },
     [bridge, take],
   );
+  // Ship Logs… (REQ-000049-sJpO9KMY): said in the status bar.
+  const shipLogs = useCallback(async () => {
+    const r = await bridge.logs?.ship?.();
+    if (!r) return;
+    if (!r.ok) {
+      if (!r.cancelled) void bridge.status.add(`could not ship the logs: ${r.message}`);
+      return;
+    }
+    const erased = r.erased ? `; ${r.erased} local files erased` : "";
+    void bridge.status.add(`logs shipped: ${r.file} (${r.local} local files${erased})`);
+  }, [bridge]);
   // Export Metrics… (REQ-000042-sJpO9KMY): only while a file is shown.
   const openExport = useCallback(() => {
     if (analysis) return setExportOpen(true);
@@ -491,10 +502,12 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
       if (name === "pause-recording") return pauseRecording();
       if (name === "stop-recording") return stopRecording();
       if (name === "export-metrics") return openExport();
+      if (name === "ship-logs") return void shipLogs();
       void bridge.menu.action(name);
     },
     [
       openExport,
+      shipLogs,
       bridge,
       newProject,
       openProject,

@@ -47,6 +47,7 @@ export const PROJECT_ACTIONS: readonly string[] = [
   "pause-recording",
   "stop-recording",
   "export-metrics",
+  "ship-logs",
 ];
 
 export const MENUS: readonly Menu[] = [
@@ -107,6 +108,11 @@ export const MENUS: readonly Menu[] = [
         label: "Export Metrics…",
         icon: "export",
         title: "Export the shown file's stats/logs as text or JSON",
+      },
+      {
+        action: "ship-logs",
+        label: "Ship Logs…",
+        title: "Zip this app's logs and the Sump's, to send when something went wrong",
       },
       "separator",
       { action: "restart", label: "Restart" },
