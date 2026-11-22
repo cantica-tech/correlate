@@ -33,6 +33,7 @@
  * `window.correlate.opened` the files the OS hands the app (REQ-000036-sJpO9KMY);
  * `window.correlate.recording` the recording session (REQ-000037-sJpO9KMY).
  * `window.correlate.exports` captures and snapshots (REQ-000041-sJpO9KMY).
+ * `window.correlate.events` event artifacts' downloads and firings (REQ-000046-sJpO9KMY).
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -98,6 +99,9 @@ const OPEN_FILES_EVENT = "open:files";
 const EXPORT_CAPTURE_CHANNEL = "export:capture";
 const EXPORT_SAVE_SNAPSHOT_CHANNEL = "export:saveSnapshot";
 const EXPORT_METRICS_CHANNEL = "export:metrics";
+/** Must match the channels in `main/src/events/ipc.ts`. */
+const EVENTS_DOWNLOAD_CHANNEL = "events:download";
+const EVENTS_FIRED_EVENT = "events:fired";
 /** Must match the channels in `main/src/recording/ipc.ts`. */
 const RECORDING_CHANNELS = {
   get: "recording:get",
@@ -259,6 +263,16 @@ contextBridge.exposeInMainWorld("correlate", {
     saveSnapshot: (snapshot) => ipcRenderer.invoke(EXPORT_SAVE_SNAPSHOT_CHANNEL, snapshot),
     /** Export the shown file `{ stats, logs, format, detail }`, where the user chooses (REQ-000042). */
     metrics: (request) => ipcRenderer.invoke(EXPORT_METRICS_CHANNEL, request),
+  },
+  events: {
+    /** Save an artifact `{ artifact, name, size }` of the window's Sump, where the user chooses. */
+    download: (artifact) => ipcRenderer.invoke(EVENTS_DOWNLOAD_CHANNEL, artifact),
+    /** Called with each firing as the main process hears it; returns an unsubscribe. */
+    onFired: (callback) => {
+      const listener = (_event, firing) => callback(firing);
+      ipcRenderer.on(EVENTS_FIRED_EVENT, listener);
+      return () => ipcRenderer.removeListener(EVENTS_FIRED_EVENT, listener);
+    },
   },
   recording: {
     /** The recording session's state. */

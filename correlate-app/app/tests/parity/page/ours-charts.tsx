@@ -12,6 +12,8 @@ import { createRoot } from "react-dom/client";
 import "../../../renderer/src/theme/tokens.css";
 import "../../../renderer/src/theme/cttc.generated.css";
 import { ChartBlock, type ChartsShown } from "../../../renderer/src/charts/ChartBlock.js";
+import { EventFormDialog } from "../../../renderer/src/events/EventFormDialog.js";
+import { EventListDialog } from "../../../renderer/src/events/EventListDialog.js";
 import { ExportMetricsDialog } from "../../../renderer/src/exports/ExportMetricsDialog.js";
 import { SnapshotDialog } from "../../../renderer/src/exports/SnapshotDialog.js";
 import { AbandonDialog } from "../../../renderer/src/recording/Abandon.js";
@@ -19,6 +21,7 @@ import { RecoveryDialog } from "../../../renderer/src/recording/RecoveryDialog.j
 import { Transport } from "../../../renderer/src/recording/Transport.js";
 import type { ShellBridge } from "../../../renderer/src/shell/bridge.js";
 import { LivePreferences } from "../../../renderer/src/shell/LivePreferences.js";
+import { ARTIFACT_FIXTURE, EVENT_FIXTURE } from "../eventsFixture.js";
 
 const stream = {
   id: "self",
@@ -33,9 +36,13 @@ const bridge = {
     request: async ({ path, query }: { path: string; query?: Record<string, unknown> }) =>
       path === "/streams"
         ? { ok: true, value: { streams: [stream] } }
-        : hostLoading && String(query?.source ?? "").endsWith("/__host__")
-          ? { ok: true, value: { values: [null, null, null, null, null] } }
-          : { ok: true, value: { values: [1, 2, 3, null, 5] } },
+        : path === "/events"
+          ? { ok: true, value: { events: [EVENT_FIXTURE] } }
+          : path.endsWith("/artifacts")
+            ? { ok: true, value: { artifacts: [ARTIFACT_FIXTURE] } }
+            : hostLoading && String(query?.source ?? "").endsWith("/__host__")
+              ? { ok: true, value: { values: [null, null, null, null, null] } }
+              : { ok: true, value: { values: [1, 2, 3, null, 5] } },
   },
   stream: { active: async () => "self", setActive: async () => ({ ok: true }) },
 } as unknown as ShellBridge;
@@ -70,6 +77,9 @@ const prefs = location.search.includes("prefs");
 const recovery = location.search.includes("recovery");
 // `?abandon`: the "Abandon the recording?" dialog alone (REQ-000039-sJpO9KMY).
 const abandon = location.search.includes("abandon");
+// `?event-form`, `?event-list`: the events' dialogs (REQ-000046-sJpO9KMY).
+const eventForm = location.search.includes("event-form");
+const eventList = location.search.includes("event-list");
 // `?export-metrics`: the Export metrics dialog alone (REQ-000042-sJpO9KMY).
 const exportMetrics = location.search.includes("export-metrics");
 // `?snapshot`: the snapshot dialog alone, cttcSnapshotDialog's values (REQ-000041-sJpO9KMY).
@@ -96,7 +106,28 @@ const SNAPSHOT = {
 const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
-    exportMetrics ? (
+    eventForm ? (
+      <EventFormDialog
+        open
+        editing={null}
+        request={bridge.sump.request}
+        activeStream="self"
+        say={() => {}}
+        onSaved={() => {}}
+        onStale={() => {}}
+        onClose={() => {}}
+      />
+    ) : eventList ? (
+      <EventListDialog
+        open
+        request={bridge.sump.request}
+        version={0}
+        say={() => {}}
+        onEdit={() => {}}
+        onDownload={() => {}}
+        onClose={() => {}}
+      />
+    ) : exportMetrics ? (
       <ExportMetricsDialog open onExport={async () => false} onClose={() => {}} />
     ) : snapshot ? (
       <SnapshotDialog

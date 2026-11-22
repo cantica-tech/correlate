@@ -15,6 +15,9 @@ import {
 import { ChartBlock } from "../charts/ChartBlock.js";
 import type { ViewState } from "../charts/viewState.js";
 import { Button, ContextMenu, Dialog, SegControl, Switch } from "../components/index.js";
+import type { Artifact, SumpEvent } from "../events/api.js";
+import { EventFormDialog } from "../events/EventFormDialog.js";
+import { EventListDialog } from "../events/EventListDialog.js";
 import { ExportMetricsDialog, type MetricsChoice } from "../exports/ExportMetricsDialog.js";
 import { Lanes } from "../logs/Lanes.js";
 import { Panels, useLogPrefs } from "../logs/Panels.js";
@@ -83,6 +86,12 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
   const [live, setLive] = useState<LiveSettings | null>(null);
   const [streams, setStreams] = useState<"new" | "edit" | null>(null);
   const [removing, setRemoving] = useState(false);
+  // Events (REQ-000046-sJpO9KMY): the form (creating, or the event edited),
+  // the list, and a version bumped by each firing or save.
+  const [eventForm, setEventForm] = useState<{ editing: SumpEvent | null } | null>(null);
+  const [eventList, setEventList] = useState(false);
+  const [eventsVersion, setEventsVersion] = useState(0);
+  const [activeStream, setActiveStream] = useState<string | null>(null);
   const [streamsVersion, setStreamsVersion] = useState(0);
   const streamsChanged = useCallback(() => setStreamsVersion((v) => v + 1), []);
   const logs = useLogPrefs(bridge);
@@ -386,6 +395,11 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
       if (name === "new-data-stream") setStreams("new");
       if (name === "edit-data-streams") setStreams("edit");
       if (name === "remove-data-stream") setRemoving(true);
+      if (name === "create-event" || name === "edit-events") {
+        void bridge.stream?.active().then(setActiveStream);
+        if (name === "create-event") setEventForm({ editing: null });
+        else setEventList(true);
+      }
       if (name === "close-data-streams") void closeActive();
       if (name === "new-project") newProject();
       if (name === "open-project") openProject();
@@ -418,6 +432,39 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
   );
   const action = useCallback((name: string) => void bridge.sidebar.action(name), [bridge]);
   // The File menu's project entries run here; the others in the main process.
+  // Events (REQ-000046-sJpO9KMY): said in the status bar; firings refresh the list.
+  const say = useCallback((text: string) => void bridge.status.add(text), [bridge]);
+  useEffect(() => {
+    if (detached || !bridge.events) return;
+    return bridge.events.onFired(() => setEventsVersion((v) => v + 1));
+  }, [bridge, detached]);
+  /** A stale edit: the event as the Sump has it now, in the form again. */
+  const reloadEvent = useCallback(
+    async (event: SumpEvent) => {
+      const r = await bridge.sump.request({ method: "GET", path: `/events/${event.id}` });
+      setEventsVersion((v) => v + 1);
+      if (r.ok) setEventForm({ editing: r.value as SumpEvent });
+    },
+    [bridge],
+  );
+  /** Download… a complete artifact into the project (cttc bug 26: checked first). */
+  const downloadArtifact = useCallback(
+    async (event: SumpEvent, artifact: Artifact) => {
+      const r = await bridge.events?.download({
+        artifact: artifact.id,
+        name: event.name,
+        size: artifact.size,
+      });
+      if (!r) return;
+      if (!r.ok) {
+        if (!r.cancelled) void bridge.status.add(`could not save event artifact: ${r.message}`);
+        return;
+      }
+      void bridge.status.add(`event artifact saved: ${r.file}`);
+      if (bridge.project) take(await bridge.project.addPaths([r.file]));
+    },
+    [bridge, take],
+  );
   // Export Metrics… (REQ-000042-sJpO9KMY): only while a file is shown.
   const openExport = useCallback(() => {
     if (analysis) return setExportOpen(true);
@@ -741,6 +788,25 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
           Switching moves this window to them.
         </p>
       </Dialog>
+      <EventFormDialog
+        open={eventForm !== null}
+        editing={eventForm?.editing ?? null}
+        request={bridge.sump.request}
+        activeStream={activeStream}
+        say={say}
+        onSaved={() => setEventsVersion((v) => v + 1)}
+        onStale={reloadEvent}
+        onClose={() => setEventForm(null)}
+      />
+      <EventListDialog
+        open={eventList}
+        request={bridge.sump.request}
+        version={eventsVersion}
+        say={say}
+        onEdit={(event) => setEventForm({ editing: event })}
+        onDownload={downloadArtifact}
+        onClose={() => setEventList(false)}
+      />
       <RemoveDialog
         bridge={bridge}
         open={removing}

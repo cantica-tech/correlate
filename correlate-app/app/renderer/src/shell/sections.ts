@@ -133,6 +133,9 @@ export const AVAILABLE: ReadonlySet<string> = new Set([
   "edit-data-streams",
   "close-data-streams",
   "remove-data-stream",
+  // Events (REQ-000046-sJpO9KMY): made and edited on the window's Sump.
+  "create-event",
+  "edit-events",
   // Projects (REQ-000035-sJpO9KMY): new, open, and adding cttc's files.
   "new-project",
   "open-project",

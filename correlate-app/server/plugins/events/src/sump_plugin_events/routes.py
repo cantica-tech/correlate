@@ -19,7 +19,8 @@ Behind the Sump's session guard: every call has a user, the D3 identity.
   most 30; its event's owner only.
 - `GET /events/firings/stream`: the firings of the caller's events (all of
   them for the Sump's owner) as they happen, as server-sent events with the
-  Sump's heartbeat; `Last-Event-ID` resumes after a firing (REQ-000046).
+  Sump's heartbeat; `Last-Event-ID` (or `?after=`) resumes after a firing
+  (REQ-000046).
 
 An event another user owns is answered as not found (404), unless the caller
 is the Sump's owner.
@@ -190,7 +191,9 @@ def add_event_routes(
         caller, owner = _caller(request), sump_owner()
         redis = the_store().redis
         # "From now" is fixed when the request arrives, not at the first read.
-        after = await start_position(redis, request.headers.get("last-event-id"))
+        # `after` for clients that cannot set the header (the app's stream client).
+        resume = request.headers.get("last-event-id") or request.query_params.get("after")
+        after = await start_position(redis, resume)
         return event_stream(firings_after(redis, after, caller, owner))
 
 

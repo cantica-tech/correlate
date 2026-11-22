@@ -10,6 +10,7 @@
  * references are macOS captures. On a failure the three pictures are written
  * to `out/`.
  */
+
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -17,11 +18,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { _electron, type ElectronApplication, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { clock } from "../../renderer/src/logs/api.js";
 import { COMPONENT_LIMIT, compare, type Mask, readPng, writePng } from "./compare.js";
 import {
   cttcAbandonDialog,
   cttcBackToLive,
   cttcChartBlock,
+  cttcEventFormDialog,
+  cttcEventListDialog,
   cttcExportMetricsDialog,
   cttcHostBlock,
   cttcNav,
@@ -37,6 +41,7 @@ import { cttcMenuBar } from "./cttcMenuBar.js";
 import { cttcSidebar, cttcWidthScript } from "./cttcSidebar.js";
 import { cttcPillMenu, cttcStatusBar } from "./cttcStatusBar.js";
 import { cttcRemoveDialog, cttcStreamsDialog } from "./cttcStreams.js";
+import { ARTIFACT_FIXTURE } from "./eventsFixture.js";
 import { LOG_ROWS } from "./logsData.js";
 import { SIDEBAR_CASES } from "./page/sidebar-cases.js";
 import { ARRIVING, HISTORY, STATUSBAR_CASES } from "./page/statusbar-data.js";
@@ -412,6 +417,36 @@ async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer
     await page.mouse.move(1, 1);
     await page.evaluate("document.fonts.ready.then(() => true)");
     pictures.set(`recording-abandon-${theme}`, await shoot("#dlg-abandon-recording"));
+    // The events' event-form dialog (REQ-000046-sJpO9KMY).
+    await page.goto(
+      `${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?event-form`,
+    );
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.body.insertAdjacentHTML("beforeend", ${JSON.stringify(cttcEventFormDialog())}); document.getElementById("dlg-event-form").showModal(); })()`,
+      );
+    }
+    await page.waitForSelector("#dlg-event-form[open]");
+    await page.waitForSelector('#event-systems input[value="web"]');
+    await page.evaluate("document.activeElement?.blur()");
+    await page.mouse.move(1, 1);
+    await page.evaluate("document.fonts.ready.then(() => true)");
+    pictures.set(`event-form-${theme}`, await shoot("#dlg-event-form"));
+    // The events' event-list dialog (REQ-000046-sJpO9KMY).
+    await page.goto(
+      `${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?event-list`,
+    );
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.body.insertAdjacentHTML("beforeend", ${JSON.stringify(cttcEventListDialog(clock(ARTIFACT_FIXTURE.created_at)))}); document.getElementById("dlg-event-list").showModal(); })()`,
+      );
+    }
+    await page.waitForSelector("#dlg-event-list[open]");
+    await page.waitForSelector(".event-artifact");
+    await page.evaluate("document.activeElement?.blur()");
+    await page.mouse.move(1, 1);
+    await page.evaluate("document.fonts.ready.then(() => true)");
+    pictures.set(`event-list-${theme}`, await shoot("#dlg-event-list"));
     // The Export metrics dialog, step 1 then step 2 (REQ-000042-sJpO9KMY).
     await page.goto(
       `${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?export-metrics`,
@@ -570,6 +605,8 @@ describe.skipIf(process.platform !== "darwin")(
       "recording-transport-paused",
       "recording-recovery",
       "recording-abandon",
+      "event-form",
+      "event-list",
       "export-snapshot",
       "export-metrics-step1",
       "export-metrics-step2",

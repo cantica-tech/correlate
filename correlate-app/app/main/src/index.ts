@@ -32,6 +32,8 @@ export {
   registerAnalysisIpc,
 } from "./analysis/ipc.js";
 export { Auditor } from "./catalog/audit.js";
+export { FiringsFollower } from "./events/firings.js";
+export { EVENTS_FIRED_EVENT, registerEventsIpc } from "./events/ipc.js";
 export { registerExportIpc } from "./exports/ipc.js";
 export { identityPublicKey, importIdentity, userName } from "./identity/identity.js";
 export { registerLiveIpc } from "./live.js";
@@ -62,7 +64,7 @@ export {
   SidebarHost,
 } from "./sidebar.js";
 export { ActiveStreams, registerStreamIpc } from "./streams.js";
-export { logout } from "./sump/client.js";
+export { download, logout, stream } from "./sump/client.js";
 export { handleSumpRequest, registerSumpIpc, SUMP_STATE_EVENT } from "./sump/ipc.js";
 export { login } from "./sump/login.js";
 export { defaultSettingsPath, registerThemeIpc, Settings } from "./theme.js";

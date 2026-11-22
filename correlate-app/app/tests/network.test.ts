@@ -156,6 +156,7 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       "analysis",
       "project",
       "exports",
+      "events",
       "recording",
       "opened",
       "live",
@@ -250,6 +251,15 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       ["export:saveSnapshot", { name: "s.txt", content: "x", kind: "txt" }],
       ["export:metrics", choice],
     ]);
+    // Event artifacts and firings: only their own channels (REQ-000046-sJpO9KMY).
+    const ev = (exposed.correlate as { events: Record<string, (m?: unknown) => unknown> }).events;
+    expect(Object.keys(ev)).toEqual(["download", "onFired"]);
+    const wanted = { artifact: "0123456789abcdef", name: "busy", size: 3 };
+    await ev.download?.(wanted);
+    expect(invoked.splice(0)).toEqual([["events:download", wanted]]);
+    const stopFired = ev.onFired?.(() => {}) as () => void;
+    expect(listeners.has("events:fired")).toBe(true);
+    stopFired();
     // Files the OS handed the app: only their own channels (REQ-000036-sJpO9KMY).
     const opened = (exposed.correlate as { opened: Record<string, (m?: unknown) => unknown> })
       .opened;

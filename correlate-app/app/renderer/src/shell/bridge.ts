@@ -103,6 +103,18 @@ export interface CaptureRequest {
   to: number;
 }
 
+/** An event's firing, as the main process tells it (REQ-000046-sJpO9KMY). */
+export interface Firing {
+  sump: string;
+  id: string;
+  event: string;
+  name: string;
+  at: string;
+  detail: string;
+  artifact?: string;
+  note?: string;
+}
+
 /** An export not written: cancelled, or why it failed (REQ-000041-sJpO9KMY). */
 export interface SaveFailure {
   ok: false;
@@ -212,6 +224,15 @@ export interface ShellBridge {
       format: "text" | "json";
       detail: "summary" | "full";
     }): Promise<{ ok: true; file: string } | SaveFailure>;
+  };
+  /** Event artifacts' downloads and firings (REQ-000046-sJpO9KMY). */
+  events?: {
+    download(artifact: {
+      artifact: string;
+      name: string;
+      size: number | null;
+    }): Promise<{ ok: true; file: string } | SaveFailure>;
+    onFired(callback: (firing: Firing) => void): () => void;
   };
   /** The recording session (REQ-000037-sJpO9KMY). */
   recording?: {

@@ -72,6 +72,11 @@ const {
   startForwards,
   writeAtomic,
   logPrefs,
+  FiringsFollower,
+  registerEventsIpc,
+  EVENTS_FIRED_EVENT,
+  stream,
+  download,
 } = require("./main/dist/main.cjs");
 
 /** Each window's active Sump (br-SUMP-000010); set once the app is ready. */
@@ -521,7 +526,40 @@ app.whenReady().then(() => {
     guard: recordingGuard,
   });
   // The passphrase's derived key lives only for the session.
+  // Events' firings, from every Sump the app is logged in to (REQ-046, D7):
+  // said in the status bar and its history, told to the windows.
+  const firings = new FiringsFollower({
+    sumps: () => tokens.sumps(),
+    resolve: (id) => sumps(id),
+    name: (id) => catalog?.get(id)?.name ?? id,
+    open: (sump, streamPath, onEvent, options) => stream(sump, streamPath, onEvent, options),
+    notify: (text) => notifications.add(text),
+    told: (firing) => broadcast(EVENTS_FIRED_EVENT, firing),
+  });
+  firings.start();
+  // An event's artifact, saved where the user chooses, checked before it is
+  // written (REQ-046, cttc bug 26).
+  registerEventsIpc(ipcMain, {
+    askSave: (event, suggested) =>
+      askSaveIn(event, {
+        title: "Save Event Artifact",
+        name: suggested,
+        filters: [{ name: "Recordings", extensions: ["recording"] }],
+      }),
+    bytes: async (event, artifact) => {
+      const id = activeSumps.get(event.sender.id);
+      const sump = id ? sumps(id) : undefined;
+      if (!sump) throw new Error("this window has no Sump");
+      const chunks = [];
+      await download(sump, `/artifacts/${artifact}`, (chunk) => {
+        chunks.push(Buffer.from(chunk));
+      });
+      return Buffer.concat(chunks);
+    },
+    write: (file, bytes) => writeAtomic(file, bytes),
+  });
   app.on("will-quit", () => {
+    firings.stopAll();
     probe.stop();
     forwards.stopAll();
     vault?.lock();

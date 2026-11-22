@@ -185,6 +185,96 @@ export function cttcExportMetricsDialog(): string {
   </dialog>`;
 }
 
+/**
+ * cttc's Create Event dialog (`index.html:458-499`) as `resetEventForm` opens
+ * it, adapted as the app's is (REQ-000046-sJpO9KMY): no "Hosted on"; the
+ * systems are a data stream (the charts page's), its containers and its host;
+ * "Keep longer" in days.
+ */
+export function cttcEventFormDialog(): string {
+  return `<dialog id="dlg-event-form">
+    <h2 id="event-form-title">Create Event</h2>
+    <p class="dlg-intro muted">Watch CPU/MEM/NET thresholds or a log regex on chosen systems, and automatically take a snapshot or start a recording when the condition is met. Keeps watching until disabled or deleted (see Edit Events).</p>
+    <label class="ctl block">Name <input id="event-name" type="text" placeholder="e.g. high CPU on api" /></label>
+    <div class="dlg-section-help muted">Systems monitored</div>
+    <div id="event-systems"><label class="ctl block">Data stream <select id="event-stream"><option value="self" selected>This Sump's host</option></select></label><label class="ctl block"><input type="checkbox" data-event-system="1" value="db"> db (container)</label><label class="ctl block"><input type="checkbox" data-event-system="1" value="web"> web (container)</label><label class="ctl block"><input type="checkbox" data-event-system="1" value="__host__"> host (host)</label></div>
+    <div class="dlg-section-help muted">Conditions (one or more)</div>
+    <div id="event-conditions"><div class="keys-box" data-condition-row="1">
+    <label class="ctl">Condition
+      <select data-field="type">
+        <option value="metric">Metric threshold</option>
+        <option value="log">Log regular expression</option>
+      </select>
+    </label>
+    <span data-fields="metric">
+      <label class="ctl">Metric
+        <select data-field="metric">
+          <option value="cpu">CPU %</option>
+          <option value="mem">MEM %</option>
+          <option value="net">NET B/s</option>
+        </select>
+      </label>
+      <label class="ctl">Op
+        <select data-field="op">
+          <option value=">">&gt;</option>
+          <option value="<">&lt;</option>
+          <option value=">=">&gt;=</option>
+          <option value="<=">&lt;=</option>
+          <option value="=">=</option>
+        </select>
+      </label>
+      <label class="ctl">Threshold <input data-field="threshold" type="number" step="any" value="80" /></label>
+    </span>
+    <span data-fields="log" hidden>
+      <label class="ctl block">Regex <input data-field="pattern" type="text" placeholder="e.g. ERROR|FATAL" /></label>
+    </span>
+    <button type="button" data-remove-condition>Remove</button>
+  </div></div>
+    <div class="dlg-actions">
+      <button type="button" id="event-add-condition">+ Add condition</button>
+    </div>
+    <label class="ctl block" id="event-match-row" hidden>Trigger when
+      <select id="event-match">
+        <option value="any">any condition is met</option>
+        <option value="all">all conditions are met</option>
+      </select>
+    </label>
+    <label class="ctl block">Action
+      <select id="event-action-kind">
+        <option value="snapshot">Take a snapshot</option>
+        <option value="recording">Start a recording</option>
+      </select>
+    </label>
+    <label class="ctl" id="event-action-minutes-row">Window (minutes) <input id="event-action-minutes" type="number" min="1" step="1" value="5" /></label>
+    <label class="ctl" id="event-action-duration-row" hidden>Duration (minutes) <input id="event-action-duration" type="number" min="1" step="1" value="10" /></label>
+    <label class="ctl block">
+      <input id="event-safe" type="checkbox" />
+      Keep longer than the default retention window
+    </label>
+    <label class="ctl" id="event-max-keep-row" hidden>Keep (days, at most 30) <input id="event-keep-days" type="number" min="1" max="30" step="1" value="7" /></label>
+    <div class="dlg-actions">
+      <button id="dlg-event-form-cancel">Cancel</button>
+      <button id="dlg-event-create" class="primary">Create event</button>
+    </div>
+  </dialog>`;
+}
+
+/**
+ * cttc's Edit Events dialog (`index.html:503-510`) as `renderEventRow` fills
+ * it, for `EVENT_FIXTURE`, with the app's artifact rows under it
+ * (REQ-000046-sJpO9KMY); `at` is the artifact's time as the app shows it.
+ */
+export function cttcEventListDialog(at: string): string {
+  return `<dialog id="dlg-event-list">
+    <h2>Edit Events</h2>
+    <p class="dlg-intro muted">This Sump's events -- update, disable/enable, or erase; download what they captured.</p>
+    <div id="events-list"><div><div class="ctl block">busy -- cpu &gt; 80 -> snapshot (last 5m) -- triggered (web cpu 92.0 &gt; 80) <button type="button">Update</button><button type="button">Disable</button><button type="button">Reset</button><button type="button">Erase</button></div><div class="ctl block event-artifact">  snapshot · complete · ${at} · 1.2 MB <button type="button" title="Save it into the project">Download…</button><button type="button" title="Keep it 30 days on the Sump">Keep…</button></div></div></div>
+    <div class="dlg-actions">
+      <button id="dlg-event-list-close">Close</button>
+    </div>
+  </dialog>`;
+}
+
 /** cttc's navigator (`index.html:240-245`), "now" live or not. */
 export function cttcNav(live: boolean): string {
   return `<div id="chart-nav" class="timeline-nav" title="Drag the thumb or click the track to pan · click “now” to jump to the present and resume following it"><div class="tl-track"><div class="tl-thumb"></div><span class="tl-now-label" data-live="${live}">now</span></div></div>`;
