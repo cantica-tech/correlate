@@ -7,7 +7,7 @@
  * the checklist (br-STREAM-000002-sJpO9KMY), and the Sump collects it.
  */
 import { useEffect, useState } from "react";
-import { Button, Dialog } from "../components/index.js";
+import { Button, Dialog, Switch } from "../components/index.js";
 import { Icon } from "../icons/Icon.js";
 import { useConfirmAbandon } from "../recording/Abandon.js";
 import type { ShellBridge } from "../shell/bridge.js";
@@ -16,6 +16,7 @@ import {
   listStreams,
   type Stream,
   setFollowed,
+  setPrivate,
   streamTargets,
   sumpPublicKey,
   type Targets,
@@ -48,6 +49,8 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
   const [targets, setTargets] = useState<Targets | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [sumpId, setSumpId] = useState<string | null>(null);
+  /** A new stream's Private switch (br-STREAM-000009-sJpO9KMY): off, shared. */
+  const [newPrivate, setNewPrivate] = useState(false);
 
   const fetchTargets = async (id: string) => {
     setBusy(true);
@@ -73,6 +76,7 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
     setTargets(null);
     setStatus("");
     setError("");
+    setNewPrivate(false);
     if (!mode) return;
     void (async () => {
       const [list, key] = await Promise.all([listStreams(request), sumpPublicKey(request)]);
@@ -97,7 +101,7 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
     setBusy(true);
     setError("");
     setStatus(`Reaching Docker on ${target} over SSH…`);
-    const added = await addStream(request, target.trim(), port);
+    const added = await addStream(request, target.trim(), port, newPrivate);
     setBusy(false);
     if (!added.ok) {
       setStatus("");
@@ -135,6 +139,45 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
   };
 
   const isNew = chosen === NEW_STREAM;
+  const current = streams.find((s) => s.id === chosen);
+  /** Make the chosen stream private or shared; a refusal is said in the Sump's words. */
+  const changePrivate = async (stream: Stream, isPrivate: boolean) => {
+    setError("");
+    const r = await setPrivate(request, stream.id, isPrivate);
+    if (!r.ok) return setError(r.message);
+    setStreams((list) =>
+      list.map((s) => (s.id === stream.id ? { ...s, private: r.value.private } : s)),
+    );
+  };
+  // Drawn only when the Sump tells who added its streams (br-STREAM-000009):
+  // a concept new to correlate-app, not in cttc's #dlg-set.
+  const privacy =
+    isNew && streams.some((s) => s.private !== undefined) ? (
+      <Switch id="stream-private" checked={newPrivate} onChange={setNewPrivate}>
+        Private: only you and the Sump's owner see it
+      </Switch>
+    ) : !isNew && current?.private !== undefined ? (
+      <div className="ctl stream-owner-row">
+        <Switch
+          id="stream-private"
+          checked={current.private}
+          disabled={busy || current.may_change === false}
+          title={
+            current.may_change === false
+              ? "Only who added it, or the Sump's owner, can change this"
+              : undefined
+          }
+          onChange={(on) => void changePrivate(current, on)}
+        >
+          Private: only who added it and the Sump's owner see it
+        </Switch>
+        {current.created_by ? (
+          <span id="stream-added-by" className="muted">
+            Added by {current.created_by}
+          </span>
+        ) : null}
+      </div>
+    ) : null;
   return (
     <Dialog
       id="dlg-set"
@@ -183,6 +226,7 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
             <option value={NEW_STREAM}>New, over SSH…</option>
           </select>
         </label>
+        {privacy}
         {isNew ? (
           <>
             <label className="ctl block">

@@ -44,6 +44,11 @@ export function streamRows(stream: Stream): [string, string][] {
     ["Data stream", stream.label],
     ["Kind", stream.kind === "self" ? "the Sump's host" : "SSH"],
     ["Following", String(stream.following ?? 0)],
+    // br-STREAM-000009-sJpO9KMY: who added it, and whether others see it.
+    ...(stream.created_by ? ([["Added by", stream.created_by]] as [string, string][]) : []),
+    ...(stream.private !== undefined
+      ? ([["Private", stream.private ? "yes: only you and the owner" : "no"]] as [string, string][])
+      : []),
     [
       "Collecting",
       stream.secondary

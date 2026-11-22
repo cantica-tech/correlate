@@ -97,7 +97,7 @@ def _changeable(plugin: SumpPluginSSH, stream_id: str, user: str | None) -> Any:
     return stream
 
 
-def _stream_dict(stream: Any, plugin: Any = None) -> dict[str, Any]:
+def _stream_dict(stream: Any, plugin: Any = None, user: str | None = None) -> dict[str, Any]:
     extra: dict[str, Any] = {}
     if plugin is not None:
         followed = plugin.store().followed(stream.id)
@@ -109,6 +109,8 @@ def _stream_dict(stream: Any, plugin: Any = None) -> dict[str, Any]:
             # br-STREAM-000006/-000009: who added it, and whether it is private.
             "created_by": plugin.creator(stream.id),
             "private": plugin.store().private(stream.id),
+            # Whether the caller may change it (br-STREAM-000008): the app's switch.
+            "may_change": plugin.may_change(stream.id, user),
         }
         secondary = plugin.store().secondary(stream.id)
         if secondary is not None:
@@ -135,7 +137,9 @@ def add_stream_routes(app: Any, plugin: SumpPluginSSH) -> None:
         user = _user(request)
         return {
             "streams": [
-                _stream_dict(s, plugin) for s in plugin.streams() if plugin.may_see(s.id, user)
+                _stream_dict(s, plugin, user)
+                for s in plugin.streams()
+                if plugin.may_see(s.id, user)
             ]
         }
 
@@ -166,7 +170,7 @@ def add_stream_routes(app: Any, plugin: SumpPluginSSH) -> None:
             # Someone else's private stream: not this caller's to add or see.
             raise HTTPException(status_code=409, detail=f"{stream.label} cannot be added")
         added = plugin.store().add(stream, created_by=user, private=body.private)
-        return _stream_dict(added, plugin)
+        return _stream_dict(added, plugin, user)
 
     @app.get("/streams/{stream_id}/targets")
     async def targets(stream_id: str, request: Request) -> dict[str, Any]:

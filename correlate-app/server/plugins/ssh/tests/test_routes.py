@@ -85,6 +85,7 @@ def test_lists_self_then_the_ssh_streams(setup) -> None:
                 "followed": {"containers": [], "services": []},
                 "created_by": "alice",
                 "private": False,
+                "may_change": True,
                 "id": "self",
                 "kind": "self",
                 "label": "This Sump's host",
@@ -317,6 +318,8 @@ def test_only_its_creator_and_the_owner_change_a_stream(setup) -> None:
     sid = "ssh:ops@lab:22"
     CALLER["user"] = "carol"
     assert client.get(f"/streams/{sid}/targets").status_code == 200
+    listed = {x["id"]: x for x in client.get("/streams").json()["streams"]}
+    assert (listed[sid]["may_change"], listed["self"]["may_change"]) == (False, False)
     for method, path, body in [
         ("PUT", f"/streams/{sid}/followed", {"containers": ["web"]}),
         ("PUT", f"/streams/{sid}/paused", {"paused": True}),

@@ -21,6 +21,12 @@ export interface Stream {
   followed?: FollowedSet;
   /** Promoted: the secondary Sump that collects it (REQ-000052-sJpO9KMY). */
   secondary?: SecondaryInfo;
+  /** Who added it (br-STREAM-000006-sJpO9KMY); the Sump's owner for "self". */
+  created_by?: string | null;
+  /** Seen only by who added it and the Sump's owner (br-STREAM-000007-sJpO9KMY). */
+  private?: boolean;
+  /** Whether this user may change it (br-STREAM-000008-sJpO9KMY). */
+  may_change?: boolean;
 }
 
 /** Whether a promoted stream's secondary answers its parent now. */
@@ -91,8 +97,15 @@ export async function listStreams(request: SumpRequester): Promise<Outcome<Strea
 }
 
 /** Add a stream over SSH; the Sump first reaches Docker there with its own key. */
-export function addStream(request: SumpRequester, target: string, port: number) {
-  return call<Stream>(request, "POST", "/streams", { target, port });
+export function addStream(request: SumpRequester, target: string, port: number, isPrivate = false) {
+  return call<Stream>(request, "POST", "/streams", { target, port, private: isPrivate });
+}
+
+/** Make a stream private or shared (br-STREAM-000007-sJpO9KMY); its creator's and the owner's. */
+export function setPrivate(request: SumpRequester, id: string, isPrivate: boolean) {
+  return call<{ private: boolean }>(request, "PUT", `${streamPath(id)}/private`, {
+    private: isPrivate,
+  });
 }
 
 /** The Sump's public key, for the host's `authorized_keys`. */
