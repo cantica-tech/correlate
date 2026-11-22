@@ -34,6 +34,7 @@ from sump_plugin_ssh.host import SCRIPT, helper_name, self_reader_args
 from sump_plugin_ssh.identity import SumpIdentity, ensure_identity
 from sump_plugin_ssh.promote import SECONDARY_PORT, PromoteError, Secondary, provision_secondary
 from sump_plugin_ssh.routes import add_removal_routes, add_stream_routes
+from sump_plugin_ssh.secondary import Forward, SecondaryClient, ssh_channel_opener
 from sump_plugin_ssh.streams import SELF_ID, Followed, StreamDef, StreamStore
 from sump_plugin_ssh.transport import LocalTransport, SSHTransport, forget_host_key
 
@@ -73,6 +74,8 @@ class SumpPluginSSH:
         self._ssh: dict[str, SSHTransport] = {}
         #: The Sump's own image, for the "self" host reader (REQ-000032-sJpO9KMY).
         self._image: str | None = None
+        #: Promoted streams' forwards and clients, made on first use.
+        self._secondaries: dict[str, tuple[Forward, SecondaryClient]] = {}
         self._image_warned = False
 
     def _data_dir(self):
@@ -166,6 +169,29 @@ class SumpPluginSSH:
             self.collection.apply(stream_id, Followed())
         logger.info("streams: %s promoted; its secondary collects it", stream_id)
         return secondary
+
+    def secondary_client(self, stream_id: str) -> SecondaryClient | None:
+        """The parent's client of a promoted stream's secondary (br-FED-000002,
+        REQ-000052-sJpO9KMY): through its own SSH forward, as `parent_user`."""
+        secondary = self.store().secondary(stream_id)
+        stream = self.store().get(stream_id)
+        if secondary is None or stream is None:
+            return None
+        if stream_id not in self._secondaries:
+            transport = self.ssh_transport(stream)
+            forward = Forward(
+                ssh_channel_opener(transport.connect, int(secondary["sump_port"])),
+                label=stream_id,
+            )
+
+            async def base_url() -> str:
+                return f"http://127.0.0.1:{await forward.port()}"
+
+            client = SecondaryClient(
+                str(secondary["parent_user"]), self.identity().private_key, base_url
+            )
+            self._secondaries[stream_id] = (forward, client)
+        return self._secondaries[stream_id][1]
 
     def pause_stream(self, stream_id: str, paused: bool) -> None:
         """Close Data Streams: stop collecting, the followed set kept; or resume."""

@@ -14,7 +14,8 @@ each behind the Sump's session like every route but `/health` and the login
   Streams (REQ-000027-sJpO9KMY).
 - `POST /streams/{id}/promote` (`owner_key`): promote an SSH stream to a
   secondary Sump on its host (br-FED-000001, REQ-000052-sJpO9KMY); the
-  Sump's owner only.
+  Sump's owner only. `GET /streams/{id}/secondary`: the secondary, and
+  whether it answers the parent (br-FED-000002).
 """
 
 from __future__ import annotations
@@ -68,6 +69,10 @@ def _stream_dict(stream: Any, plugin: Any = None) -> dict[str, Any]:
             # What the charts draw (REQ-000028-sJpO9KMY), without asking Docker.
             "followed": {"containers": followed.containers, "services": followed.services},
         }
+        secondary = plugin.store().secondary(stream.id)
+        if secondary is not None:
+            # br-FED-000004: the app shows "via <secondary>".
+            extra["secondary"] = secondary
     return {
         **extra,
         "id": stream.id,
@@ -156,6 +161,9 @@ def add_stream_routes(app: Any, plugin: SumpPluginSSH) -> None:
         """Make the stream's followed set exactly `body`, saved, collection following."""
         if plugin.stream(stream_id) is None:
             raise HTTPException(status_code=404, detail=f"no data stream {stream_id}")
+        if plugin.store().secondary(stream_id) is not None:
+            # br-FED-000002: its secondary collects it, not this Sump.
+            raise HTTPException(status_code=409, detail="its secondary Sump collects this stream")
         try:
             wanted = Followed(
                 check_names(body.containers, "containers"), check_names(body.services, "services")
@@ -201,6 +209,16 @@ def add_removal_routes(app: Any, plugin: SumpPluginSSH) -> None:
         except PromoteError as exc:
             status = 409 if exc.step == "check" else 502
             raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @app.get("/streams/{stream_id}/secondary")
+    async def secondary_status(stream_id: str) -> dict[str, Any]:
+        """A promoted stream's secondary, and whether it answers the parent
+        now through its forward (br-FED-000002, REQ-000052-sJpO9KMY)."""
+        secondary = plugin.store().secondary(stream_id)
+        client = plugin.secondary_client(stream_id)
+        if secondary is None or client is None:
+            raise HTTPException(status_code=404, detail=f"{stream_id} is not promoted")
+        return {"secondary": secondary, **(await client.check())}
 
     @app.put("/streams/{stream_id}/paused")
     async def pause_stream(stream_id: str, body: Paused) -> dict[str, bool]:

@@ -163,6 +163,11 @@ class SSHTransport(Transport):
                 ) from exc
         return client
 
+    def connect(self) -> paramiko.SSHClient:
+        """A connected SSH client (blocking), for a forward (REQ-000052-sJpO9KMY);
+        the caller closes it."""
+        return self._connect()
+
     async def _docker(self, args: Sequence[str]) -> Sequence[str]:
         """`args`, with `sudo -n` before `docker` when this host needs it."""
         if not args or args[0] != "docker":

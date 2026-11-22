@@ -224,3 +224,21 @@ def test_promotes_an_ssh_stream_for_the_owner_only(setup, monkeypatch) -> None:
     assert plugin.store().secondary(sid) == secondary
     assert sid not in plugin.store().all_followed()
     assert client.post(f"/streams/{sid}/promote", json=body).status_code == 409
+    # br-FED-000002: collected by its secondary, which is said on the stream.
+    put = client.put(f"/streams/{sid}/followed", json={"containers": ["web"], "services": []})
+    assert put.status_code == 409
+    listed = {s["id"]: s for s in client.get("/streams").json()["streams"]}
+    assert listed[sid]["secondary"] == secondary and "secondary" not in listed["self"]
+    assert client.get("/streams/self/secondary").status_code == 404
+
+    class Client:
+        async def check(self) -> dict:
+            return {"reachable": False, "error": "the secondary is unreachable: refused"}
+
+    monkeypatch.setattr(plugin, "secondary_client", lambda _sid: Client())
+    status = client.get(f"/streams/{sid}/secondary").json()
+    assert status == {
+        "secondary": secondary,
+        "reachable": False,
+        "error": "the secondary is unreachable: refused",
+    }
