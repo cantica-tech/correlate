@@ -1,2 +1,5 @@
 # Editor and OS files. Each part has its own .gitignore for its build output.
 .DS_Store
+
+# Python bytecode, from running the repository scripts.
+__pycache__/
