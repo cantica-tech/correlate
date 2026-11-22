@@ -178,3 +178,49 @@ def test_pauses_and_a_submit_resumes(setup) -> None:
     client.put("/streams/self/followed", json={"containers": ["web"]})
     assert not plugin.store().paused("self")
     assert plugin.collection.applied[-1] == ("self", Followed(["web"], []))
+
+
+def test_promotes_an_ssh_stream_for_the_owner_only(setup, monkeypatch) -> None:
+    """br-FED-000001-sJpO9KMY: the owner promotes; the stream stops being
+    collected here and its secondary is kept."""
+    plugin, _docker, client = setup
+    client.post("/streams", json={"target": "ops@lab", "port": 2222})
+    sid = "ssh:ops@lab:2222"
+    client.put(f"/streams/{sid}/followed", json={"containers": ["web"], "services": []})
+    provisioned: list[dict] = []
+
+    async def provision(shell, **kwargs) -> None:
+        provisioned.append(kwargs)
+
+    monkeypatch.setattr("sump_plugin_ssh.plugin.provision_secondary", provision)
+    monkeypatch.setenv("SUMP_IMAGE", "ghcr.io/cantica/correlate-sump:1.2.3")
+    owner: list[str | None] = [None]
+    monkeypatch.setattr(plugin, "sump_owner", lambda: owner[0])
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def session(request, call_next):
+        request.state.session = type("S", (), {"user": "alice"})()
+        return await call_next(request)
+
+    plugin.contribute_routes(app)
+    client = TestClient(app)
+
+    body = {"owner_key": "ssh-ed25519 AAAAowner alice@laptop"}
+    assert client.post(f"/streams/{sid}/promote", json=body).status_code == 403
+    owner[0] = "alice"
+    assert client.post("/streams/ssh:nobody@gone:22/promote", json=body).status_code == 404
+    assert client.post("/streams/self/promote", json=body).status_code == 409
+    done = client.post(f"/streams/{sid}/promote", json=body)
+    assert done.status_code == 200, done.text
+    secondary = done.json()["secondary"]
+    assert secondary["host"] == "lab" and secondary["owner"] == "alice"
+    assert secondary["sump_port"] == 8775 and secondary["promoted_at"] > 0
+    assert provisioned[0]["owner"] == "alice"
+    assert provisioned[0]["image"] == "ghcr.io/cantica/correlate-sump:1.2.3"
+    assert provisioned[0]["parent_key"].startswith("ssh-ed25519 ")
+    assert plugin.collection.applied[-1] == (sid, Followed())
+    assert plugin.store().secondary(sid) == secondary
+    assert sid not in plugin.store().all_followed()
+    assert client.post(f"/streams/{sid}/promote", json=body).status_code == 409

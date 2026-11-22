@@ -12,6 +12,9 @@ each behind the Sump's session like every route but `/health` and the login
 - `DELETE /streams/{id}`: stop a stream's collection and forget it
   (br-STREAM-000004-sJpO9KMY); `PUT /streams/{id}/paused`: Close Data
   Streams (REQ-000027-sJpO9KMY).
+- `POST /streams/{id}/promote` (`owner_key`): promote an SSH stream to a
+  secondary Sump on its host (br-FED-000001, REQ-000052-sJpO9KMY); the
+  Sump's owner only.
 """
 
 from __future__ import annotations
@@ -20,10 +23,11 @@ import asyncio
 import json
 from typing import TYPE_CHECKING, Any
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from pydantic import BaseModel
 
 from sump_plugin_ssh.containers import running_containers
+from sump_plugin_ssh.promote import PromoteError
 from sump_plugin_ssh.streams import Followed, StreamError, check_names, parse_target
 
 if TYPE_CHECKING:
@@ -38,6 +42,11 @@ LIST_TIMEOUT_S = 20.0
 class NewStream(BaseModel):
     target: str
     port: int = 22
+
+
+class Promote(BaseModel):
+    #: The promoting user's public key (an OpenSSH line): the secondary's owner's.
+    owner_key: str
 
 
 class Paused(BaseModel):
@@ -176,6 +185,22 @@ def add_removal_routes(app: Any, plugin: SumpPluginSSH) -> None:
                 status_code=409, detail="the Sump's own host cannot be removed; close it"
             )
         plugin.remove_stream(stream_id)
+
+    @app.post("/streams/{stream_id}/promote")
+    async def promote_stream(stream_id: str, body: Promote, request: Request) -> dict[str, Any]:
+        """Promote an SSH stream to a secondary Sump on its host (br-FED-000001,
+        REQ-000052-sJpO9KMY); this Sump's owner only, who owns the secondary."""
+        session = getattr(request.state, "session", None)
+        user = str(getattr(session, "user", ""))
+        if not user or user != plugin.sump_owner():
+            raise HTTPException(status_code=403, detail="only the Sump's owner can promote")
+        if plugin.stream(stream_id) is None:
+            raise HTTPException(status_code=404, detail=f"no data stream {stream_id}")
+        try:
+            return {"secondary": await plugin.promote_stream(stream_id, user, body.owner_key)}
+        except PromoteError as exc:
+            status = 409 if exc.step == "check" else 502
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
 
     @app.put("/streams/{stream_id}/paused")
     async def pause_stream(stream_id: str, body: Paused) -> dict[str, bool]:

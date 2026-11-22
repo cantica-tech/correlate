@@ -173,6 +173,11 @@ class SSHTransport(Transport):
             self._sudo = probe.returncode != 0 and denied
         return ["sudo", "-n", *args] if self._sudo else args
 
+    async def docker_prefix(self) -> list[str]:
+        """How to call `docker` on this host: `["docker"]`, or with `sudo -n`
+        where it needs it; for commands built as a pipeline (REQ-000052)."""
+        return list(await self._docker(["docker"]))
+
     async def run(self, args: Sequence[str]) -> ExecResult:
         command = shlex.join(await self._docker(args))
         return await asyncio.to_thread(self._run_sync, command)

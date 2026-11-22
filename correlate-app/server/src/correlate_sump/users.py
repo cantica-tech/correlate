@@ -176,12 +176,18 @@ def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) ->
     owner.add_argument("--user", required=True)
     owner.add_argument("--replace", action="store_true", help="replace a different owner")
     sub.add_parser("list", help="list users and their key fingerprints")
+    # A secondary Sump's parent, as a user (br-FED-000001-sJpO9KMY, REQ-000052).
+    add = sub.add_parser("add-key", help="give NAME the key on stdin")
+    add.add_argument("--user", required=True)
     args = parser.parse_args(argv)
     store = UserStore(data_dir_from_env(os.environ if env is None else env))
     try:
         if args.command == "set-owner":
             key = store.set_owner(args.user, sys.stdin.read().strip(), replace=args.replace)
             print(f"{args.user} owns this Sump ({key.type} {key.fingerprint})")
+        elif args.command == "add-key":
+            key = store.add_key(args.user, sys.stdin.read().strip())
+            print(f"{args.user} may log in ({key.type} {key.fingerprint})")
         else:
             owner_name = store.owner()
             for user in store.users():

@@ -129,6 +129,20 @@ def test_the_owner_command(tmp_path, monkeypatch, capsys) -> None:
     assert capsys.readouterr().out.startswith("alice (owner) ssh-ed25519 SHA256:")
 
 
+def test_the_add_key_command_lets_a_parent_sump_log_in(tmp_path, monkeypatch, capsys) -> None:
+    """br-FED-000001-sJpO9KMY: a promoted Sump's parent is one of its users."""
+    env = {"SUMP_DATA_DIR": str(tmp_path)}
+    monkeypatch.setattr("sys.stdin", io.StringIO(line(new_key())))
+    assert main(["set-owner", "--user", "alice"], env) == 0
+    monkeypatch.setattr("sys.stdin", io.StringIO(line(new_key(), "parent") + "\n"))
+    assert main(["add-key", "--user", "parent-sump"], env) == 0
+    assert "parent-sump may log in (ssh-ed25519 SHA256:" in capsys.readouterr().out
+    assert UserStore(tmp_path).owner() == "alice"
+    assert len(UserStore(tmp_path).keys("parent-sump")) == 1
+    monkeypatch.setattr("sys.stdin", io.StringIO("not a key"))
+    assert main(["add-key", "--user", "parent-sump"], env) == 1
+
+
 # -- the login and the owner routes ------------------------------------------
 
 

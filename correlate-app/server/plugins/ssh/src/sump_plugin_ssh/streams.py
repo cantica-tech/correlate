@@ -18,6 +18,7 @@ import re
 import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
 
 #: The stream of the Sump's own host.
 SELF_ID = "self"
@@ -96,9 +97,12 @@ class StreamStore:
         self._followed: dict[str, Followed] = {}
         #: Streams paused by Close Data Streams: their set kept, not collected.
         self._paused: set[str] = set()
+        #: Promoted streams' secondaries (br-FED-000002): collected there, not here.
+        self._secondaries: dict[str, dict[str, Any]] = {}
         if path.exists():
             saved = json.loads(path.read_text(encoding="utf-8"))
             self._paused = set(saved.get("paused", []))
+            self._secondaries = dict(saved.get("secondaries", {}))
             for s in saved.get("streams", []):
                 stream = StreamDef(**s)
                 self._streams[stream.id] = stream
@@ -146,8 +150,23 @@ class StreamStore:
         return Followed(list(f.containers), list(f.services)) if f else Followed()
 
     def all_followed(self) -> dict[str, Followed]:
-        """Every stream's followed set, paused ones left out: what a start resumes."""
-        return {sid: self.followed(sid) for sid in self._followed if sid not in self._paused}
+        """Every stream's followed set, paused and promoted ones left out: what a start resumes."""
+        return {
+            sid: self.followed(sid)
+            for sid in self._followed
+            if sid not in self._paused and sid not in self._secondaries
+        }
+
+    def secondary(self, stream_id: str) -> dict[str, Any] | None:
+        """The stream's secondary Sump, when it was promoted (REQ-000052-sJpO9KMY)."""
+        found = self._secondaries.get(stream_id)
+        return dict(found) if found else None
+
+    def set_secondary(self, stream_id: str, secondary: dict[str, Any]) -> None:
+        """Keep the stream's secondary: from now on it collects the stream."""
+        with self._lock:
+            self._secondaries[stream_id] = dict(secondary)
+            self._save()
 
     def set_followed(self, stream_id: str, followed: Followed) -> Followed:
         """Make `stream_id`'s followed set exactly `followed`, saved before it returns."""
@@ -163,6 +182,7 @@ class StreamStore:
             "streams": [asdict(s) for s in self._streams.values()],
             "followed": {sid: asdict(f) for sid, f in self._followed.items()},
             "paused": sorted(self._paused),
+            "secondaries": self._secondaries,
         }
         tmp = self.path.with_suffix(".tmp")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

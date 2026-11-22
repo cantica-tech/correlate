@@ -17,18 +17,22 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import socket
+import time
+from dataclasses import asdict
 from typing import Any
 
 from correlate_sump.datasource import DataSource
 from correlate_sump.plugins import hookimpl
 from correlate_sump.transport import Transport
-from correlate_sump.users import data_dir_from_env
+from correlate_sump.users import UserStore, data_dir_from_env
 from sump_plugin_ssh import __version__
 from sump_plugin_ssh.collect import Collection
 from sump_plugin_ssh.datasource import DockerHostDataSource
 from sump_plugin_ssh.host import SCRIPT, helper_name, self_reader_args
 from sump_plugin_ssh.identity import SumpIdentity, ensure_identity
+from sump_plugin_ssh.promote import SECONDARY_PORT, PromoteError, Secondary, provision_secondary
 from sump_plugin_ssh.routes import add_removal_routes, add_stream_routes
 from sump_plugin_ssh.streams import SELF_ID, Followed, StreamDef, StreamStore
 from sump_plugin_ssh.transport import LocalTransport, SSHTransport, forget_host_key
@@ -75,6 +79,13 @@ class SumpPluginSSH:
         env = self._env if self._env is not None else dict(os.environ)
         return data_dir_from_env(env)
 
+    def sump_owner(self) -> str | None:
+        """This Sump's owner, or `None` before one is set (or when unreadable)."""
+        try:
+            return UserStore(self._data_dir()).owner()
+        except Exception:  # noqa: BLE001 - a corrupt store owns nothing
+            return None
+
     def identity(self) -> SumpIdentity:
         """The Sump's key pair, made on first use (`SUMP_DATA_DIR/ssh/`)."""
         if self._identity is None:
@@ -110,6 +121,51 @@ class SumpPluginSSH:
             forget_host_key(self.identity(), stream.host, stream.port)
             logger.info("streams: removed %s; its collection stopped", stream_id)
         return stream
+
+    async def promote_stream(self, stream_id: str, owner: str, owner_key: str) -> dict[str, Any]:
+        """Promote an SSH stream to a secondary Sump on its host (br-FED-000001,
+        REQ-000052-sJpO9KMY): provisioned through this Sump's SSH access, owned
+        by `owner`, this Sump a user on it; then collected there, not here.
+        Raises `PromoteError` (nothing left running, still collected here)."""
+        stream = self.store().get(stream_id)
+        if stream is None or stream.kind != "ssh":
+            raise PromoteError("check", "only a data stream over SSH can be promoted")
+        if self.store().secondary(stream_id) is not None:
+            raise PromoteError("check", "this data stream is already promoted")
+        image = os.environ.get("SUMP_IMAGE")
+        local = self.self_source.transport if self.self_source is not None else None
+        if not image and local is not None:
+            image = await self._own_image(local)
+        if not image:
+            raise PromoteError("check", "this Sump cannot tell its own image (no Docker socket)")
+        name = re.sub(r"[^A-Za-z0-9._-]", "-", self._own_container())[:40] or "sump"
+        parent_user = f"parent-{name}"
+        parent_key = self.identity().public_key_file.read_text(encoding="utf-8").strip()
+        transport = self.transport_for(stream_id)
+        await provision_secondary(
+            transport,
+            image=image,
+            owner=owner,
+            owner_key=owner_key,
+            parent_user=parent_user,
+            parent_key=parent_key,
+        )
+        secondary = asdict(
+            Secondary(
+                host=stream.host,
+                ssh_port=stream.port,
+                ssh_user=stream.user,
+                sump_port=SECONDARY_PORT,
+                owner=owner,
+                parent_user=parent_user,
+                promoted_at=int(time.time() * 1000),
+            )
+        )
+        self.store().set_secondary(stream_id, secondary)
+        if self.collection is not None:
+            self.collection.apply(stream_id, Followed())
+        logger.info("streams: %s promoted; its secondary collects it", stream_id)
+        return secondary
 
     def pause_stream(self, stream_id: str, paused: bool) -> None:
         """Close Data Streams: stop collecting, the followed set kept; or resume."""
