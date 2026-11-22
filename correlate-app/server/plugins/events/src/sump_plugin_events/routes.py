@@ -17,6 +17,9 @@ Behind the Sump's session guard: every call has a user, the D3 identity.
   (409 while pending, or failed); its event's owner or the Sump's owner.
 - `POST /artifacts/{id}/keep` (`{ "days": n }`): kept n days from now, at
   most 30; its event's owner only.
+- `GET /events/firings/stream`: the firings of the caller's events (all of
+  them for the Sump's owner) as they happen, as server-sent events with the
+  Sump's heartbeat; `Last-Event-ID` resumes after a firing (REQ-000046).
 
 An event another user owns is answered as not found (404), unless the caller
 is the Sump's owner.
@@ -25,14 +28,15 @@ is the Sump's owner.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from typing import Annotated, Any
 
 from fastapi import Body, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
+from correlate_sump.sse import ServerSentEvent, event_stream
 from sump_plugin_events.artifacts import ArtifactRefused, Artifacts
-from sump_plugin_events.engine import EventRefused, EventStore, visible
+from sump_plugin_events.engine import FIRINGS, EventRefused, EventStore, visible
 from sump_plugin_events.model import InvalidEvent
 
 
@@ -180,3 +184,42 @@ def add_event_routes(
             )
         except ArtifactRefused as error:
             raise HTTPException(status_code=error.status, detail=str(error)) from error
+
+    @app.get("/events/firings/stream")
+    async def firings_stream(request: Request) -> StreamingResponse:
+        caller, owner = _caller(request), sump_owner()
+        redis = the_store().redis
+        # "From now" is fixed when the request arrives, not at the first read.
+        after = await start_position(redis, request.headers.get("last-event-id"))
+        return event_stream(firings_after(redis, after, caller, owner))
+
+
+#: How long one blocking read of the firings waits before reading again (ms).
+FIRINGS_BLOCK_MS = 1000
+
+
+async def start_position(redis: Any, last_event_id: str | None) -> str:
+    """Where a stream starts: after `Last-Event-ID`, or after the latest firing now."""
+    if last_event_id:
+        return last_event_id
+    last = await redis.xrevrange(FIRINGS, count=1)
+    return _id(last[0][0]) if last else "0-0"
+
+
+async def firings_after(
+    redis: Any, after: str, caller: str, owner: str | None, block_ms: int = FIRINGS_BLOCK_MS
+) -> AsyncIterator[ServerSentEvent]:
+    """The firings after stream id `after` that `caller` may see."""
+    position = after
+    while True:
+        replies = await redis.xread({FIRINGS: position}, block=block_ms, count=100)
+        for _stream, entries in replies or []:
+            for entry_id, fields in entries:
+                position = _id(entry_id)
+                firing = {_id(k): _id(v) for k, v in fields.items()}
+                if firing.get("owner") == caller or (owner is not None and caller == owner):
+                    yield ServerSentEvent(data=firing, event="firing", id=position)
+
+
+def _id(value: Any) -> str:
+    return value.decode() if isinstance(value, bytes) else str(value)

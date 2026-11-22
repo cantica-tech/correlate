@@ -80,6 +80,8 @@ class Action:
 
     kind: Literal["none", "snapshot", "recording"] = "none"
     minutes: float = 0.0
+    #: Days each artifact is kept; 0, the default 24 h (REQ-000046-sJpO9KMY).
+    keep_days: float = 0.0
 
 
 def parse_action(raw: Any) -> Action:
@@ -99,7 +101,10 @@ def parse_action(raw: Any) -> Action:
         raise InvalidEvent("an action's minutes must be a number")
     if not 0 < minutes <= most:
         raise InvalidEvent(f"a {kind}'s minutes are more than 0 and at most {most:g}")
-    return Action(kind=kind, minutes=float(minutes))
+    keep = raw.get("keep_days", 0)
+    if isinstance(keep, bool) or not isinstance(keep, int | float) or not 0 <= keep <= 30:
+        raise InvalidEvent("an action's artifacts are kept for 0 (24 h) to 30 days")
+    return Action(kind=kind, minutes=float(minutes), keep_days=float(keep))
 
 
 @dataclass

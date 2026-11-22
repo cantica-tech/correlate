@@ -126,7 +126,9 @@ class Artifacts:
             "to": end,
             "created_at": at,
             "expires_at": None,
-            "safe": False,
+            # Kept longer when the event says so (REQ-000046-sJpO9KMY).
+            "safe": action.keep_days > 0,
+            "keep_ms": int(action.keep_days * 24 * 3600 * 1000) or TTL_MS,
             "size": None,
             "reason": None,
         }
@@ -196,7 +198,7 @@ class Artifacts:
         except Exception as error:
             logger.warning("artifact %s failed: %s", record["id"], error)
             record.update(status="failed", reason=str(error))
-        record["expires_at"] = now + TTL_MS
+        record["expires_at"] = now + int(record.get("keep_ms") or TTL_MS)
         await self._save(record)
 
     async def keep(self, artifact_id: str, keep_ms: int, caller: str, now: int) -> dict[str, Any]:
