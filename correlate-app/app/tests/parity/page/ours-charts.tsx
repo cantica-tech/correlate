@@ -12,6 +12,7 @@ import { createRoot } from "react-dom/client";
 import "../../../renderer/src/theme/tokens.css";
 import "../../../renderer/src/theme/cttc.generated.css";
 import { ChartBlock, type ChartsShown } from "../../../renderer/src/charts/ChartBlock.js";
+import { ExportMetricsDialog } from "../../../renderer/src/exports/ExportMetricsDialog.js";
 import { SnapshotDialog } from "../../../renderer/src/exports/SnapshotDialog.js";
 import { AbandonDialog } from "../../../renderer/src/recording/Abandon.js";
 import { RecoveryDialog } from "../../../renderer/src/recording/RecoveryDialog.js";
@@ -69,6 +70,8 @@ const prefs = location.search.includes("prefs");
 const recovery = location.search.includes("recovery");
 // `?abandon`: the "Abandon the recording?" dialog alone (REQ-000039-sJpO9KMY).
 const abandon = location.search.includes("abandon");
+// `?export-metrics`: the Export metrics dialog alone (REQ-000042-sJpO9KMY).
+const exportMetrics = location.search.includes("export-metrics");
 // `?snapshot`: the snapshot dialog alone, cttcSnapshotDialog's values (REQ-000041-sJpO9KMY).
 const snapshot = location.search.includes("snapshot");
 const SNAPSHOT_T = Date.UTC(2026, 10, 22, 12, 0, 30);
@@ -93,7 +96,9 @@ const SNAPSHOT = {
 const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
-    snapshot ? (
+    exportMetrics ? (
+      <ExportMetricsDialog open onExport={async () => false} onClose={() => {}} />
+    ) : snapshot ? (
       <SnapshotDialog
         at={SNAPSHOT_T}
         take={async () => SNAPSHOT}

@@ -37,7 +37,7 @@ describe("REQ-000023-sJpO9KMY: the menus", () => {
       "Start or Resume Recording",
       "Pause Recording",
       "Stop Recording…",
-      "Export…",
+      "Export Metrics…",
       "Restart",
       "Quit",
       "Undo",

@@ -133,6 +133,8 @@ export interface ChartBlockProps {
   analysis?: { from: number; to: number } | null;
   /** "Back to live tracking" (REQ-000033-sJpO9KMY). */
   onBackToLive?: () => void;
+  /** cttc's Export metrics button, in the analysis view's head (REQ-000042-sJpO9KMY). */
+  onExportMetrics?: () => void;
   /**
    * The recording transport, in the live view's head (REQ-000037-sJpO9KMY),
    * given what Start would record: the active stream, its followed
@@ -193,6 +195,7 @@ export function ChartBlock({
   onHostToggle,
   analysis = null,
   onBackToLive,
+  onExportMetrics,
   onLegendMenu,
   transport,
   recorded = null,
@@ -590,6 +593,17 @@ export function ChartBlock({
                   <Icon name="track" svgClassName="flat-action-icon" />
                   Back to live tracking
                 </button>
+                {onExportMetrics ? (
+                  <button
+                    type="button"
+                    id="btn-export-metrics"
+                    className="icon-btn"
+                    title="Export this metrics file's stats/logs as text or JSON"
+                    onClick={onExportMetrics}
+                  >
+                    <Icon name="export" />
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>

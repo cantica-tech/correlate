@@ -97,6 +97,7 @@ const OPEN_FILES_EVENT = "open:files";
 /** Must match the channels in `main/src/exports/ipc.ts`. */
 const EXPORT_CAPTURE_CHANNEL = "export:capture";
 const EXPORT_SAVE_SNAPSHOT_CHANNEL = "export:saveSnapshot";
+const EXPORT_METRICS_CHANNEL = "export:metrics";
 /** Must match the channels in `main/src/recording/ipc.ts`. */
 const RECORDING_CHANNELS = {
   get: "recording:get",
@@ -256,6 +257,8 @@ contextBridge.exposeInMainWorld("correlate", {
     capture: (request) => ipcRenderer.invoke(EXPORT_CAPTURE_CHANNEL, request),
     /** Save a snapshot `{ name, content, kind: "txt" | "json" }`, where the user chooses. */
     saveSnapshot: (snapshot) => ipcRenderer.invoke(EXPORT_SAVE_SNAPSHOT_CHANNEL, snapshot),
+    /** Export the shown file `{ stats, logs, format, detail }`, where the user chooses (REQ-000042). */
+    metrics: (request) => ipcRenderer.invoke(EXPORT_METRICS_CHANNEL, request),
   },
   recording: {
     /** The recording session's state. */

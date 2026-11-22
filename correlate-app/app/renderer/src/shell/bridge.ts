@@ -205,6 +205,13 @@ export interface ShellBridge {
       content: string;
       kind: "txt" | "json";
     }): Promise<{ ok: true; file: string } | SaveFailure>;
+    /** Export the shown file (REQ-000042-sJpO9KMY). */
+    metrics(request: {
+      stats: boolean;
+      logs: boolean;
+      format: "text" | "json";
+      detail: "summary" | "full";
+    }): Promise<{ ok: true; file: string } | SaveFailure>;
   };
   /** The recording session (REQ-000037-sJpO9KMY). */
   recording?: {

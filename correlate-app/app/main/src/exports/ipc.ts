@@ -7,14 +7,18 @@
  * - `export:saveSnapshot` (`{ name, content, kind: "txt" | "json" }`): a
  *   snapshot already shown, saved where the user chooses
  *   (br-EXPORT-000004-sJpO9KMY).
+ * - `export:metrics` (`MetricsRequest`): the shown file exported as text or
+ *   JSON (br-EXPORT-000005-sJpO9KMY, REQ-000042-sJpO9KMY).
  *
  * Both ask where to save first, write atomically, and never throw.
  */
 import type { IpcEventLike, IpcMainLike } from "../sump/ipc.js";
 import { type CaptureDeps, type CaptureResult, capture, parseCapture } from "./capture.js";
+import { exportMetrics, type MetricsDeps, type MetricsResult, parseMetrics } from "./metrics.js";
 
 export const EXPORT_CAPTURE_CHANNEL = "export:capture";
 export const EXPORT_SAVE_SNAPSHOT_CHANNEL = "export:saveSnapshot";
+export const EXPORT_METRICS_CHANNEL = "export:metrics";
 
 /** A snapshot's file name: printable, no folder, at most 200 characters. */
 function fileName(name: unknown): name is string {
@@ -25,6 +29,8 @@ function fileName(name: unknown): name is string {
 /** What the channels need, per calling window. */
 export interface ExportDeps {
   capture: (event: IpcEventLike) => CaptureDeps;
+  /** Exporting the calling window's shown file. */
+  metrics: (event: IpcEventLike) => MetricsDeps;
   /** The save dialog for a snapshot: the chosen path, or null when cancelled. */
   askSaveSnapshot: (
     event: IpcEventLike,
@@ -65,6 +71,13 @@ export function registerExportIpc(ipcMain: IpcMainLike, deps: ExportDeps): void 
   ipcMain.handle(EXPORT_CAPTURE_CHANNEL, async (event, message): Promise<CaptureResult> => {
     try {
       return await capture(parseCapture(message), deps.capture(event));
+    } catch (error) {
+      return { ok: false, message: (error as Error).message };
+    }
+  });
+  ipcMain.handle(EXPORT_METRICS_CHANNEL, async (event, message): Promise<MetricsResult> => {
+    try {
+      return await exportMetrics(parseMetrics(message), deps.metrics(event));
     } catch (error) {
       return { ok: false, message: (error as Error).message };
     }

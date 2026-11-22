@@ -163,6 +163,7 @@ describe("br-EXPORT-000003-sJpO9KMY: capturing a range", () => {
 describe("br-EXPORT-000004-sJpO9KMY: saving a snapshot", () => {
   const deps = (answer: string | null, written: Map<string, string>) => ({
     capture: () => fakes(null).deps,
+    metrics: () => ({ scope: () => undefined, askSave: async () => null, write: async () => {} }),
     askSaveSnapshot: async () => answer,
     write: async (file: string, content: string) => void written.set(file, content),
   });

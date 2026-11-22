@@ -22,6 +22,7 @@ import {
   cttcAbandonDialog,
   cttcBackToLive,
   cttcChartBlock,
+  cttcExportMetricsDialog,
   cttcHostBlock,
   cttcNav,
   cttcNavScript,
@@ -411,6 +412,31 @@ async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer
     await page.mouse.move(1, 1);
     await page.evaluate("document.fonts.ready.then(() => true)");
     pictures.set(`recording-abandon-${theme}`, await shoot("#dlg-abandon-recording"));
+    // The Export metrics dialog, step 1 then step 2 (REQ-000042-sJpO9KMY).
+    await page.goto(
+      `${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?export-metrics`,
+    );
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.body.insertAdjacentHTML("beforeend", ${JSON.stringify(cttcExportMetricsDialog())}); document.getElementById("dlg-export-metrics").showModal(); })()`,
+      );
+    }
+    await page.waitForSelector("#dlg-export-metrics[open]");
+    await page.evaluate("document.activeElement?.blur()");
+    await page.mouse.move(1, 1);
+    await page.evaluate("document.fonts.ready.then(() => true)");
+    pictures.set(`export-metrics-step1-${theme}`, await shoot("#dlg-export-metrics"));
+    // Step 2: Next…, on cttc's side as its handler does.
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.getElementById("export-metrics-step1").hidden = true; document.getElementById("export-metrics-step2").hidden = false; })()`,
+      );
+    } else {
+      await page.click("#dlg-export-metrics-next");
+    }
+    await page.evaluate("document.activeElement?.blur()");
+    await page.mouse.move(1, 1);
+    pictures.set(`export-metrics-step2-${theme}`, await shoot("#dlg-export-metrics"));
     // The snapshot dialog, filled (REQ-000041-sJpO9KMY).
     await page.goto(`${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?snapshot`);
     if (side === "cttc") {
@@ -545,6 +571,8 @@ describe.skipIf(process.platform !== "darwin")(
       "recording-recovery",
       "recording-abandon",
       "export-snapshot",
+      "export-metrics-step1",
+      "export-metrics-step2",
       "host-head",
       "host-head-folded",
       "host-loading-line",

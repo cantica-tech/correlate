@@ -33,8 +33,9 @@ export interface Menu {
 }
 
 /**
- * The File menu's project (REQ-000035-sJpO9KMY) and recording
- * (REQ-000037-sJpO9KMY) entries, run by the window, not the main process.
+ * The File menu's project (REQ-000035-sJpO9KMY), recording
+ * (REQ-000037-sJpO9KMY) and export (REQ-000042-sJpO9KMY) entries, run by the
+ * window, not the main process.
  */
 export const PROJECT_ACTIONS: readonly string[] = [
   "new-project",
@@ -45,6 +46,7 @@ export const PROJECT_ACTIONS: readonly string[] = [
   "start-recording",
   "pause-recording",
   "stop-recording",
+  "export-metrics",
 ];
 
 export const MENUS: readonly Menu[] = [
@@ -101,11 +103,10 @@ export const MENUS: readonly Menu[] = [
       },
       "separator",
       {
-        action: "export",
-        label: "Export…",
+        action: "export-metrics",
+        label: "Export Metrics…",
         icon: "export",
-        later: true,
-        title: "Export this project's metrics and logs as text or JSON",
+        title: "Export the shown file's stats/logs as text or JSON",
       },
       "separator",
       { action: "restart", label: "Restart" },

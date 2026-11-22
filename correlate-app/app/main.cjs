@@ -71,6 +71,7 @@ const {
   SidebarHost,
   startForwards,
   writeAtomic,
+  logPrefs,
 } = require("./main/dist/main.cjs");
 
 /** Each window's active Sump (br-SUMP-000010); set once the app is ready. */
@@ -445,6 +446,35 @@ app.whenReady().then(() => {
       },
       shownFile: () => openFiles.get(event.sender.id),
       write: (file, bytes) => writeAtomic(file, bytes),
+    }),
+    // The shown file's export (REQ-042): its containers not hidden in the
+    // legend, its host when the host block is open, its tracks' delays.
+    metrics: (event) => ({
+      scope: () => {
+        const window = event.sender.id;
+        const file = openFiles.get(window);
+        if (!file) return undefined;
+        const { tracks } = shownTracks(projects, openFiles, window);
+        return {
+          file,
+          containers: file.containers.filter((name) => !tracks[name]?.hidden),
+          host: logPrefs(settings).hostOpen,
+          delays: Object.fromEntries(
+            Object.entries(tracks).map(([name, t]) => [name, t.delaySecs ?? 0]),
+          ),
+        };
+      },
+      askSave: (name, format) =>
+        askSaveIn(event, {
+          title: "Export Metrics",
+          name,
+          filters: [
+            format === "json"
+              ? { name: "JSON", extensions: ["json"] }
+              : { name: "Text", extensions: ["txt"] },
+          ],
+        }),
+      write: (file, content) => writeAtomic(file, content),
     }),
     askSaveSnapshot: (event, name, kind) =>
       askSaveIn(event, {

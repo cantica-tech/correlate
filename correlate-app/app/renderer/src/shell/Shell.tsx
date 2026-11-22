@@ -15,6 +15,7 @@ import {
 import { ChartBlock } from "../charts/ChartBlock.js";
 import type { ViewState } from "../charts/viewState.js";
 import { Button, ContextMenu, Dialog, SegControl, Switch } from "../components/index.js";
+import { ExportMetricsDialog, type MetricsChoice } from "../exports/ExportMetricsDialog.js";
 import { Lanes } from "../logs/Lanes.js";
 import { Panels, useLogPrefs } from "../logs/Panels.js";
 import { MenuBar } from "../menubar/MenuBar.js";
@@ -102,6 +103,8 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
   const [delaying, setDelaying] = useState<{ name: string; secs: number } | null>(null);
   // The recording session (REQ-000037-sJpO9KMY), and what Start would record.
   const [recording, setRecording] = useState<RecordingState["status"]>("idle");
+  // The Export metrics dialog, of the shown file (REQ-000042-sJpO9KMY).
+  const [exportOpen, setExportOpen] = useState(false);
   // Capture mode, said in the status bar while armed (REQ-000041-sJpO9KMY).
   const [captureArmed, setCaptureArmed] = useState(false);
   // What it has captured, banded on the live view (REQ-000040-sJpO9KMY).
@@ -415,6 +418,21 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
   );
   const action = useCallback((name: string) => void bridge.sidebar.action(name), [bridge]);
   // The File menu's project entries run here; the others in the main process.
+  // Export Metrics… (REQ-000042-sJpO9KMY): only while a file is shown.
+  const openExport = useCallback(() => {
+    if (analysis) return setExportOpen(true);
+    void bridge.status.add("Export Metrics needs a file shown in the analysis view");
+  }, [analysis, bridge]);
+  const exportMetrics = useCallback(
+    async (choice: MetricsChoice) => {
+      const r = await bridge.exports?.metrics(choice);
+      if (!r) return false;
+      if (r.ok) void bridge.status.add(`metrics exported: ${r.file}`);
+      else if (!r.cancelled) void bridge.status.add(`metrics export failed: ${r.message}`);
+      return r.ok;
+    },
+    [bridge],
+  );
   const menuAction = useCallback(
     (name: string) => {
       if (name === "new-project") return newProject();
@@ -425,9 +443,11 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
       if (name === "start-recording") return startRecording();
       if (name === "pause-recording") return pauseRecording();
       if (name === "stop-recording") return stopRecording();
+      if (name === "export-metrics") return openExport();
       void bridge.menu.action(name);
     },
     [
+      openExport,
       bridge,
       newProject,
       openProject,
@@ -528,6 +548,7 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
             onLegendMenu={analysis ? (name, x, y) => setTrackMenu({ name, x, y }) : undefined}
             analysis={analysis}
             onBackToLive={backToLive}
+            onExportMetrics={analysis ? openExport : undefined}
             initialView={analysis ? null : liveView.current}
             onViewState={analysis ? undefined : keepLiveView}
             onLiveStatus={setLiveStatus}
@@ -641,6 +662,11 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
           ]}
         />
       ) : null}
+      <ExportMetricsDialog
+        open={exportOpen}
+        onExport={exportMetrics}
+        onClose={() => setExportOpen(false)}
+      />
       <RecoveryDialog
         open={interrupted !== null}
         sumpGone={interrupted?.sumpGone ?? false}

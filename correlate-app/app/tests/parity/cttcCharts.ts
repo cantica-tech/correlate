@@ -141,6 +141,50 @@ export function cttcSnapshotDialog(): string {
   </dialog>`;
 }
 
+/**
+ * cttc's Export metrics dialog (`index.html:817-852`), verbatim but for its
+ * Summary title, which says the summary the rule decided
+ * (br-EXPORT-000005-sJpO9KMY; REQ-000042-sJpO9KMY).
+ */
+export function cttcExportMetricsDialog(): string {
+  return `  <dialog id="dlg-export-metrics">
+    <h2>Export metrics</h2>
+    <div id="export-metrics-step1">
+      <p class="dlg-intro muted">Export the active metrics file's data as a plain-text or JSON file, covering its whole time range.</p>
+      <label class="ctl block">
+        <input id="export-metrics-stats" type="checkbox" checked />
+        Stats (CPU/MEM/NET telemetry)
+      </label>
+      <label class="ctl block">
+        <input id="export-metrics-logs" type="checkbox" checked />
+        Logs
+      </label>
+      <div class="dlg-actions">
+        <button id="dlg-export-metrics-cancel" title="Close without exporting">Cancel</button>
+        <button id="dlg-export-metrics-next" class="primary" title="Choose the export format">Next…</button>
+      </div>
+    </div>
+    <div id="export-metrics-step2" hidden>
+      <div class="dlg-section-help muted">Format</div>
+      <div class="btn-group" id="export-metrics-format-switch">
+        <button id="export-metrics-format-text" type="button" class="primary" title="A human-readable plain-text file">Text</button>
+        <button id="export-metrics-format-json" type="button" title="A machine-readable JSON file">JSON</button>
+      </div>
+      <div id="export-metrics-granularity-row">
+        <div class="dlg-section-help muted">Stats detail</div>
+        <div class="btn-group" id="export-metrics-granularity-switch">
+          <button id="export-metrics-granularity-summary" type="button" class="primary" title="Per container: first/last/min/max/mean CPU/MEM/NET over the whole file">Summary</button>
+          <button id="export-metrics-granularity-full" type="button" title="Every recorded sample, per container">Full time series</button>
+        </div>
+      </div>
+      <div class="dlg-actions">
+        <button id="dlg-export-metrics-back" title="Back to what to include">Back</button>
+        <button id="dlg-export-metrics-export" class="primary" title="Save the export">💾 Export…</button>
+      </div>
+    </div>
+  </dialog>`;
+}
+
 /** cttc's navigator (`index.html:240-245`), "now" live or not. */
 export function cttcNav(live: boolean): string {
   return `<div id="chart-nav" class="timeline-nav" title="Drag the thumb or click the track to pan · click “now” to jump to the present and resume following it"><div class="tl-track"><div class="tl-thumb"></div><span class="tl-now-label" data-live="${live}">now</span></div></div>`;

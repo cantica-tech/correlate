@@ -35,7 +35,7 @@ export { Auditor } from "./catalog/audit.js";
 export { registerExportIpc } from "./exports/ipc.js";
 export { identityPublicKey, importIdentity, userName } from "./identity/identity.js";
 export { registerLiveIpc } from "./live.js";
-export { registerLogsIpc } from "./logs.js";
+export { logPrefs, registerLogsIpc } from "./logs.js";
 export { fieldMenuTemplate, nativeMenuTemplate, registerMenuIpc } from "./menu.js";
 export { Notifications, notifyLifecycle, registerStatusIpc } from "./notify.js";
 export { filesFromArgv, Inbox, OPEN_FILES_EVENT, registerOpenIpc } from "./opened.js";

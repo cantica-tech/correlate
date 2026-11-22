@@ -232,7 +232,7 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
     // Captures and snapshots: only their own channels (REQ-000041-sJpO9KMY).
     const exp = (exposed.correlate as { exports: Record<string, (m?: unknown) => unknown> })
       .exports;
-    expect(Object.keys(exp)).toEqual(["capture", "saveSnapshot"]);
+    expect(Object.keys(exp)).toEqual(["capture", "saveSnapshot", "metrics"]);
     const range = {
       view: "live",
       stream: "self",
@@ -243,9 +243,12 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
     };
     await exp.capture?.(range);
     await exp.saveSnapshot?.({ name: "s.txt", content: "x", kind: "txt" });
+    const choice = { stats: true, logs: false, format: "json", detail: "full" };
+    await exp.metrics?.(choice);
     expect(invoked.splice(0)).toEqual([
       ["export:capture", range],
       ["export:saveSnapshot", { name: "s.txt", content: "x", kind: "txt" }],
+      ["export:metrics", choice],
     ]);
     // Files the OS handed the app: only their own channels (REQ-000036-sJpO9KMY).
     const opened = (exposed.correlate as { opened: Record<string, (m?: unknown) => unknown> })
