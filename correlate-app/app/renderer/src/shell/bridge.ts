@@ -154,12 +154,18 @@ export interface ShellBridge {
     save(): Promise<ProjectState>;
     saveAs(): Promise<ProjectState>;
     addFiles(): Promise<ProjectState>;
+    addPaths(paths: string[]): Promise<ProjectState>;
     show(id: string): Promise<ProjectState>;
     change(change: Record<string, unknown> & { op: string }): Promise<ProjectState>;
     tracks(): Promise<{
       item: string | null;
       tracks: Record<string, { delaySecs: number; hidden: boolean }>;
     }>;
+  };
+  /** Files the OS handed the app (REQ-000036-sJpO9KMY). */
+  opened?: {
+    take(): Promise<{ files: string[]; ignored: string[] }>;
+    onFiles(listener: (arrived: { files: string[]; ignored: string[] }) => void): () => void;
   };
   /** The live view's settings (REQ-000031-sJpO9KMY). */
   live?: {

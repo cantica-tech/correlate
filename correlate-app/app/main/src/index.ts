@@ -37,6 +37,7 @@ export { registerLiveIpc } from "./live.js";
 export { registerLogsIpc } from "./logs.js";
 export { fieldMenuTemplate, nativeMenuTemplate, registerMenuIpc } from "./menu.js";
 export { Notifications, notifyLifecycle, registerStatusIpc } from "./notify.js";
+export { filesFromArgv, Inbox, OPEN_FILES_EVENT, registerOpenIpc } from "./opened.js";
 export { registerPickerIpc } from "./picker.js";
 export { registerProjectIpc, shownTracks } from "./projects/ipc.js";
 export { Projects } from "./projects/store.js";

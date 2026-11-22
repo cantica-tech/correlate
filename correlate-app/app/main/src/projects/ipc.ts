@@ -7,8 +7,9 @@
  * - `project:new`, `project:open` (the open dialog), `project:openFile`
  *   (a Recent), `project:save` (Save As when it has no file yet),
  *   `project:saveAs` (the save dialog).
- * - `project:addFiles` (the open dialog for cttc's files): added to the
- *   project, read, the last shown.
+ * - `project:addFiles` (the open dialog for captures): added to the
+ *   project, read, the last shown; `project:addPaths` (paths the OS handed
+ *   the app, REQ-000036-sJpO9KMY) alike, without the dialog.
  * - `project:show` (a file's id): read if not yet, and shown.
  * - `project:change` (an operation): new folder, rename, move, remove (a file
  *   closed too, falling back as br-ANLYS-000006-sJpO9KMY), a track's delay
@@ -20,6 +21,7 @@
  */
 import type { OpenFiles, OpenList } from "../analysis/ipc.js";
 import { openFiles } from "../analysis/ipc.js";
+import { kindOf } from "../opened.js";
 import type { IpcEventLike, IpcMainLike } from "../sump/ipc.js";
 import {
   addFiles,
@@ -41,6 +43,7 @@ export const PROJECT_OPEN_FILE_CHANNEL = "project:openFile";
 export const PROJECT_SAVE_CHANNEL = "project:save";
 export const PROJECT_SAVE_AS_CHANNEL = "project:saveAs";
 export const PROJECT_ADD_FILES_CHANNEL = "project:addFiles";
+export const PROJECT_ADD_PATHS_CHANNEL = "project:addPaths";
 export const PROJECT_SHOW_CHANNEL = "project:show";
 export const PROJECT_CHANGE_CHANNEL = "project:change";
 export const PROJECT_TRACKS_CHANNEL = "project:tracks";
@@ -195,9 +198,9 @@ export function registerProjectIpc(
     }
   });
   ipcMain.handle(PROJECT_SAVE_AS_CHANNEL, (event) => saveAs(event));
-  ipcMain.handle(PROJECT_ADD_FILES_CHANNEL, async (event) => {
+  /** Read `chosen`, add those read to the project, show the last. */
+  const addPaths = async (event: IpcEventLike, chosen: string[]) => {
     const window = windowOf(event);
-    const chosen = await deps.askFiles(event);
     if (chosen.length === 0) return reply(window, { ok: false, cancelled: true });
     const opened = await show(event, chosen);
     // Only the files that could be read join the project.
@@ -208,7 +211,19 @@ export function registerProjectIpc(
       refused: opened.refused ?? [],
       warnings: opened.ok ? opened.warnings : [],
     });
-  });
+  };
+  ipcMain.handle(PROJECT_ADD_FILES_CHANNEL, async (event) =>
+    addPaths(event, await deps.askFiles(event)),
+  );
+  // Files the OS handed the app (REQ-000036-sJpO9KMY): as Add Files…, without the dialog.
+  ipcMain.handle(PROJECT_ADD_PATHS_CHANNEL, (event, paths) =>
+    addPaths(
+      event,
+      Array.isArray(paths)
+        ? paths.filter((p): p is string => typeof p === "string" && kindOf(p) === "capture")
+        : [],
+    ),
+  );
   ipcMain.handle(PROJECT_SHOW_CHANNEL, async (event, id) => {
     const window = windowOf(event);
     const item = projects.session(window).project.items.find((i) => i.id === id);

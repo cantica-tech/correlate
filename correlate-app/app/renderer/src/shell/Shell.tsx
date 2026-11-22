@@ -142,6 +142,41 @@ export function Shell({ bridge, detached = false }: ShellProps) {
     (file: string) => guard(() => void bridge.project?.openFile(file).then(arrived)),
     [bridge, guard, arrived],
   );
+  /**
+   * Files the OS handed the app (REQ-000036-sJpO9KMY): the last project opens,
+   * as Open Project… (unsaved changes asked about first); the captures join
+   * the project, as Add Files…, the last shown.
+   */
+  const received = useCallback(
+    (got: { files: string[]; ignored: string[] }) => {
+      for (const file of got.ignored)
+        void bridge.status.add(`Not a project or a recording: ${file}`);
+      const projects = got.files.filter((f) => f.toLowerCase().endsWith(".correlator"));
+      const captures = got.files.filter((f) => !f.toLowerCase().endsWith(".correlator"));
+      const addCaptures = () => {
+        if (captures.length > 0) void bridge.project?.addPaths(captures).then((r) => take(r, true));
+      };
+      const last = projects[projects.length - 1];
+      if (last) {
+        guard(
+          () =>
+            void bridge.project?.openFile(last).then(async (r) => {
+              await arrived(r);
+              addCaptures();
+            }),
+        );
+      } else addCaptures();
+    },
+    [bridge, guard, take, arrived],
+  );
+  // Taken once the window is ready; later ones as they come.
+  const receivedRef = useRef(received);
+  receivedRef.current = received;
+  useEffect(() => {
+    if (detached || !bridge.opened) return;
+    void bridge.opened.take().then((a) => receivedRef.current(a));
+    return bridge.opened.onFiles((a) => receivedRef.current(a));
+  }, [bridge, detached]);
   const saveProject = useCallback(
     () => void bridge.project?.save().then((r) => take(r)),
     [bridge, take],

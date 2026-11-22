@@ -23,22 +23,26 @@ const {
   connectSsh,
   defaultSettingsPath,
   fieldMenuTemplate,
+  filesFromArgv,
   fileRequest,
   handleSumpRequest,
   Forwards,
   HealthProbe,
+  Inbox,
   Lifecycle,
   nativeMenuTemplate,
   Notifications,
   notifyLifecycle,
   SUMP_STATE_EVENT,
   configuredSumps,
+  OPEN_FILES_EVENT,
   OPENED_EXTENSIONS,
   OpenFiles,
   Projects,
   openCatalog,
   openVault,
   registerMenuIpc,
+  registerOpenIpc,
   registerAnalysisIpc,
   registerLiveIpc,
   registerLogsIpc,
@@ -68,6 +72,27 @@ const activeStreams = new ActiveStreams();
 const openFiles = new OpenFiles();
 /** Each window's project (REQ-035); set once the app is ready. */
 let projectsReady = null;
+
+// Files the OS hands the app (REQ-036): the app runs once; a second launch
+// passes its files here and quits; macOS sends them as `open-file`, even
+// before the app is ready. They wait for the main window, in order.
+const inbox = new Inbox((arrived) => mainWindow?.webContents.send(OPEN_FILES_EVENT, arrived));
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, argv, workingDirectory) => {
+    inbox.push(filesFromArgv(argv, workingDirectory, Boolean(process.defaultApp)));
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+app.on("open-file", (event, file) => {
+  event.preventDefault();
+  inbox.push(filesFromArgv(["app", file], "/", false));
+});
+inbox.push(filesFromArgv(process.argv, process.cwd(), Boolean(process.defaultApp)));
 /** The main window, the one the sidebar's actions act on (REQ-000021). */
 let mainWindow = null;
 /** The sidebar's layout and detached window (REQ-000021); set once the app is ready. */
@@ -106,6 +131,8 @@ function createWindow() {
     webPreferences: WEB_PREFERENCES,
   });
   mainWindow = window;
+  // A new window takes the files waiting for it (REQ-036).
+  inbox.reset();
   // Each window has its own active Sump, starting on the last one used.
   const id = window.webContents.id;
   activeSumps?.open(id);
@@ -239,6 +266,7 @@ app.whenReady().then(() => {
   registerSumpIpc(ipcMain, sumps, tokens, relogin, activeSumps, lifecycle);
   // Each window's active data stream, on its active Sump (REQ-000027).
   registerStreamIpc(ipcMain, activeStreams, activeSumps);
+  registerOpenIpc(ipcMain, inbox);
   // Each stream's containers: their order and those hidden (REQ-000030).
   registerSeriesIpc(ipcMain, settings, activeSumps);
   // The log panels' order and lanes, and Export .log: the save dialog

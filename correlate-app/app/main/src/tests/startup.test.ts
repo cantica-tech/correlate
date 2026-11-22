@@ -42,6 +42,8 @@ describe("main.cjs starts", () => {
         getVersion: () => "0.1.0",
         name: "correlate-app",
         quit: () => {},
+        // The app runs once (REQ-036): this is the first.
+        requestSingleInstanceLock: () => true,
       },
       BrowserWindow,
       Menu: {
@@ -101,12 +103,18 @@ describe("main.cjs starts", () => {
       "picker:setLastStream",
       "stream:active",
       "stream:setActive",
+      "open:take",
+      "project:get",
+      "project:addPaths",
     ]) {
       expect(channels).toContain(channel);
     }
     // A native menu on macOS only (REQ-000023).
     expect(menus).toHaveLength(1);
     expect(menus[0] === null).toBe(process.platform !== "darwin");
+    // The OS's files are heard for from the start (REQ-036).
+    expect(appEvents.has("open-file")).toBe(true);
+    expect(appEvents.has("second-instance")).toBe(true);
     appEvents.get("will-quit")?.();
   });
 });

@@ -29,7 +29,8 @@
  * set (REQ-000030-sJpO9KMY); `window.correlate.live` the live view's
  * settings (REQ-000031-sJpO9KMY); `window.correlate.analysis` the analysis
  * view's open files, read by the main process (REQ-000033-sJpO9KMY);
- * `window.correlate.project` the window's project (REQ-000035-sJpO9KMY).
+ * `window.correlate.project` the window's project (REQ-000035-sJpO9KMY);
+ * `window.correlate.opened` the files the OS hands the app (REQ-000036-sJpO9KMY).
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -83,10 +84,14 @@ const PROJECT_CHANNELS = {
   save: "project:save",
   saveAs: "project:saveAs",
   addFiles: "project:addFiles",
+  addPaths: "project:addPaths",
   show: "project:show",
   change: "project:change",
   tracks: "project:tracks",
 };
+/** Must match the channels in `main/src/opened.ts`. */
+const OPEN_TAKE_CHANNEL = "open:take";
+const OPEN_FILES_EVENT = "open:files";
 /** Must match the channels in `main/src/live.ts`. */
 const LIVE_GET_CHANNEL = "live:get";
 const LIVE_SET_CHANNEL = "live:set";
@@ -215,12 +220,20 @@ contextBridge.exposeInMainWorld("correlate", {
     saveAs: () => ipcRenderer.invoke(PROJECT_CHANNELS.saveAs),
     /** Add cttc files to the project (the open dialog); the last is shown. */
     addFiles: () => ipcRenderer.invoke(PROJECT_CHANNELS.addFiles),
+    /** Add captures the OS handed the app (no dialog); the last is shown. */
+    addPaths: (paths) => ipcRenderer.invoke(PROJECT_CHANNELS.addPaths, paths),
     /** Show one of the project's files, by id. */
     show: (id) => ipcRenderer.invoke(PROJECT_CHANNELS.show, id),
     /** Change the project: `{ op, ... }`. */
     change: (change) => ipcRenderer.invoke(PROJECT_CHANNELS.change, change),
     /** The shown file's tracks: `{ item, tracks }`. */
     tracks: () => ipcRenderer.invoke(PROJECT_CHANNELS.tracks),
+  },
+  opened: {
+    /** The window is ready: the files the OS handed the app so far, and those ignored. */
+    take: () => ipcRenderer.invoke(OPEN_TAKE_CHANNEL),
+    /** Hear files handed later; returns the function that stops listening. */
+    onFiles: (listener) => listen(OPEN_FILES_EVENT, listener),
   },
   live: {
     /** The live view's settings: windowSecs, liveTrack, liveTrackSecs, resumeSecs. */

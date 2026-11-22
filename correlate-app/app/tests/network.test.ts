@@ -155,6 +155,7 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       "stream",
       "analysis",
       "project",
+      "opened",
       "live",
       "series",
       "logs",
@@ -182,6 +183,7 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       "save",
       "saveAs",
       "addFiles",
+      "addPaths",
       "show",
       "change",
       "tracks",
@@ -189,11 +191,22 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
     await project.get?.();
     await project.openFile?.("/p.correlator");
     await project.change?.({ op: "unbind" });
+    await project.addPaths?.(["/r.recording"]);
     expect(invoked.splice(0)).toEqual([
       ["project:get"],
       ["project:openFile", "/p.correlator"],
       ["project:change", { op: "unbind" }],
+      ["project:addPaths", ["/r.recording"]],
     ]);
+    // Files the OS handed the app: only their own channels (REQ-000036-sJpO9KMY).
+    const opened = (exposed.correlate as { opened: Record<string, (m?: unknown) => unknown> })
+      .opened;
+    expect(Object.keys(opened)).toEqual(["take", "onFiles"]);
+    await opened.take?.();
+    expect(invoked.splice(0)).toEqual([["open:take"]]);
+    const stopFiles = opened.onFiles?.(() => {}) as () => void;
+    expect(listeners.has("open:files")).toBe(true);
+    stopFiles();
     // The live view's settings: only their own channels (REQ-000031-sJpO9KMY).
     const live = (exposed.correlate as { live: Record<string, (m?: unknown) => unknown> }).live;
     expect(Object.keys(live)).toEqual(["get", "set", "onChanged"]);

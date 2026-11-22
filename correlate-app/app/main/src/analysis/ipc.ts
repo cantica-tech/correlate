@@ -27,8 +27,11 @@ export const ANALYSIS_LIST_CHANNEL = "analysis:list";
 export const ANALYSIS_REQUEST_CHANNEL = "analysis:request";
 export const ANALYSIS_CLOSE_CHANNEL = "analysis:close";
 
-/** The extensions opened (decided in FEAT-000034-sJpO9KMY: cttc's, read-only). */
-export const OPENED_EXTENSIONS = ["cttc-record", "cttc-metric"];
+/**
+ * The extensions opened: the app's own `*.recording` and `*.track` (read as
+ * the cttc archives they continue, REQ-000036-sJpO9KMY) and cttc's, read-only.
+ */
+export const OPENED_EXTENSIONS = ["recording", "track", "cttc-record", "cttc-metric"];
 
 /** An open file, as the renderer sees it. */
 export interface OpenInfo {
