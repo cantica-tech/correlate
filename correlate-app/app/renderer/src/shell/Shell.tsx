@@ -28,6 +28,7 @@ import { RecoveryDialog } from "../recording/RecoveryDialog.js";
 import { Transport } from "../recording/Transport.js";
 import { StatusBar } from "../statusbar/StatusBar.js";
 import { pauseStream } from "../streams/api.js";
+import { PromoteDialog } from "../streams/PromoteDialog.js";
 import { RemoveDialog } from "../streams/RemoveDialog.js";
 import { StreamsDialog } from "../streams/StreamsDialog.js";
 import { setAppearance } from "../theme/appearance.js";
@@ -81,6 +82,7 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
   const [live, setLive] = useState<LiveSettings | null>(null);
   const [streams, setStreams] = useState<"new" | "edit" | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [promoting, setPromoting] = useState(false);
   // Events (REQ-000046-sJpO9KMY): the form (creating, or the event edited),
   // the list, and a version bumped by each firing or save.
   const [eventForm, setEventForm] = useState<{ editing: SumpEvent | null } | null>(null);
@@ -803,9 +805,18 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
         onClose={() => setRemoving(false)}
         onRemoved={streamsChanged}
       />
+      <PromoteDialog
+        bridge={bridge}
+        open={promoting}
+        onClose={() => setPromoting(false)}
+        onPromoted={streamsChanged}
+      />
       <StatusBar
         bridge={bridge}
-        onStreamAction={action}
+        onStreamAction={(name) =>
+          // Promote… is the pill's own (cttc's sidebar has no such entry).
+          name === "promote-data-stream" ? setPromoting(true) : action(name)
+        }
         streamsVersion={streamsVersion}
         persistent={captureArmed ? "capture mode ✂️" : liveStatus}
         blink={captureArmed}

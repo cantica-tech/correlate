@@ -18,7 +18,7 @@ import { Icon } from "../icons/Icon.js";
 import { useConfirmAbandon } from "../recording/Abandon.js";
 import type { ShellBridge } from "../shell/bridge.js";
 import { healActive, streamPillState, streamRows, streamWhere } from "./active.js";
-import { listStreams, type Stream } from "./api.js";
+import { listStreams, type Stream, secondaryStatus } from "./api.js";
 
 /** How often the pill reads the streams: as the Sump's pill is probed, 5 s. */
 export const STREAMS_EVERY_MS = 5_000;
@@ -45,6 +45,8 @@ export function StreamPill({ bridge, onAction, version = 0 }: StreamPillProps) {
   const [open, setOpen] = useState<Open>({ kind: "none" });
   const ref = useRef<HTMLDivElement>(null);
   const confirmAbandon = useConfirmAbandon();
+  /** A promoted stream's secondary, as its parent reaches it now (br-FED-000004). */
+  const [reach, setReach] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const list = await listStreams(bridge.sump.request);
@@ -90,6 +92,17 @@ export function StreamPill({ bridge, onAction, version = 0 }: StreamPillProps) {
   }, [open.kind]);
 
   const stream = streams.find((s) => s.id === active);
+  const promotedId = stream?.secondary ? stream.id : null;
+  // Current Status of a promoted stream says whether its secondary answers.
+  useEffect(() => {
+    setReach(null);
+    if (open.kind !== "status" || !promotedId) return;
+    void secondaryStatus(bridge.sump.request, promotedId).then((r) =>
+      setReach(
+        !r.ok ? r.message : r.value.reachable ? "reachable" : (r.value.error ?? "unreachable"),
+      ),
+    );
+  }, [open.kind, promotedId, bridge]);
   const state = streamPillState(stream);
   const label = stream
     ? `Data stream ${stream.label}: ${state === "up" ? "collecting" : state === "down" ? "paused" : "nothing followed"}`
@@ -110,6 +123,11 @@ export function StreamPill({ bridge, onAction, version = 0 }: StreamPillProps) {
       label: "Remove Data Stream…",
       icon: "remove",
       onSelect: () => onAction("remove-data-stream"),
+    },
+    {
+      label: "Promote to a Secondary Sump…",
+      icon: "sump",
+      onSelect: () => onAction("promote-data-stream"),
     },
     "separator",
     {
@@ -181,12 +199,14 @@ export function StreamPill({ bridge, onAction, version = 0 }: StreamPillProps) {
       ) : null}
       {open.kind === "status" && stream ? (
         <div id="docker-host-info-popup" className="connection-info-popup" role="tooltip">
-          {streamRows(stream).map(([name, value]) => (
-            <div className="cip-row" key={name}>
-              <span className="cip-label">{name}</span>
-              <span className="cip-val">{value}</span>
-            </div>
-          ))}
+          {[...streamRows(stream), ...(reach ? [["Secondary", reach]] : [])].map(
+            ([name, value]) => (
+              <div className="cip-row" key={name}>
+                <span className="cip-label">{name}</span>
+                <span className="cip-val">{value}</span>
+              </div>
+            ),
+          )}
         </div>
       ) : null}
       {open.kind === "menu" ? (

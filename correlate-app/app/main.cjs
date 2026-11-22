@@ -100,6 +100,10 @@ const {
   sumpAbout,
   aboutText,
   request,
+  registerPromoteIpc,
+  identityPublicKey,
+  joinCatalog,
+  PROMOTE_TIMEOUT_MS,
 } = require("./main/dist/main.cjs");
 
 /** Each window's active Sump (br-SUMP-000010); set once the app is ready. */
@@ -646,7 +650,7 @@ app.whenReady().then(() => {
   const probe = new HealthProbe(lifecycle, sumps, { inUse: () => activeSumps.inUse() });
   probe.start();
   // Startup plan and provisioning, for the Add Sump screens (REQ-000014).
-  registerProvisionIpc(ipcMain, {
+  const remoteCtx = {
     run: runCommand,
     lifecycle,
     tokens,
@@ -661,7 +665,24 @@ app.whenReady().then(() => {
     afterConnect,
     audit: auditor ? () => auditor.run() : undefined,
     guard: recordingGuard,
-  });
+  };
+  registerProvisionIpc(ipcMain, remoteCtx);
+  // Promote… (REQ-052): the window's Sump promotes a stream; the secondary
+  // joins the catalog through this app's own first connect.
+  registerPromoteIpc(ipcMain, (event) => ({
+    sump: () => {
+      const id = activeSumps.get(event.sender.id);
+      return id ? sumps(id) : undefined;
+    },
+    publicKey: () => {
+      if (vault.state === "none" && !vault.needsPassphrase()) vault.create();
+      if (vault.state !== "unlocked") throw new Error("the key vault is locked");
+      return identityPublicKey(vault);
+    },
+    post: (sump, path, body) =>
+      request(sump, "POST", path, { body, timeoutMs: PROMOTE_TIMEOUT_MS }),
+    join: (secondary) => joinCatalog(remoteCtx, secondary),
+  }));
   // The passphrase's derived key lives only for the session.
   // Events' firings, from every Sump the app is logged in to (REQ-046, D7):
   // said in the status bar and its history, told to the windows.

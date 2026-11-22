@@ -127,6 +127,7 @@ const LOGS_SHIP_CHANNEL = "logs:ship";
 /** Must match the channels in `main/src/streams.ts`. */
 const STREAM_ACTIVE_CHANNEL = "stream:active";
 const STREAM_SET_ACTIVE_CHANNEL = "stream:setActive";
+const STREAM_PROMOTE_CHANNEL = "streams:promote";
 
 /** Listen on `channel`; returns the function that stops listening. */
 function listen(channel, listener) {
@@ -224,6 +225,11 @@ contextBridge.exposeInMainWorld("correlate", {
         STREAM_SET_ACTIVE_CHANNEL,
         confirmed === true ? { stream, confirmed: true } : stream,
       ),
+    /**
+     * Promote an SSH stream to a secondary Sump on its host (REQ-000052):
+     * `{ ok, secondary, catalog }` or `{ ok: false, message }`.
+     */
+    promote: (stream) => ipcRenderer.invoke(STREAM_PROMOTE_CHANNEL, { stream }),
   },
   analysis: {
     /** This window's open files and the shown one. */

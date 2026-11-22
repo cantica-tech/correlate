@@ -3,7 +3,7 @@
  * the Sump bridge only (br-CONN-000008-sJpO9KMY): the Sump keeps the streams
  * and what is followed on each, and collects it.
  */
-import type { SumpErrorInfo, SumpRequester } from "../shell/bridge.js";
+import type { SecondaryInfo, SumpErrorInfo, SumpRequester } from "../shell/bridge.js";
 
 /** A data stream, as the Sump lists it. */
 export interface Stream {
@@ -19,6 +19,15 @@ export interface Stream {
   following?: number;
   /** What it follows (REQ-000028-sJpO9KMY). */
   followed?: FollowedSet;
+  /** Promoted: the secondary Sump that collects it (REQ-000052-sJpO9KMY). */
+  secondary?: SecondaryInfo;
+}
+
+/** Whether a promoted stream's secondary answers its parent now. */
+export interface SecondaryStatus {
+  secondary: SecondaryInfo;
+  reachable: boolean;
+  error: string | null;
 }
 
 /** A running container. */
@@ -110,4 +119,9 @@ export function removeStream(request: SumpRequester, id: string) {
 /** Close Data Streams (`true`): collection stops, the followed set kept. */
 export function pauseStream(request: SumpRequester, id: string, paused: boolean) {
   return call<{ paused: boolean }>(request, "PUT", `${streamPath(id)}/paused`, { paused });
+}
+
+/** Whether a promoted stream's secondary answers the Sump now (br-FED-000004-sJpO9KMY). */
+export function secondaryStatus(request: SumpRequester, id: string) {
+  return call<SecondaryStatus>(request, "GET", `${streamPath(id)}/secondary`);
 }

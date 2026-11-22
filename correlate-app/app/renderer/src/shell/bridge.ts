@@ -53,6 +53,26 @@ export interface ListedSump {
 /** What a switch answers: done, refused, or a confirmation needed first. */
 export type SwitchResult = { ok: true; id: string } | { ok: false; step: string; message: string };
 
+/** A secondary Sump, as its parent keeps it (REQ-000052-sJpO9KMY). */
+export interface SecondaryInfo {
+  host: string;
+  ssh_port: number;
+  ssh_user: string;
+  sump_port: number;
+  owner: string;
+  parent_user: string;
+  promoted_at: number;
+}
+
+/** What Promote answers: the secondary, and whether it joined the catalog. */
+export type PromoteResult =
+  | {
+      ok: true;
+      secondary: SecondaryInfo;
+      catalog: { ok: true; id: string; name: string } | { ok: false; message: string };
+    }
+  | { ok: false; message: string };
+
 /** One notification. */
 export interface Notice {
   at: string;
@@ -201,6 +221,8 @@ export interface ShellBridge {
       stream: string,
       confirmed?: boolean,
     ): Promise<{ ok: boolean; step?: string; message?: string }>;
+    /** Promote an SSH stream to a secondary Sump on its host (REQ-000052-sJpO9KMY). */
+    promote?(stream: string): Promise<PromoteResult>;
   };
   /** The analysis view's open files (REQ-000033-sJpO9KMY, REQ-000034-sJpO9KMY). */
   analysis?: {

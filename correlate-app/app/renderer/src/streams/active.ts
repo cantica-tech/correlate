@@ -27,7 +27,15 @@ export function streamPillState(stream: Stream | undefined): "up" | "down" | "ch
 
 /** Where a stream is, as the switcher's second line. */
 export function streamWhere(stream: Stream): string {
-  return stream.kind === "self" ? "the Sump's own host" : stream.id.replace(/^ssh:/, "");
+  if (stream.kind === "self") return "the Sump's own host";
+  const where = stream.id.replace(/^ssh:/, "");
+  // br-FED-000004-sJpO9KMY: a promoted stream is collected by its secondary.
+  return stream.secondary ? `${where} via ${secondaryLabel(stream)}` : where;
+}
+
+/** A promoted stream's secondary, as the catalog names it ("<host> (secondary)"). */
+export function secondaryLabel(stream: Stream): string {
+  return stream.secondary ? `${stream.secondary.host} (secondary)` : "";
 }
 
 /** Current Status's rows for a stream. */
@@ -38,7 +46,13 @@ export function streamRows(stream: Stream): [string, string][] {
     ["Following", String(stream.following ?? 0)],
     [
       "Collecting",
-      stream.paused ? "paused" : (stream.following ?? 0) > 0 ? "yes" : "nothing followed",
+      stream.secondary
+        ? `by ${secondaryLabel(stream)}`
+        : stream.paused
+          ? "paused"
+          : (stream.following ?? 0) > 0
+            ? "yes"
+            : "nothing followed",
     ],
   ];
 }

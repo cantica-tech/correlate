@@ -305,14 +305,17 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
     ]);
     const stream = (exposed.correlate as { stream: Record<string, (m?: unknown) => unknown> })
       .stream;
-    expect(Object.keys(stream)).toEqual(["active", "setActive"]);
+    expect(Object.keys(stream)).toEqual(["active", "setActive", "promote"]);
     await stream.active?.();
     await stream.setActive?.("self");
     await (stream.setActive as (s: string, c: boolean) => unknown)?.("other", true);
+    // Promote… (REQ-000052-sJpO9KMY): the main process asks the Sump.
+    await stream.promote?.("ssh:ops@lab:22");
     expect(invoked.splice(0)).toEqual([
       ["stream:active"],
       ["stream:setActive", "self"],
       ["stream:setActive", { stream: "other", confirmed: true }],
+      ["streams:promote", { stream: "ssh:ops@lab:22" }],
     ]);
     const picker = (exposed.correlate as { picker: Record<string, (m?: unknown) => unknown> })
       .picker;

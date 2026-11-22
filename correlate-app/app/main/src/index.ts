@@ -37,6 +37,7 @@ export { Auditor } from "./catalog/audit.js";
 export { FiringsFollower } from "./events/firings.js";
 export { EVENTS_FIRED_EVENT, registerEventsIpc } from "./events/ipc.js";
 export { registerExportIpc } from "./exports/ipc.js";
+export { joinCatalog, PROMOTE_TIMEOUT_MS, registerPromoteIpc } from "./federation/promote.js";
 export { identityPublicKey, importIdentity, userName } from "./identity/identity.js";
 export { registerLiveIpc } from "./live.js";
 export { logPrefs, registerLogsIpc } from "./logs.js";
