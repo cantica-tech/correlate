@@ -121,16 +121,25 @@ export interface MenuItemTemplate {
   type?: "separator";
   enabled?: boolean;
   submenu?: MenuItemTemplate[];
+  click?: () => void;
 }
 
-/** The native menu: on macOS the app menu and Edit, elsewhere none. */
-export function nativeMenuTemplate(platform: string, appName: string): MenuItemTemplate[] | null {
+/**
+ * The native menu: on macOS the app menu and Edit, elsewhere none. `about`,
+ * when given, is the app's own About (REQ-000051-sJpO9KMY) in place of
+ * Electron's panel.
+ */
+export function nativeMenuTemplate(
+  platform: string,
+  appName: string,
+  about?: () => void,
+): MenuItemTemplate[] | null {
   if (platform !== "darwin") return null;
   return [
     {
       label: appName,
       submenu: [
-        { role: "about" },
+        about ? { label: `About ${appName}`, click: about } : { role: "about" },
         { type: "separator" },
         { role: "hide" },
         { role: "hideOthers" },

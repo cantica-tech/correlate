@@ -14,7 +14,16 @@
  * `docs/roadmap/correlate-app-rewrite.md`. CommonJS, as in cttc and
  * correlator, because Electron's own module loads most reliably this way.
  */
-const { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, safeStorage } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeTheme,
+  safeStorage,
+} = require("electron");
 const path = require("node:path");
 const {
   ActiveStreams,
@@ -87,6 +96,10 @@ const {
   fetchSumpLog,
   registerAppearanceIpc,
   registerPreferencesIpc,
+  readBuildInfo,
+  sumpAbout,
+  aboutText,
+  request,
 } = require("./main/dist/main.cjs");
 
 /** Each window's active Sump (br-SUMP-000010); set once the app is ready. */
@@ -120,6 +133,8 @@ app.on("open-file", (event, file) => {
 inbox.push(filesFromArgv(process.argv, process.cwd(), Boolean(process.defaultApp)));
 /** The main window, the one the sidebar's actions act on (REQ-000021). */
 let mainWindow = null;
+/** The Sumps by id, with their tokens, for About (set once the catalog is open). */
+let aboutSumps = null;
 /** The app's own log (REQ-048), from the start of `whenReady`. */
 let ownLog = null;
 /** The sidebar's layout and detached window (REQ-000021); set once the app is ready. */
@@ -152,6 +167,49 @@ function attachFieldMenu(window) {
     const template = fieldMenuTemplate(params);
     if (template) Menu.buildFromTemplate(template).popup({ window });
   });
+}
+
+/**
+ * About (REQ-051): the build (its stamp, or a development build with the
+ * checkout's commit), the stack, and the main window's Sump (its version and
+ * plugins, or why not), in the system's own message box with OK and Copy.
+ */
+async function showAbout() {
+  const build = readBuildInfo(app.getAppPath(), app.getVersion());
+  const stack = {
+    electron: process.versions.electron,
+    chrome: process.versions.chrome,
+    node: process.versions.node,
+  };
+  let sump = null;
+  const id = mainWindow ? activeSumps?.get(mainWindow.webContents.id) : undefined;
+  const target = id && aboutSumps ? aboutSumps(id) : undefined;
+  if (target) {
+    try {
+      const health = await request(target, "GET", "/health", { timeoutMs: 5_000 });
+      const plugins = await request(target, "GET", "/plugins", { timeoutMs: 5_000 }).catch(
+        () => null,
+      );
+      sump = sumpAbout(target.name, health, plugins);
+    } catch (error) {
+      sump = { name: target.name, error: error.message };
+    }
+  }
+  const text = aboutText(build, stack, sump, new Date().getFullYear());
+  const options = {
+    type: "info",
+    title: `About ${app.name}`,
+    message: app.name,
+    detail: text,
+    buttons: ["OK", "Copy"],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  };
+  const { response } = mainWindow
+    ? await dialog.showMessageBox(mainWindow, options)
+    : await dialog.showMessageBox(options);
+  if (response === 1) clipboard.writeText(`${app.name}\n${text}`);
 }
 
 /** Create the main window. */
@@ -256,9 +314,16 @@ app.whenReady().then(() => {
   nativeTheme.themeSource = settings.themeMode();
   // cttc's menu bar is drawn in the window; on macOS a minimal native menu
   // (app menu and Edit) keeps the system shortcuts working (REQ-000023).
-  const nativeMenu = nativeMenuTemplate(process.platform, app.name);
+  const nativeMenu = nativeMenuTemplate(process.platform, app.name, () => void showAbout());
   Menu.setApplicationMenu(nativeMenu ? Menu.buildFromTemplate(nativeMenu) : null);
-  registerMenuIpc(ipcMain, (event) => BrowserWindow.fromWebContents(event.sender), app);
+  // The menus' About is the app's own (REQ-051), not Electron's panel.
+  const menuApp = {
+    quit: () => app.quit(),
+    relaunch: () => app.relaunch(),
+    exit: (code) => app.exit(code),
+    showAboutPanel: () => void showAbout(),
+  };
+  registerMenuIpc(ipcMain, (event) => BrowserWindow.fromWebContents(event.sender), menuApp);
   // The data-stream picker opens on the stream last edited on each Sump (REQ-000026).
   registerPickerIpc(ipcMain, settings);
   registerThemeIpc(ipcMain, settings, (mode) => {
@@ -275,7 +340,7 @@ app.whenReady().then(() => {
     },
     {
       quit: () => app.quit(),
-      about: () => app.showAboutPanel(),
+      about: () => void showAbout(),
     },
   );
   registerSidebarIpc(ipcMain, sidebar);
@@ -296,6 +361,7 @@ app.whenReady().then(() => {
   // the background (br-SUMP-000008, -000009, -000010).
   const forwards = new Forwards({ lifecycle });
   const sumps = configuredSumps(process.env, tokens, catalog, forwards);
+  aboutSumps = sumps;
   startForwards(forwards, catalog, vault);
   lifecycle.subscribe((record) => {
     for (const window of BrowserWindow.getAllWindows()) {

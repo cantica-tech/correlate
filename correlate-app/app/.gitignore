@@ -6,3 +6,6 @@ tests/parity/out/
 
 # The app's own log, written next to the app when run from source (REQ-000048-sJpO9KMY).
 correlate-*.log
+
+# The packaging build's stamp, for About (REQ-000051-sJpO9KMY).
+build-info.json

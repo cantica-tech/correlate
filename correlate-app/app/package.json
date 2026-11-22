@@ -18,7 +18,8 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run",
-    "css": "node build/cttc-css.js"
+    "css": "node build/cttc-css.js",
+    "stamp": "node build/stamp.js"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.10",

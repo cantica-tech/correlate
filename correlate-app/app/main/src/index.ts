@@ -25,6 +25,7 @@ import { SessionTokens } from "./sump/tokens.js";
 import type { SafeStorageLike } from "./vault/cipher.js";
 import { Vault, type VaultLogger } from "./vault/vault.js";
 
+export { aboutText, readBuildInfo, sumpAbout } from "./about.js";
 export {
   fileRequest,
   OPENED_EXTENSIONS,
@@ -70,7 +71,7 @@ export {
   SidebarHost,
 } from "./sidebar.js";
 export { ActiveStreams, registerStreamIpc } from "./streams.js";
-export { download, logout, stream } from "./sump/client.js";
+export { download, logout, request, stream } from "./sump/client.js";
 export { handleSumpRequest, registerSumpIpc, SUMP_STATE_EVENT } from "./sump/ipc.js";
 export { login } from "./sump/login.js";
 export { defaultSettingsPath, registerThemeIpc, Settings } from "./theme.js";
