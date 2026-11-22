@@ -52,9 +52,11 @@ export interface OwnLogDeps {
  * bundle, whose signature a written file would break (REQ-000054-sJpO9KMY).
  */
 export function besideTheApp(execPath: string, platform: NodeJS.Platform): string {
-  const dir = path.dirname(execPath);
-  const bundle = path.resolve(dir, "..", "..");
-  if (platform === "darwin" && bundle.endsWith(".app")) return path.dirname(bundle);
+  // The platform's own path rules, whatever system this runs on.
+  const paths = platform === "win32" ? path.win32 : path.posix;
+  const dir = paths.dirname(execPath);
+  const bundle = paths.join(dir, "..", "..");
+  if (platform === "darwin" && bundle.endsWith(".app")) return paths.dirname(bundle);
   return dir;
 }
 

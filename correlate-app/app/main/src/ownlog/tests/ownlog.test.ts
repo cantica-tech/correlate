@@ -219,5 +219,8 @@ describe("REQ-000054-sJpO9KMY: next to a packaged app", () => {
   it("is the executable's folder elsewhere", () => {
     expect(besideTheApp("/opt/correlate-app/correlate-app", "linux")).toBe("/opt/correlate-app");
     expect(besideTheApp("/tmp/correlate-app", "darwin")).toBe("/tmp");
+    expect(besideTheApp("C:\\Program Files\\correlate-app\\correlate-app.exe", "win32")).toBe(
+      "C:\\Program Files\\correlate-app",
+    );
   });
 });
