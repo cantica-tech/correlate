@@ -22,6 +22,8 @@ import { zip } from "./zipWriter.js";
 // REQ-000033-sJpO9KMY Requirements 1-3: cttc's files read-only, and their
 // answers to the views, for the calling window only.
 
+/** A path as the OS resolves it (a drive and backslashes on Windows). */
+const resolved = (p: string) => path.resolve(p);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const T0 = Date.UTC(2026, 7, 6, 12, 0, 0);
 
@@ -80,7 +82,7 @@ const span = { from: iso(T0), to: iso(T0 + 180_000) };
 
 describe("REQ-000033-sJpO9KMY: reading cttc's files", () => {
   it("reads every segment: containers, the host and logs, oldest first", () => {
-    const file = readCttcArchive(archive(), "/data/run.cttc-record");
+    const file = readCttcArchive(archive(), resolved("/data/run.cttc-record"));
     expect(file.label).toBe("run.cttc-record");
     expect([file.from, file.to]).toEqual([T0, T0 + 180_000]);
     expect(file.containers).toEqual(["db", "web"]);
@@ -130,7 +132,7 @@ describe("REQ-000033-sJpO9KMY: reading cttc's files", () => {
 });
 
 describe("br-ANLYS-000001-sJpO9KMY: the file answers the views", () => {
-  const file = readCttcArchive(archive(), "/data/run.cttc-record");
+  const file = readCttcArchive(archive(), resolved("/data/run.cttc-record"));
   const get = (p: string, query: Record<string, string | number> = {}) =>
     answer(file, { method: "GET", path: p, query });
 
@@ -233,11 +235,11 @@ describe("REQ-000034-sJpO9KMY: a window's open files", () => {
     });
     expect(cancelled).toEqual({ ok: false, cancelled: true });
     expect(read).toBe(false);
-    const opened = await openFiles(event, files, deps(["/data/run.cttc-record"]));
+    const opened = await openFiles(event, files, deps([resolved("/data/run.cttc-record")]));
     expect(opened).toMatchObject({
       ok: true,
-      active: "/data/run.cttc-record",
-      files: [{ path: "/data/run.cttc-record", label: "run.cttc-record", from: T0 }],
+      active: resolved("/data/run.cttc-record"),
+      files: [{ path: resolved("/data/run.cttc-record"), label: "run.cttc-record", from: T0 }],
       refused: [],
     });
     expect(fileRequest(files, 1, { method: "GET", path: "/streams" }).ok).toBe(true);
@@ -259,21 +261,33 @@ describe("REQ-000034-sJpO9KMY: a window's open files", () => {
       event,
       files,
       deps(
-        ["/a/one.cttc-record", "/a/bad.cttc-record", "/a/empty.cttc-metric", "/a/two.cttc-record"],
+        [
+          resolved("/a/one.cttc-record"),
+          resolved("/a/bad.cttc-record"),
+          resolved("/a/empty.cttc-metric"),
+          resolved("/a/two.cttc-record"),
+        ],
         {
-          "/a/bad.cttc-record": Buffer.from("no"),
-          "/a/empty.cttc-metric": empty,
+          [resolved("/a/bad.cttc-record")]: Buffer.from("no"),
+          [resolved("/a/empty.cttc-metric")]: empty,
         },
       ),
     );
-    expect(r).toMatchObject({ ok: true, active: "/a/two.cttc-record" });
+    expect(r).toMatchObject({ ok: true, active: resolved("/a/two.cttc-record") });
     if (!r.ok) return;
-    expect(r.files.map((f) => f.path)).toEqual(["/a/one.cttc-record", "/a/two.cttc-record"]);
+    expect(r.files.map((f) => f.path)).toEqual([
+      resolved("/a/one.cttc-record"),
+      resolved("/a/two.cttc-record"),
+    ]);
     expect(r.refused).toEqual([
       expect.stringContaining("bad.cttc-record: not a zip"),
       expect.stringContaining("empty.cttc-metric: it holds no data"),
     ]);
-    const none = await openFiles(event, new OpenFiles(), deps(["/a/bad"], Buffer.from("x")));
+    const none = await openFiles(
+      event,
+      new OpenFiles(),
+      deps([resolved("/a/bad")], Buffer.from("x")),
+    );
     expect(none).toMatchObject({ ok: false, refused: [expect.stringContaining("not a zip")] });
   });
 
@@ -282,18 +296,18 @@ describe("REQ-000034-sJpO9KMY: a window's open files", () => {
     for (const name of ["a", "b", "c"]) {
       files.set(1, readCttcArchive(archive(), `/d/${name}.cttc-record`));
     }
-    expect(files.switchTo(1, "/d/a.cttc-record")).toBe(true);
-    expect(files.switchTo(1, "/d/zzz.cttc-record")).toBe(false);
-    files.remove(1, "/d/a.cttc-record");
+    expect(files.switchTo(1, resolved("/d/a.cttc-record"))).toBe(true);
+    expect(files.switchTo(1, resolved("/d/zzz.cttc-record"))).toBe(false);
+    files.remove(1, resolved("/d/a.cttc-record"));
     expect(files.list(1).active).toBe("/d/c.cttc-record");
     files.leave(1);
     expect(files.list(1)).toMatchObject({ active: null });
     expect(files.list(1).files).toHaveLength(2);
     expect(files.get(1)).toBeUndefined();
-    files.remove(1, "/d/b.cttc-record");
+    files.remove(1, resolved("/d/b.cttc-record"));
     expect(files.list(1).active).toBeNull();
-    files.switchTo(1, "/d/c.cttc-record");
-    files.remove(1, "/d/c.cttc-record");
+    files.switchTo(1, resolved("/d/c.cttc-record"));
+    files.remove(1, resolved("/d/c.cttc-record"));
     expect(files.list(1)).toEqual({ files: [], active: null });
   });
 
@@ -303,21 +317,25 @@ describe("REQ-000034-sJpO9KMY: a window's open files", () => {
     registerAnalysisIpc(
       { handle: (c, l) => void handlers.set(c, l) },
       files,
-      deps(["/d/r.cttc-record", "/d/s.cttc-record"]),
+      deps([resolved("/d/r.cttc-record"), resolved("/d/s.cttc-record")]),
     );
     expect(await handlers.get(ANALYSIS_OPEN_CHANNEL)?.(event)).toMatchObject({ ok: true });
     expect(
       await handlers.get(ANALYSIS_REQUEST_CHANNEL)?.(event, { method: "GET", path: "/streams" }),
     ).toMatchObject({ ok: true });
     expect(await handlers.get(ANALYSIS_LIST_CHANNEL)?.(event)).toMatchObject({
-      active: "/d/s.cttc-record",
+      active: resolved("/d/s.cttc-record"),
     });
-    expect(await handlers.get(ANALYSIS_SWITCH_CHANNEL)?.(event, "/d/r.cttc-record")).toMatchObject({
+    expect(
+      await handlers.get(ANALYSIS_SWITCH_CHANNEL)?.(event, resolved("/d/r.cttc-record")),
+    ).toMatchObject({
       ok: true,
-      active: "/d/r.cttc-record",
+      active: resolved("/d/r.cttc-record"),
     });
-    expect(await handlers.get(ANALYSIS_REMOVE_CHANNEL)?.(event, "/d/r.cttc-record")).toMatchObject({
-      active: "/d/s.cttc-record",
+    expect(
+      await handlers.get(ANALYSIS_REMOVE_CHANNEL)?.(event, resolved("/d/r.cttc-record")),
+    ).toMatchObject({
+      active: resolved("/d/s.cttc-record"),
     });
     expect(await handlers.get(ANALYSIS_CLOSE_CHANNEL)?.(event)).toEqual({ ok: true });
     expect(files.get(1)).toBeUndefined();

@@ -1,3 +1,4 @@
+import path from "node:path";
 /**
  * Regression corpus of cttc's bugs: analysis view (ANLYS).
  *
@@ -17,6 +18,9 @@ import {
   moved,
   recentred,
 } from "../../../renderer/src/charts/viewState.js";
+
+/** A path as the OS resolves it (a drive and backslashes on Windows). */
+const resolved = (p: string) => path.resolve(p);
 
 /** A cttc archive of one container's log over `[from, to]`. */
 function archiveOver(from: number, to: number): Buffer {
@@ -74,7 +78,7 @@ describe("br-ANLYS-000004-sJpO9KMY", () => {
     const r = await openFiles(
       event,
       new OpenFiles(),
-      deps(["/x/first.cttc-record", "/x/second.cttc-record"]),
+      deps([resolved("/x/first.cttc-record"), resolved("/x/second.cttc-record")]),
     );
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -90,10 +94,14 @@ describe("br-ANLYS-000004-sJpO9KMY", () => {
     // previous, often out-of-range view. Each open and switch frames the file
     // anew: its span is 75% of the view, centred.
     const files = new OpenFiles();
-    await openFiles(event, files, deps(["/x/first.cttc-record", "/x/second.cttc-record"]));
-    files.switchTo(1, "/x/first.cttc-record");
-    const again = await openFiles(event, files, deps(["/x/first.cttc-record"]));
-    expect(again).toMatchObject({ ok: true, active: "/x/first.cttc-record" });
+    await openFiles(
+      event,
+      files,
+      deps([resolved("/x/first.cttc-record"), resolved("/x/second.cttc-record")]),
+    );
+    files.switchTo(1, resolved("/x/first.cttc-record"));
+    const again = await openFiles(event, files, deps([resolved("/x/first.cttc-record")]));
+    expect(again).toMatchObject({ ok: true, active: resolved("/x/first.cttc-record") });
     const { view } = fileState(first);
     expect((first.to - first.from) / (view.t1 - view.t0)).toBeCloseTo(0.75);
     expect((view.t0 + view.t1) / 2).toBe((first.from + first.to) / 2);
@@ -118,15 +126,15 @@ describe("br-ANLYS-000005-sJpO9KMY", () => {
         return archiveOver(1_000_000, 2_000_000);
       },
     });
-    await openFiles(event, files, deps(["/one/recording.cttc-record"]));
-    await openFiles(event, files, deps(["/two/recording.cttc-record"]));
+    await openFiles(event, files, deps([resolved("/one/recording.cttc-record")]));
+    await openFiles(event, files, deps([resolved("/two/recording.cttc-record")]));
     expect(files.list(1).files.map((f) => f.path)).toEqual([
-      "/one/recording.cttc-record",
-      "/two/recording.cttc-record",
+      resolved("/one/recording.cttc-record"),
+      resolved("/two/recording.cttc-record"),
     ]);
     // The same file again is switched to, not read again.
-    await openFiles(event, files, deps(["/one/recording.cttc-record"]));
+    await openFiles(event, files, deps([resolved("/one/recording.cttc-record")]));
     expect(reads).toBe(2);
-    expect(files.list(1)).toMatchObject({ active: "/one/recording.cttc-record" });
+    expect(files.list(1)).toMatchObject({ active: resolved("/one/recording.cttc-record") });
   });
 });

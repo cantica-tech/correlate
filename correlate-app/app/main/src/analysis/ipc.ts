@@ -94,8 +94,9 @@ export class OpenFiles {
   /** Keep `data` open in the window and make it active. */
   set(window: number, data: FileData): void {
     const entry = this.of(window);
-    entry.files.set(data.path, data);
-    entry.active = data.path;
+    const key = path.resolve(data.path);
+    entry.files.set(key, data);
+    entry.active = key;
   }
 
   /** Make an open file active; false when it is not open. */
@@ -126,7 +127,7 @@ export class OpenFiles {
   list(window: number): OpenList {
     const entry = this.byWindow.get(window);
     return {
-      files: [...(entry?.files.values() ?? [])].map(infoOf),
+      files: [...(entry?.files.entries() ?? [])].map(([key, f]) => ({ ...infoOf(f), path: key })),
       active: entry?.active ?? null,
     };
   }
