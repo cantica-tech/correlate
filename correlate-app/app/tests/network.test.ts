@@ -153,9 +153,22 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       "menu",
       "picker",
       "stream",
+      "analysis",
       "live",
       "series",
       "logs",
+    ]);
+    // The analysis view's file: only its own channels (REQ-000033-sJpO9KMY).
+    const analysis = (exposed.correlate as { analysis: Record<string, (m?: unknown) => unknown> })
+      .analysis;
+    expect(Object.keys(analysis)).toEqual(["open", "request", "close"]);
+    await analysis.open?.();
+    await analysis.request?.({ method: "GET", path: "/streams" });
+    await analysis.close?.();
+    expect(invoked.splice(0)).toEqual([
+      ["analysis:open"],
+      ["analysis:request", { method: "GET", path: "/streams" }],
+      ["analysis:close"],
     ]);
     // The live view's settings: only their own channels (REQ-000031-sJpO9KMY).
     const live = (exposed.correlate as { live: Record<string, (m?: unknown) => unknown> }).live;

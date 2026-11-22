@@ -66,6 +66,8 @@ export interface ExportRequest {
   from: string;
   to: string;
   order: "newest" | "oldest";
+  /** From the window's open file, in the analysis view (REQ-000033-sJpO9KMY). */
+  file?: boolean;
 }
 
 /** A Sump call's answer, as the Sump bridge gives it. */
@@ -75,10 +77,15 @@ export type SumpAnswer = { ok: true; value: unknown } | { ok: false; error: { me
 export interface ExportDeps {
   /** The save dialog: the chosen path, or null when cancelled. */
   ask: (event: IpcEventLike, defaultName: string) => Promise<string | null>;
-  /** One call to the calling window's Sump. */
+  /** One call to the calling window's Sump, or to its open file when `file`. */
   request: (
     event: IpcEventLike,
-    message: { method: "GET"; path: string; query: Record<string, string | number> },
+    message: {
+      method: "GET";
+      path: string;
+      query: Record<string, string | number>;
+      file?: boolean;
+    },
   ) => Promise<SumpAnswer>;
   /** Write the file; owner-only by default. */
   write?: (path: string, text: string) => Promise<void>;
@@ -98,7 +105,14 @@ export function parseExport(message: unknown): ExportRequest {
   }
   const order = m.order === "oldest" ? "oldest" : "newest";
   const name = typeof m.name === "string" && m.name ? m.name : (m.source.split("/").pop() ?? "log");
-  return { source: m.source, name, from: m.from as string, to: m.to as string, order };
+  return {
+    source: m.source,
+    name,
+    from: m.from as string,
+    to: m.to as string,
+    order,
+    file: m.file === true,
+  };
 }
 
 /** A file name from a container's name and the time: cttc's `<name>-<stamp>.log`. */
@@ -144,6 +158,7 @@ export async function exportLog(
         offset,
         limit: EXPORT_PAGE,
       },
+      file: m.file,
     });
     if (!reply.ok) return { ok: false, message: `could not read the logs: ${reply.error.message}` };
     const page = reply.value as { total: number; rows: { ts: string; text: string }[] };

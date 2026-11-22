@@ -100,6 +100,15 @@ export interface ShellBridge {
     active(): Promise<string | null>;
     setActive(stream: string): Promise<{ ok: boolean; message?: string }>;
   };
+  /** The analysis view's open file (REQ-000033-sJpO9KMY). */
+  analysis?: {
+    open(): Promise<
+      | { ok: true; label: string; path: string; from: number; to: number; warnings: string[] }
+      | { ok: false; cancelled?: true; message?: string }
+    >;
+    request: SumpRequester;
+    close(): Promise<{ ok: boolean }>;
+  };
   /** The live view's settings (REQ-000031-sJpO9KMY). */
   live?: {
     get(): Promise<LiveSettings>;

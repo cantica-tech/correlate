@@ -23,6 +23,7 @@ const {
   connectSsh,
   defaultSettingsPath,
   fieldMenuTemplate,
+  fileRequest,
   handleSumpRequest,
   Forwards,
   HealthProbe,
@@ -32,9 +33,12 @@ const {
   notifyLifecycle,
   SUMP_STATE_EVENT,
   configuredSumps,
+  OPENED_EXTENSIONS,
+  OpenFiles,
   openCatalog,
   openVault,
   registerMenuIpc,
+  registerAnalysisIpc,
   registerLiveIpc,
   registerLogsIpc,
   registerPickerIpc,
@@ -57,6 +61,8 @@ const {
 let activeSumps;
 /** Each window's active data stream (REQ-000027). */
 const activeStreams = new ActiveStreams();
+/** Each window's open file, in the analysis view (REQ-033). */
+const openFiles = new OpenFiles();
 /** The main window, the one the sidebar's actions act on (REQ-000021). */
 let mainWindow = null;
 /** The sidebar's layout and detached window (REQ-000021); set once the app is ready. */
@@ -101,6 +107,7 @@ function createWindow() {
   window.on("closed", () => {
     activeSumps?.close(id);
     activeStreams.close(id);
+    openFiles.close(id);
     if (mainWindow === window) {
       mainWindow = null;
       // The detached sidebar goes with the main window, and stays detached.
@@ -213,15 +220,34 @@ app.whenReady().then(() => {
         : await dialog.showSaveDialog(options);
       return r.canceled || !r.filePath ? null : r.filePath;
     },
-    request: (event, message) =>
-      handleSumpRequest(
-        message,
-        sumps,
-        tokens,
-        relogin,
-        activeSumps.get(event.sender.id),
-        lifecycle,
-      ),
+    // In the analysis view, Export reads the window's open file (REQ-033).
+    request: async (event, message) =>
+      message.file
+        ? fileRequest(openFiles, event.sender.id, message)
+        : handleSumpRequest(
+            message,
+            sumps,
+            tokens,
+            relogin,
+            activeSumps.get(event.sender.id),
+            lifecycle,
+          ),
+  });
+  // The analysis view: a cttc file opened read-only, its data answered here,
+  // never sent to a Sump (REQ-033).
+  registerAnalysisIpc(ipcMain, openFiles, {
+    ask: async (event) => {
+      const window = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+      const options = {
+        title: "Open a recording",
+        properties: ["openFile"],
+        filters: [{ name: "cttc recordings and metrics", extensions: OPENED_EXTENSIONS }],
+      };
+      const r = window
+        ? await dialog.showOpenDialog(window, options)
+        : await dialog.showOpenDialog(options);
+      return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0];
+    },
   });
   // Notifications and their History, one feed for every window; a Sump a
   // window is on that is lost or comes back is notified (REQ-000022).

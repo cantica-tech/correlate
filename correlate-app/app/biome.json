@@ -15,7 +15,8 @@
       "!**/*.reference.css",
       "!**/icons.generated.ts",
       "!tests/parity/page/cttc.html",
-      "!**/*.generated.css"
+      "!**/*.generated.css",
+      "!**/cttc-manifest.json"
     ]
   },
   "formatter": {

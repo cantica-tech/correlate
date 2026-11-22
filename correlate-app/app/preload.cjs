@@ -27,7 +27,8 @@
  * keeps the log panels' choices and runs Export .log (REQ-000029-sJpO9KMY);
  * `window.correlate.series` keeps each stream's containers' order and hidden
  * set (REQ-000030-sJpO9KMY); `window.correlate.live` the live view's
- * settings (REQ-000031-sJpO9KMY).
+ * settings (REQ-000031-sJpO9KMY); `window.correlate.analysis` the analysis
+ * view's open file, read by the main process (REQ-000033-sJpO9KMY).
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -68,6 +69,10 @@ const MENU_ACTION_CHANNEL = "menu:action";
 /** Must match the channels in `main/src/picker.ts`. */
 const PICKER_LAST_CHANNEL = "picker:lastStream";
 const PICKER_SET_LAST_CHANNEL = "picker:setLastStream";
+/** Must match the channels in `main/src/analysis/ipc.ts`. */
+const ANALYSIS_OPEN_CHANNEL = "analysis:open";
+const ANALYSIS_REQUEST_CHANNEL = "analysis:request";
+const ANALYSIS_CLOSE_CHANNEL = "analysis:close";
 /** Must match the channels in `main/src/live.ts`. */
 const LIVE_GET_CHANNEL = "live:get";
 const LIVE_SET_CHANNEL = "live:set";
@@ -172,6 +177,14 @@ contextBridge.exposeInMainWorld("correlate", {
     active: () => ipcRenderer.invoke(STREAM_ACTIVE_CHANNEL),
     /** Make a stream this window's active one: `{ ok, stream }` or `{ ok: false, message }`. */
     setActive: (stream) => ipcRenderer.invoke(STREAM_SET_ACTIVE_CHANNEL, stream),
+  },
+  analysis: {
+    /** Ask for a cttc file and open it in this window's analysis view. */
+    open: () => ipcRenderer.invoke(ANALYSIS_OPEN_CHANNEL),
+    /** One of the views' queries, answered from this window's open file. */
+    request: (message) => ipcRenderer.invoke(ANALYSIS_REQUEST_CHANNEL, message),
+    /** Back to live: the file is closed. */
+    close: () => ipcRenderer.invoke(ANALYSIS_CLOSE_CHANNEL),
   },
   live: {
     /** The live view's settings: windowSecs, liveTrack, liveTrackSecs, resumeSecs. */

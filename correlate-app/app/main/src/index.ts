@@ -25,6 +25,12 @@ import { SessionTokens } from "./sump/tokens.js";
 import type { SafeStorageLike } from "./vault/cipher.js";
 import { Vault, type VaultLogger } from "./vault/vault.js";
 
+export {
+  fileRequest,
+  OPENED_EXTENSIONS,
+  OpenFiles,
+  registerAnalysisIpc,
+} from "./analysis/ipc.js";
 export { Auditor } from "./catalog/audit.js";
 export { identityPublicKey, importIdentity, userName } from "./identity/identity.js";
 export { registerLiveIpc } from "./live.js";
