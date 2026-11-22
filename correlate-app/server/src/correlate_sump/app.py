@@ -48,6 +48,7 @@ from correlate_sump.otel import SumpMetrics
 from correlate_sump.plugins import PluginManager
 from correlate_sump.records import DEFAULT_LIMIT, QueryError, query_records
 from correlate_sump.runtime import PluginRuntime, health_interval_from_env
+from correlate_sump.segment import segment
 from correlate_sump.sessions import (
     CHALLENGE_SECONDS,
     CorruptSessionStore,
@@ -485,6 +486,21 @@ def create_app(
         (REQ-000031-sJpO9KMY), for the live view's navigator."""
         try:
             return await data_range(redis_client, [s for s in sources.split(",") if s])
+        except QueryError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/records/segment")
+    async def record_segment(
+        sources: str,
+        start: Annotated[datetime, Query(alias="from")],
+        end: Annotated[datetime, Query(alias="to")],
+        host: str | None = None,
+    ) -> dict[str, Any]:
+        """A recording's segment of `sources` (comma-separated) and `host` over
+        a range, in the recording format's shapes (REQ-000037-sJpO9KMY)."""
+        try:
+            names = [s for s in sources.split(",") if s]
+            return await segment(redis_client, names, host=host or None, start=start, end=end)
         except QueryError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
