@@ -42,7 +42,7 @@ class Sump:
     async def event(self, **spec: Any) -> Any:
         spec.setdefault("name", "busy")
         spec.setdefault("stream", "self")
-        return await self.store.create(spec, int(self.now))
+        return await self.store.create(spec, "ann", int(self.now))
 
     async def firings(self) -> list[dict[str, str]]:
         entries: Any = await self.redis.xrange(FIRINGS)
@@ -127,7 +127,7 @@ async def test_the_host_only_when_asked_and_named_containers_only(sump: Sump) ->
     await sump.metric("other/web", cpu_percent=99)
     plain = await sump.event(conditions=[CPU_OVER_50], containers=["api"])
     assert await sump.engine.tick() == []
-    await sump.store.delete(plain.id)
+    await sump.store.delete(plain.id, 1, "ann", None)
     await sump.event(conditions=[CPU_OVER_50], containers=["api"], host=True)
     assert [f["detail"] for f in await sump.engine.tick()] == ["__host__ cpu 99.0 > 50"]
 
@@ -189,8 +189,7 @@ async def test_disabled_events_wait_and_a_broken_one_does_not_stop_the_others(
     sump: Sump,
 ) -> None:
     off = await sump.event(name="off", conditions=[CPU_OVER_50])
-    off.enabled = False
-    await sump.store.save(off)
+    await sump.store.update(off.id, {"enabled": False, "version": 1}, "ann")
     await sump.event(name="on", conditions=[CPU_OVER_50])
     await sump.redis.set(event_key("evt-broken"), "{not json")
     await sump.redis.sadd("sump:events", "evt-broken")

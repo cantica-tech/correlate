@@ -26,6 +26,24 @@ METRICS = ("cpu", "mem", "net")
 _NAME = re.compile(r"^[\x21-\x7e]{1,200}$")
 
 
+#: An event's definition: what the API writes. The rest is the engine's state.
+DEFINITION = frozenset(
+    {
+        "id",
+        "name",
+        "stream",
+        "conditions",
+        "match",
+        "containers",
+        "host",
+        "enabled",
+        "created_at",
+        "owner",
+        "version",
+    }
+)
+
+
 class InvalidEvent(ValueError):
     """An event the Sump refuses, with the reason."""
 
@@ -69,6 +87,10 @@ class Event:
     enabled: bool = True
     #: When it was made (epoch ms); log positions start there.
     created_at: int = 0
+    #: The user who made it, through the D3 identity (br-EVENT-000007-sJpO9KMY).
+    owner: str = ""
+    #: The definition's version: each edit is based on one, and bumps it.
+    version: int = 1
     #: `armed` (watching) or `triggered` (met, until it clears or is reset).
     status: Literal["armed", "triggered"] = "armed"
     #: The edge latch: the conditions were not met at the last check.
@@ -80,12 +102,20 @@ class Event:
     positions: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
-        """The event as stored and as the API will answer it."""
+        """The whole event, as the API answers it."""
         return asdict(self)
+
+    def definition(self) -> dict[str, Any]:
+        """What the API writes, versioned."""
+        return {k: v for k, v in asdict(self).items() if k in DEFINITION}
+
+    def state(self) -> dict[str, Any]:
+        """What the engine writes, with the definition version it was computed for."""
+        return {k: v for k, v in asdict(self).items() if k not in DEFINITION or k == "version"}
 
     @staticmethod
     def from_json(data: dict[str, Any]) -> Event:
-        """An event as stored; its definition checked again."""
+        """An event from its definition and state, merged; its definition checked again."""
         triggered_at = data.get("triggered_at")
         event = Event(
             id=str(data["id"]),
@@ -106,6 +136,8 @@ class Event:
                 str(index): {str(s): str(p) for s, p in by_source.items()}
                 for index, by_source in (data.get("positions") or {}).items()
             },
+            owner=str(data.get("owner", "")),
+            version=int(data.get("version", 1)),
         )
         validate(event)
         return event

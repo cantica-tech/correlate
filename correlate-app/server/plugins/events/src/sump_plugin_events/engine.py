@@ -30,6 +30,8 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from redis.exceptions import WatchError
+
 from correlate_sump.ingest import stream_key
 from sump_plugin_events.model import (
     Event,
@@ -92,19 +94,55 @@ def _ts_ms(record: dict[str, Any]) -> int | None:
         return None
 
 
+class EventRefused(Exception):
+    """An API call the store refuses: its HTTP status and why."""
+
+    status = 400
+
+
+class EventNotFound(EventRefused):
+    status = 404
+
+
+class EventForbidden(EventRefused):
+    status = 403
+
+
+class EventConflict(EventRefused):
+    """The edit was based on another version (br-EVENT-000007-sJpO9KMY)."""
+
+    status = 409
+
+
+#: The definition fields an edit may change.
+EDITABLE = ("name", "stream", "conditions", "match", "containers", "host", "enabled")
+
+
+def state_key(event_id: str) -> str:
+    """The Redis key holding one event's state, written by the engine only."""
+    return f"sump:events:{event_id}:state"
+
+
 class EventStore:
-    """The Sump's events, kept in Redis."""
+    """The Sump's events, kept in Redis as a versioned definition and a state.
+
+    The API writes definitions, each edit compared and set on its version, so
+    a concurrent change is refused, never overwritten; the engine writes only
+    states, and only for the definition version it evaluated (decided in
+    FEAT-000046-sJpO9KMY, cttc bug 25).
+    """
 
     def __init__(self, redis: Any) -> None:
         self.redis = redis
 
-    async def save(self, event: Event) -> None:
-        await self.redis.set(event_key(event.id), json.dumps(event.to_json()))
-        await self.redis.sadd(INDEX, event.id)
-
     async def get(self, event_id: str) -> Event | None:
         raw = await self.redis.get(event_key(event_id))
-        return Event.from_json(json.loads(_text(raw))) if raw is not None else None
+        if raw is None:
+            return None
+        state = await self.redis.get(state_key(event_id))
+        merged = {**(json.loads(_text(state)) if state is not None else {})}
+        merged.update(json.loads(_text(raw)))
+        return Event.from_json(merged)
 
     async def all(self) -> list[Event]:
         """Every event, by id; one that cannot be read is logged and left out."""
@@ -112,31 +150,34 @@ class EventStore:
         for event_id in sorted(_text(i) for i in await self.redis.smembers(INDEX)):
             try:
                 event = await self.get(event_id)
-            except ValueError:
+            except (ValueError, KeyError):
                 logger.exception("event %s cannot be read; skipped", event_id)
                 continue
             if event is not None:
                 events.append(event)
         return events
 
-    async def delete(self, event_id: str) -> None:
-        await self.redis.delete(event_key(event_id))
-        await self.redis.srem(INDEX, event_id)
+    async def save_state(self, event: Event) -> bool:
+        """Keep `event`'s state, unless its definition changed or went meanwhile."""
+        key = event_key(event.id)
+        try:
+            async with self.redis.pipeline(transaction=True) as pipe:
+                await pipe.watch(key)
+                raw = await pipe.get(key)
+                if raw is None or json.loads(_text(raw)).get("version") != event.version:
+                    await pipe.reset()
+                    return False
+                pipe.multi()
+                pipe.set(state_key(event.id), json.dumps(event.state()))
+                await pipe.execute()
+                return True
+        except WatchError:
+            return False
 
-    async def create(self, spec: dict[str, Any], now_ms: int) -> Event:
-        """Make an event from `spec`, refused if invalid; its log positions at the tails."""
-        conditions = [parse_condition(c) for c in spec.get("conditions") or []]
-        event = Event(
-            id=f"evt-{secrets.token_hex(6)}",
-            name=str(spec.get("name", "")),
-            stream=str(spec.get("stream", "")),
-            conditions=conditions,
-            match=spec.get("match", "any"),
-            containers=list(spec.get("containers") or []),
-            host=spec.get("host") is True,
-            created_at=now_ms,
-        )
-        validate(event)
+    async def _seed(self, event: Event) -> None:
+        """Re-arm `event` and put its log positions at the streams' tails."""
+        event.armed, event.status = True, "armed"
+        event.positions = {}
         engine = Engine(self.redis, self)
         for index, condition in enumerate(event.conditions):
             if isinstance(condition, LogCondition):
@@ -146,8 +187,116 @@ class EventStore:
                     if last:
                         tails[source] = _text(last[0][0])
                 event.positions[str(index)] = tails
-        await self.save(event)
+
+    async def create(self, spec: dict[str, Any], owner: str, now_ms: int) -> Event:
+        """Make `owner`'s event from `spec`, refused if invalid; its log positions at the tails."""
+        conditions = [parse_condition(c) for c in spec.get("conditions") or []]
+        event = Event(
+            id=f"evt-{secrets.token_hex(6)}",
+            name=str(spec.get("name", "")),
+            stream=str(spec.get("stream", "")),
+            conditions=conditions,
+            match=spec.get("match", "any"),
+            containers=list(spec.get("containers") or []),
+            host=spec.get("host") is True,
+            enabled=spec.get("enabled") is not False,
+            created_at=now_ms,
+            owner=owner,
+            version=1,
+        )
+        validate(event)
+        await self._seed(event)
+        async with self.redis.pipeline(transaction=True) as pipe:
+            pipe.set(event_key(event.id), json.dumps(event.definition()))
+            pipe.set(state_key(event.id), json.dumps(event.state()))
+            pipe.sadd(INDEX, event.id)
+            await pipe.execute()
         return event
+
+    async def update(self, event_id: str, spec: dict[str, Any], editor: str) -> Event:
+        """Edit the event as `spec` says, based on `spec["version"]`; its owner only.
+
+        Changing the conditions or the stream re-arms it and moves its log
+        positions to the tails; any other change keeps its state.
+        """
+        key = event_key(event_id)
+        try:
+            async with self.redis.pipeline(transaction=True) as pipe:
+                await pipe.watch(key, state_key(event_id))
+                current = await self.get(event_id)
+                if current is None:
+                    raise EventNotFound(f"no event {event_id}")
+                if current.owner != editor:
+                    raise EventForbidden("only the event's owner can edit it")
+                based_on = spec.get("version")
+                if based_on != current.version:
+                    raise EventConflict(
+                        f"the event is at version {current.version}, not {based_on}: "
+                        "reload it and edit again"
+                    )
+                edited = Event.from_json(current.to_json())
+                for name in EDITABLE:
+                    if name not in spec:
+                        continue
+                    value = spec[name]
+                    if name == "conditions":
+                        value = [parse_condition(c) for c in value or []]
+                    elif name in ("host", "enabled"):
+                        value = value is True
+                    elif name == "containers":
+                        value = list(value or [])
+                    setattr(edited, name, value)
+                validate(edited)
+                edited.version = current.version + 1
+                reseed = edited.stream != current.stream or edited.conditions != current.conditions
+                if reseed:
+                    await self._seed(edited)
+                pipe.multi()
+                pipe.set(key, json.dumps(edited.definition()))
+                if reseed:
+                    pipe.set(state_key(event_id), json.dumps(edited.state()))
+                await pipe.execute()
+                return edited
+        except WatchError as error:
+            raise EventConflict("the event changed meanwhile: reload it and edit again") from error
+
+    async def delete(
+        self, event_id: str, version: Any, caller: str, sump_owner: str | None
+    ) -> None:
+        """Delete the event at `version`: its owner, or the Sump's owner. Its firings stay."""
+        try:
+            async with self.redis.pipeline(transaction=True) as pipe:
+                await pipe.watch(event_key(event_id))
+                current = await self.get(event_id)
+                if current is None or not visible(current, caller, sump_owner):
+                    raise EventNotFound(f"no event {event_id}")
+                if current.owner != caller and caller != sump_owner:
+                    raise EventForbidden("only the event's owner can delete it")
+                if version != current.version:
+                    raise EventConflict(f"the event is at version {current.version}, not {version}")
+                pipe.multi()
+                pipe.delete(event_key(event_id), state_key(event_id))
+                pipe.srem(INDEX, event_id)
+                await pipe.execute()
+        except WatchError as error:
+            raise EventConflict("the event changed meanwhile: reload it") from error
+
+    async def reset(self, event_id: str, caller: str) -> Event:
+        """Re-arm the event without waiting for its conditions to clear; its owner only."""
+        current = await self.get(event_id)
+        if current is None:
+            raise EventNotFound(f"no event {event_id}")
+        if current.owner != caller:
+            raise EventForbidden("only the event's owner can reset it")
+        current.armed, current.status = True, "armed"
+        if not await self.save_state(current):
+            raise EventConflict("the event changed meanwhile: reload it")
+        return current
+
+
+def visible(event: Event, caller: str, sump_owner: str | None) -> bool:
+    """Whether `caller` sees `event`: their own, or any for the Sump's owner."""
+    return event.owner == caller or (sump_owner is not None and caller == sump_owner)
 
 
 class Engine:
@@ -210,18 +359,22 @@ class Engine:
                 firing = {
                     "event": event.id,
                     "name": event.name,
+                    "owner": event.owner,
                     "stream": event.stream,
                     "at": str(now),
                     "detail": event.trigger_detail,
                     "count": str(event.trigger_count),
                 }
-                await self.redis.xadd(FIRINGS, firing, maxlen=FIRINGS_MAXLEN, approximate=True)
             event.armed = False
             event.status = "triggered"
         else:
             event.armed = True
             event.status = "armed"
-        await self.store.save(event)
+        # Kept only if the definition was not edited meanwhile; then no firing.
+        if not await self.store.save_state(event):
+            return None
+        if firing is not None:
+            await self.redis.xadd(FIRINGS, firing, maxlen=FIRINGS_MAXLEN, approximate=True)
         return firing
 
     async def _check(self, event: Event, index: int, condition: Any, now: int) -> str | None:
