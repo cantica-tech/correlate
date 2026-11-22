@@ -43,7 +43,9 @@ describe.skipIf(!executable)("br-BUILD-000010-sJpO9KMY: the packaged app", () =>
     const home = mkdtempSync(path.join(tmpdir(), "correlate-packaged-"));
     const env = { ...process.env, HOME: home, USERPROFILE: home } as Record<string, string>;
     delete env.ELECTRON_RUN_AS_NODE;
-    const app = await _electron.launch({ executablePath: executable as string, env });
+    // CI's Linux runners cannot use Chromium's sandbox for an unpacked build.
+    const args = process.platform === "linux" ? ["--no-sandbox"] : [];
+    const app = await _electron.launch({ executablePath: executable as string, args, env });
     try {
       const window = await app.firstWindow();
       await window.waitForLoadState("domcontentloaded");

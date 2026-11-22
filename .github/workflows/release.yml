@@ -1,0 +1,202 @@
+# Release for correlate-app (br-BUILD-000007 to br-BUILD-000010;
+# REQ-000054-sJpO9KMY).
+#
+# On a `v<version>` tag: the checks, the tag against the app's and the Sump's
+# one version, the installers built each on its own system (NSIS for Windows
+# x64, DMGs for macOS arm64 and x64, an AppImage for Linux x64), the Sump
+# image built for amd64 and arm64 and pushed as
+# ghcr.io/oliben67/correlate-sump:<version>, then a draft GitHub Release with
+# the installers, for the user to publish.
+#
+# Run by hand (Actions > Release > Run workflow), it builds everything and
+# publishes nothing: no image is pushed and no release is made.
+#
+# Signing happens only when its secrets exist: macOS CSC_LINK,
+# CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID;
+# Windows WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD. Without them the installers are
+# unsigned and the release notes say how to open them. Actions are pinned by
+# commit SHA, with their release in a comment.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Read-only by default; only the jobs that publish, and only on a tag, write.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: correlate-app
+
+env:
+  IMAGE: ghcr.io/oliben67/correlate-sump
+  # A tag run publishes; a manual run never does (br-BUILD-000008).
+  PUBLISH: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  # The one version, checked against the tag on a tag run (br-BUILD-000007),
+  # and the same checks as CI, before anything is built.
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: correlate-app/server/uv.lock
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: correlate-app/app/package-lock.json
+      - id: version
+        name: One version, and the tag's
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ "$PUBLISH" = "true" ]; then
+            uv run --no-project --python 3.13 python scripts/check_versions.py --tag "$TAG"
+          else
+            uv run --no-project --python 3.13 python scripts/check_versions.py
+          fi
+          echo "version=$(node -p "require('./app/package.json').version")" >> "$GITHUB_OUTPUT"
+      - run: task install
+      - run: task check
+
+  # Each system's installers (br-BUILD-000010), and the packaged app started.
+  installers:
+    name: installers (${{ matrix.os }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: correlate-app/app/package-lock.json
+      - run: task app:install
+      - name: Build the installers (signed when the secrets exist)
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: task app:package
+      - name: Start the packaged app
+        if: runner.os != 'Linux'
+        working-directory: correlate-app/app
+        run: npx vitest run tests/package
+      - name: Start the packaged app (under a virtual display)
+        if: runner.os == 'Linux'
+        working-directory: correlate-app/app
+        run: xvfb-run -a npx vitest run tests/package
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installers-${{ runner.os }}
+          if-no-files-found: error
+          path: |
+            correlate-app/app/dist/*.dmg
+            correlate-app/app/dist/*.exe
+            correlate-app/app/dist/*.AppImage
+
+  # The Sump image for amd64 and arm64 (br-BUILD-000009), pushed only on a tag.
+  image:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - if: env.PUBLISH == 'true'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: correlate-app/server
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: ${{ env.IMAGE }}:${{ needs.check.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.check.outputs.version }}
+
+  # A draft release with the installers, for the user to publish (br-BUILD-000008).
+  release:
+    needs: [check, installers, image]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: installers-*
+          path: ${{ runner.temp }}/installers
+          merge-multiple: true
+      - name: Make the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.check.outputs.version }}
+          FILES: ${{ runner.temp }}/installers
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          correlate-app $VERSION.
+
+          Installers: Windows x64 (NSIS), macOS for Apple silicon and Intel
+          (DMG), Linux x64 (AppImage). The Sump it provisions is
+          \`$IMAGE:$VERSION\`, for amd64 and arm64.
+
+          If these installers are unsigned, the system asks before opening
+          them: on macOS, right-click the app and choose Open (or allow it in
+          System Settings > Privacy & Security); on Windows, choose More info
+          then Run anyway in SmartScreen; on Linux, make the AppImage
+          executable (\`chmod +x\`).
+          EOF
+          gh release create "$TAG" --draft --verify-tag --title "correlate-app $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md" "$FILES"/*
