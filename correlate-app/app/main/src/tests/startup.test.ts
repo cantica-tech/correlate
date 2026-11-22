@@ -39,6 +39,9 @@ describe("main.cjs starts", () => {
         whenReady: () => readyPromise,
         on: (event: string, handler: () => void) => void appEvents.set(event, handler),
         getPath: () => dir,
+        // The own log writes next to the app: the test's folder (REQ-048).
+        getAppPath: () => dir,
+        isPackaged: false,
         getVersion: () => "0.1.0",
         name: "correlate-app",
         quit: () => {},

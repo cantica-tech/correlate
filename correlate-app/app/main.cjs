@@ -77,6 +77,12 @@ const {
   EVENTS_FIRED_EVENT,
   stream,
   download,
+  OwnLog,
+  parseOwnLogSettings,
+  captureConsole,
+  windowError,
+  followLocalSump,
+  dockerFollow,
 } = require("./main/dist/main.cjs");
 
 /** Each window's active Sump (br-SUMP-000010); set once the app is ready. */
@@ -110,6 +116,8 @@ app.on("open-file", (event, file) => {
 inbox.push(filesFromArgv(process.argv, process.cwd(), Boolean(process.defaultApp)));
 /** The main window, the one the sidebar's actions act on (REQ-000021). */
 let mainWindow = null;
+/** The app's own log (REQ-048), from the start of `whenReady`. */
+let ownLog = null;
 /** The sidebar's layout and detached window (REQ-000021); set once the app is ready. */
 let sidebar;
 
@@ -131,6 +139,11 @@ function broadcast(channel, value) {
  * Electron gives none by default (REQ-000023, as cttc's attachEditContextMenu).
  */
 function attachFieldMenu(window) {
+  // A window's uncaught errors go to the own log too (REQ-048).
+  window.webContents.on("console-message", (event) => {
+    const line = windowError(event);
+    if (line) ownLog?.write("ERROR", line);
+  });
   window.webContents.on("context-menu", (_event, params) => {
     const template = fieldMenuTemplate(params);
     if (template) Menu.buildFromTemplate(template).popup({ window });
@@ -222,6 +235,20 @@ function createSidebarWindow() {
 app.whenReady().then(() => {
   // The theme first, so no window paints in the wrong one (REQ-000018).
   const settings = new Settings(defaultSettingsPath(process.env));
+  // The own log, on by default next to the app, falling back once to the
+  // data folder (br-DIAG-000001); everything the console says, and the local
+  // Sump's container log, classified (br-DIAG-000003, REQ-048).
+  ownLog = new OwnLog({
+    read: () => parseOwnLogSettings(settings.part("ownLog")),
+    write: (value) => settings.setPart("ownLog", value),
+    defaultDir: app.isPackaged ? path.dirname(process.execPath) : app.getAppPath(),
+    fallbackDir: app.getPath("userData"),
+    warn: (text) => console.warn(text),
+  });
+  ownLog.start();
+  captureConsole(ownLog);
+  const stopSumpLog = followLocalSump(ownLog, dockerFollow);
+  app.on("will-quit", () => stopSumpLog());
   nativeTheme.themeSource = settings.themeMode();
   // cttc's menu bar is drawn in the window; on macOS a minimal native menu
   // (app menu and Edit) keeps the system shortcuts working (REQ-000023).
