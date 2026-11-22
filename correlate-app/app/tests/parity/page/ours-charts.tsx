@@ -43,6 +43,8 @@ function RecentreOnce({ shown }: { shown: ChartsShown }) {
 }
 
 const paused = location.search.includes("paused");
+// `?file`: the analysis view's head, with "Back to live tracking" (REQ-000033-sJpO9KMY).
+const file = location.search.includes("file");
 // `?host-loading`: the host has no figures yet; `?host-folded`: its block folded (REQ-000032-sJpO9KMY).
 const hostLoading = location.search.includes("host-loading");
 const hostFolded = location.search.includes("host-folded");
@@ -69,6 +71,9 @@ if (root)
           bridge={bridge}
           panels={paused ? (shown) => <RecentreOnce shown={shown} /> : undefined}
           hostOpen={!hostFolded}
+          analysis={
+            file ? { from: Date.UTC(2026, 7, 6, 12, 0), to: Date.UTC(2026, 7, 6, 12, 4) } : null
+          }
         />
       </div>
     ),

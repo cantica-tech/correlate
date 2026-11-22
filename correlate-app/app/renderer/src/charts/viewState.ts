@@ -133,3 +133,23 @@ export function liveCursor(
   if (!state.live || !settings.liveTrack) return null;
   return now + Math.min(0, settings.liveTrackSecs) * 1000;
 }
+
+/**
+ * The analysis view (REQ-000033-sJpO9KMY, br-ANLYS-000002-sJpO9KMY): a file's
+ * view is never live and opens on the file's whole range (Item 35 frames it
+ * at 75%).
+ */
+export function fileState(range: { from: number; to: number }): ViewState {
+  return { view: { t0: range.from, t1: range.to }, live: false, resumeAt: null };
+}
+
+/**
+ * `view` kept within `range` (br-ANLYS-000003-sJpO9KMY): no wider than the
+ * range, and shifted back inside it; the 200 ms floor still holds.
+ */
+export function bounded(view: Viewport, range: { from: number; to: number }): Viewport {
+  const room = range.to - range.from;
+  const span = Math.min(Math.max(view.t1 - view.t0, MIN_SPAN_MS), Math.max(room, MIN_SPAN_MS));
+  const t0 = Math.min(Math.max(view.t0, range.from), Math.max(range.from, range.to - span));
+  return { t0, t1: t0 + span };
+}

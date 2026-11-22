@@ -36,7 +36,7 @@ Rule IDs omit their `-sJpO9KMY` suffix; Roadmap gives the item numbers in
 | 12 | Switching to a known remote gateway collides with the local gateway's port | Medium | `br-SUMP-000008` | 16, 17 | passing |
 | 13 | Host telemetry block shows for the wrong host or view | Medium | `br-STREAM-000001` | 33 | passing |
 | 14 | Snapshots mix live and loaded-file telemetry | High | `br-ANLYS-000001` | 43 | placeholder |
-| 16 | 'now' label moves the analysis view to the present | Medium | `br-ANLYS-000002` | 34 | placeholder |
+| 16 | 'now' label moves the analysis view to the present | Medium | `br-ANLYS-000002` | 34 | passing |
 | 17 | Multi-file load centres on the union, not the active file | Medium | `br-ANLYS-000004` | 35 | placeholder |
 | 18 | Re-opening or switching files does not use the 75% framing | Low | `br-ANLYS-000004` | 35 | placeholder |
 | 19 | Open-file dedup keys on basename only | Medium | `br-ANLYS-000005` | 35 | placeholder |

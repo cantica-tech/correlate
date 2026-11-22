@@ -138,6 +138,7 @@ export interface ShellBridge {
       from: string;
       to: string;
       order: "newest" | "oldest";
+      file?: boolean;
     }): Promise<
       { ok: true; path: string; rows: number } | { ok: false; cancelled?: true; message?: string }
     >;

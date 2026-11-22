@@ -23,6 +23,11 @@ export interface TimelineNavProps {
   /** A pause counts down to live again. */
   resuming: boolean;
   hidden?: boolean;
+  /**
+   * The "now" label; left out in the analysis view, where nothing goes to the
+   * present (br-ANLYS-000002-sJpO9KMY, cttc bug 16).
+   */
+  showNow?: boolean;
   /** A pan that is read at once (the track, the keys). */
   onPan: (view: Viewport) => void;
   /** A thumb drag in progress; `onPanned` when it ends. */
@@ -96,32 +101,34 @@ export function TimelineNav(props: TimelineNavProps) {
             props.onPan(panBy(view, e.key === "ArrowLeft" ? -0.1 : 0.1));
           }}
         />
-        {/* biome-ignore lint/a11y/useSemanticElements: cttc's now label is a span; a button to assistive technology. */}
-        <span
-          className="tl-now-label"
-          data-live={String(live)}
-          role="button"
-          tabIndex={0}
-          title={
-            !live && props.resuming
-              ? "Live tracking paused -- see the status bar for the resume countdown, or click to jump now"
-              : live
-                ? "Following the present -- click to jump anyway"
-                : "Jump back to the present and resume following it"
-          }
-          onClick={(e) => {
-            e.stopPropagation();
-            props.onNow();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              props.onNow();
+        {props.showNow === false ? null : (
+          // biome-ignore lint/a11y/useSemanticElements: cttc's now label is a span; a button to assistive technology.
+          <span
+            className="tl-now-label"
+            data-live={String(live)}
+            role="button"
+            tabIndex={0}
+            title={
+              !live && props.resuming
+                ? "Live tracking paused -- see the status bar for the resume countdown, or click to jump now"
+                : live
+                  ? "Following the present -- click to jump anyway"
+                  : "Jump back to the present and resume following it"
             }
-          }}
-        >
-          now
-        </span>
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onNow();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                props.onNow();
+              }
+            }}
+          >
+            now
+          </span>
+        )}
       </div>
     </div>
   );

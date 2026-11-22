@@ -1,8 +1,8 @@
 /**
  * cttc's side of the status bar parity check (REQ-000022-sJpO9KMY
  * Requirement 5): cttc's status bar markup (`index.html:268-306` at
- * d8a444b, less the recording and mode parts and the Docker host pill,
- * which come later), as cttc's code leaves it with something open
+ * d8a444b, less the recording parts, which come later; its mode icons since
+ * REQ-000033-sJpO9KMY), as cttc's code leaves it with something open
  * (`modules/gateway/pill.ts`, `shared/ctx-menu`, `modules/status-bar/`),
  * with our data. Drawn under cttc's own `style.css`.
  */
@@ -53,6 +53,10 @@ export function cttcStatusBar(open: StatusBarCase, times: Record<string, string>
   return (
     '<div class="filler"></div>' +
     '<div id="app-status-bar" class="app-status-bar">' +
+    // cttc's mode icons (index.html:286-288): live, or analysis.
+    `<span id="status-bar-mode-live" class="toolbar-mode-icon"${open === "analysis" ? " hidden" : ""} title="Live tracking">${svg("track")}</span>` +
+    `<span id="status-bar-mode-record" class="toolbar-mode-icon"${open === "analysis" ? "" : " hidden"} title="Analysis mode">${svg("analysis-mode-status-bar")}</span>` +
+    '<span class="toolbar-mode-divider"></span>' +
     `<span id="app-status-bar-text">${text(ARRIVING.text)}</span>` +
     '<span class="status-bar-divider"></span>' +
     `<div id="server-status" class="server-status${open === "switcher" ? " open" : ""}" data-state="up">` +

@@ -133,6 +133,8 @@ export const AVAILABLE: ReadonlySet<string> = new Set([
   "edit-data-streams",
   "close-data-streams",
   "remove-data-stream",
+  // Opens a cttc file in the analysis view until projects come (REQ-000033-sJpO9KMY).
+  "open-project",
   "preferences",
   "about",
   "quit",

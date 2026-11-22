@@ -7,6 +7,8 @@
  * a style attribute written as markup.
  */
 
+import { ICONS } from "../../renderer/src/icons/icons.generated.js";
+
 /**
  * The containers of the parity data, in legend order, and their color tokens:
  * cttc gives slots in first-seen order, and the Sump's followed sets are
@@ -44,6 +46,14 @@ export function cttcHostBlock(open: boolean, loading: boolean): string {
     <div id="host-loading" class="muted"${open && loading ? "" : " hidden"}><span class="hourglass">⏳</span> Loading host telemetry…</div>
     ${cttcNav(true).replace('id="chart-nav"', `id="host-nav"${open && !loading ? "" : " hidden"}`)}
   </div>`;
+}
+
+/**
+ * cttc's "Back to live tracking" (`index.html:214`, its flat action), placed
+ * in the charts' head's right cluster, as the app puts it (REQ-000033-sJpO9KMY).
+ */
+export function cttcBackToLive(): string {
+  return `<div class="panel-head-right"><button id="btn-back-to-live" class="flat-action" title="Currently in analysis mode -- click to show live data again">${ICONS.track.replace("<svg ", '<svg class="flat-action-icon" ')}Back to live tracking</button></div>`;
 }
 
 /** cttc's navigator (`index.html:240-245`), "now" live or not. */

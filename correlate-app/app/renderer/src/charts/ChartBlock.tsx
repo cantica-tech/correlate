@@ -20,12 +20,19 @@
  * The host's own telemetry (REQ-000032-sJpO9KMY): cttc's host block under the
  * container charts, titled for the active stream's host, its own strips on
  * the same view and cursor, never mixed with the containers'.
+ *
+ * The analysis view (REQ-000033-sJpO9KMY): given `analysis`, the block shows
+ * an opened file through a bridge answering from it; the view opens on the
+ * file's range and is static (no now line, no live tracking, no movement,
+ * no "now", br-ANLYS-000002-sJpO9KMY) and bounded to it
+ * (br-ANLYS-000003-sJpO9KMY); "Back to live tracking" leaves it.
  */
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Viewport } from "../correlate/atoms.js";
 import { PLOT_MARGIN_LEFT } from "../correlate/axes.js";
 import { assignSlots, colorForSlot, type SlotMap } from "../correlate/colorSlots.js";
 import { rangeView } from "../correlate/zoom.js";
+import { Icon } from "../icons/Icon.js";
 import type { LiveSettings, ShellBridge } from "../shell/bridge.js";
 import { listStreams, type Stream } from "../streams/api.js";
 import { type Arranged, arrange, DRAG_TYPE, moveBy, moveTo } from "./arrange.js";
@@ -34,8 +41,10 @@ import { type Cursor, StripCanvases, type StripData } from "./StripCanvases.js";
 import { bucketsQuery, bucketsToPoints, STRIPS } from "./strips.js";
 import { TimelineNav } from "./TimelineNav.js";
 import {
+  bounded,
   countdown,
   countdownText,
+  fileState,
   goLive,
   initialState,
   liveCursor,
@@ -109,6 +118,14 @@ export interface ChartBlockProps {
   /** The host block is open (cttc's ▾), kept by the shell (REQ-000032-sJpO9KMY). */
   hostOpen?: boolean;
   onHostToggle?: (open: boolean) => void;
+  /** The analysis view: the opened file's range; `bridge` answers from the file. */
+  analysis?: { from: number; to: number } | null;
+  /** "Back to live tracking" (REQ-000033-sJpO9KMY). */
+  onBackToLive?: () => void;
+  /** The live view to start from (the one saved when a file was opened). */
+  initialView?: ViewState | null;
+  /** Told of every change of the view, so the shell can keep the live one. */
+  onViewState?: (state: ViewState) => void;
 }
 
 /** The buckets of `names` within `stream` over `view`, per strip and name. */
@@ -149,6 +166,10 @@ export function ChartBlock({
   onLiveStatus,
   hostOpen = true,
   onHostToggle,
+  analysis = null,
+  onBackToLive,
+  initialView = null,
+  onViewState,
 }: ChartBlockProps) {
   const [stream, setStream] = useState<Stream | null>(null);
   const [containers, setContainers] = useState<string[]>([]);
@@ -156,7 +177,9 @@ export function ChartBlock({
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [data, setData] = useState<StripData>({});
   const [hostData, setHostData] = useState<StripData>({});
-  const [vs, setVsState] = useState<ViewState>(() => initialState(Date.now()));
+  const [vs, setVsState] = useState<ViewState>(() =>
+    analysis ? fileState(analysis) : (initialView ?? initialState(Date.now())),
+  );
   const [dataView, setDataView] = useState<Viewport>(() => vs.view);
   const [dataRange, setDataRange] = useState<{ from: number; to: number } | null>(null);
   const [nowT, setNowT] = useState(() => Date.now());
@@ -171,10 +194,20 @@ export function ChartBlock({
   const statusRef = useRef("");
   const onLiveStatusRef = useRef(onLiveStatus);
   onLiveStatusRef.current = onLiveStatus;
+  const analysisRef = useRef(analysis);
+  analysisRef.current = analysis;
+  const onViewStateRef = useRef(onViewState);
+  onViewStateRef.current = onViewState;
 
+  // In the analysis view every view is kept within the file (br-ANLYS-000003-sJpO9KMY).
   const setVs = useCallback((next: ViewState) => {
-    vsRef.current = next;
-    setVsState(next);
+    const range = analysisRef.current;
+    const kept = range
+      ? { ...next, view: bounded(next.view, range), live: false, resumeAt: null }
+      : next;
+    vsRef.current = kept;
+    setVsState(kept);
+    onViewStateRef.current?.(kept);
   }, []);
   const currentView = useCallback(() => vsRef.current.view, []);
 
@@ -244,6 +277,8 @@ export function ChartBlock({
   // tracking moves the cursor, and the countdown is told.
   useEffect(() => {
     const timer = setInterval(() => {
+      // The analysis view is static: nothing moves with time (br-ANLYS-000002-sJpO9KMY).
+      if (analysisRef.current) return;
       const now = Date.now();
       const before = vsRef.current;
       const after = tick(before, now);
@@ -333,12 +368,19 @@ export function ChartBlock({
     [pan],
   );
   const nowLive = () => {
+    // Nothing in the analysis view goes to the present (cttc bug 16).
+    if (analysisRef.current) return;
     setVs(goLive(vsRef.current, Date.now(), true));
     void read();
   };
 
   const view = vs.view;
-  const bounds = navBounds(view, dataRange, nowT);
+  // The analysis view's navigator spans the file, not now (br-ANLYS-000003-sJpO9KMY).
+  const bounds = analysis
+    ? { lo: analysis.from, hi: analysis.to }
+    : navBounds(view, dataRange, nowT);
+  // No now line in the analysis view; NaN is in no view.
+  const shownNow = analysis ? Number.NaN : nowT;
   const windowMs = live.windowSecs * 1000;
   const cursorT = cursor?.t ?? null;
   const cursorLive = cursor?.live ?? false;
@@ -359,7 +401,7 @@ export function ChartBlock({
     view,
     currentView,
     cursor,
-    nowT,
+    nowT: shownNow,
     onCursor: setCursor,
     onZoom: zoomTo,
     onRecenter: recenterAt,
@@ -374,6 +416,7 @@ export function ChartBlock({
     onDrag: drag,
     onPanned: () => void read(),
     onNow: nowLive,
+    showNow: !analysis,
   };
   const shown = useMemo<ChartsShown | null>(
     () =>
@@ -384,7 +427,7 @@ export function ChartBlock({
             slots,
             view: dataView,
             shownView: view,
-            nowT,
+            nowT: shownNow,
             cursorT,
             cursorLive,
             windowMs,
@@ -402,7 +445,7 @@ export function ChartBlock({
       slots,
       dataView,
       view,
-      nowT,
+      shownNow,
       cursorT,
       cursorLive,
       windowMs,
@@ -420,6 +463,20 @@ export function ChartBlock({
         <div id="svc-graph" className="graph-block" ref={chartsBox}>
           <div id="chart-head">
             <span className="panel-head-title">Telemetry</span>
+            {analysis ? (
+              <div className="panel-head-right">
+                <button
+                  type="button"
+                  id="btn-back-to-live"
+                  className="flat-action"
+                  title="Currently in analysis mode -- click to show live data again"
+                  onClick={onBackToLive}
+                >
+                  <Icon name="track" svgClassName="flat-action-icon" />
+                  Back to live tracking
+                </button>
+              </div>
+            ) : null}
           </div>
           <div className="panel-head-divider" />
           <div id="legend">

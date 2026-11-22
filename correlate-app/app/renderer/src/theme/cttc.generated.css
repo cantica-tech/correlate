@@ -715,6 +715,54 @@
   box-sizing: border-box;
 }
 
+/* statusbar/statusbar.css: cttc style.css:834-845 */
+.toolbar-mode-divider {
+  width: 4px;
+  align-self: stretch;
+  /* #toolbar's own flex gap (10px) already provides space on each side;
+     the negative margin-left here pulls that down to 6px -- half of the
+     icon's 12px gap from the toolbar's own left edge (see the icon's own
+     margin-left below), so both the "before" and "after" gaps around the
+     icon are equal and both halved from their un-tightened 12px default. */
+  margin: 0 10px 0 -4px;
+  border-left: 1px dotted var(--border);
+  border-right: 1px dotted var(--border);
+}
+
+/* statusbar/statusbar.css: cttc style.css:850-855 */
+.toolbar-mode-icon {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.toolbar-mode-icon svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+}
+
+/* charts/charts.css: cttc style.css:875-886 */
+.flat-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  color: var(--accent);
+  font: inherit;
+}
+.flat-action:hover,
+.flat-action:active {
+  background: none;
+  text-decoration: underline;
+}
+.flat-action-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
 /* components/components.css: cttc style.css:902-903 */
 .muted {
   color: var(--muted);

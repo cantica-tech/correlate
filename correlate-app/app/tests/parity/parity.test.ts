@@ -19,6 +19,7 @@ import { _electron, type ElectronApplication, type Page } from "playwright-core"
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COMPONENT_LIMIT, compare, type Mask, readPng, writePng } from "./compare.js";
 import {
+  cttcBackToLive,
   cttcChartBlock,
   cttcHostBlock,
   cttcNav,
@@ -175,7 +176,8 @@ async function captureStatusBar(
   for (const theme of THEMES) {
     await page.emulateMedia({ colorScheme: theme });
     for (const name of STATUSBAR_CASES) {
-      await page.goto(pathToFileURL(path.join(here, `page/${side}-statusbar.html`)).href);
+      const url = pathToFileURL(path.join(here, `page/${side}-statusbar.html`)).href;
+      await page.goto(name === "analysis" ? `${url}?analysis` : url);
       if (side === "cttc") {
         const times: Record<string, string> = {};
         for (const n of [...HISTORY, ARRIVING]) {
@@ -366,6 +368,17 @@ async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer
         pictures.set(`host-loading-line-${theme}`, await shoot("#host-loading"));
       }
     }
+    // The analysis view's head: "Back to live tracking" (REQ-000033-sJpO9KMY).
+    await page.goto(`${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?file`);
+    if (side === "cttc") {
+      await page.evaluate(
+        `(() => { document.getElementById("stage").innerHTML = ${JSON.stringify(cttcChartBlock())}; document.getElementById("chart-head").insertAdjacentHTML("beforeend", ${JSON.stringify(cttcBackToLive())}); })()`,
+      );
+    }
+    await page.waitForSelector("#btn-back-to-live");
+    await page.mouse.move(1, 1);
+    await page.evaluate("document.fonts.ready.then(() => true)");
+    pictures.set(`charts-head-analysis-${theme}`, await shoot("#chart-head"));
     // The live settings' fieldsets (REQ-000031-sJpO9KMY).
     const prefsUrl = pathToFileURL(path.join(here, `page/${side}-charts.html`)).href;
     await page.goto(`${prefsUrl}?prefs`);
@@ -467,6 +480,7 @@ describe.skipIf(process.platform !== "darwin")(
       "charts-legend",
       "charts-nav",
       "charts-nav-paused",
+      "charts-head-analysis",
       "host-head",
       "host-head-folded",
       "host-loading-line",

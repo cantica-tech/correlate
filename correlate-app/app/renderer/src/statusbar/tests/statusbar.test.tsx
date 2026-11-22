@@ -83,10 +83,14 @@ describe("REQ-000022-sJpO9KMY: the pill", () => {
 });
 
 describe("REQ-000022-sJpO9KMY: the bar's markup", () => {
-  it("is cttc's: text, divider, pill, double divider, History", () => {
+  it("is cttc's: mode, mode divider, text, divider, pill, double divider, History", () => {
     const out = renderToStaticMarkup(<StatusBar bridge={{} as ShellBridge} />);
+    // The mode icons, live shown (REQ-000033-sJpO9KMY), as cttc's index.html:286-288.
     expect(out).toMatch(
-      /^<div id="app-status-bar" class="app-status-bar"><span id="app-status-bar-text"><\/span><span class="status-bar-divider"><\/span><div id="server-status" class="server-status" data-state="checking">/,
+      /^<div id="app-status-bar" class="app-status-bar"><span id="status-bar-mode-live" class="toolbar-mode-icon" title="Live tracking">/,
+    );
+    expect(out).toMatch(
+      /<span id="status-bar-mode-record" class="toolbar-mode-icon" title="[^"]*" hidden="" role="button" tabindex="-1">.*?<\/span><span class="toolbar-mode-divider"><\/span><span id="app-status-bar-text"><\/span><span class="status-bar-divider"><\/span><div id="server-status" class="server-status" data-state="checking">/,
     );
     expect(out).toContain(
       '<button id="server-status-btn" type="button" class="server-status-btn" aria-label="No Sump: being checked"',

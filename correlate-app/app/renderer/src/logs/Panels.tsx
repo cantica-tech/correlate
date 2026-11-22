@@ -70,6 +70,8 @@ export function Panels({ bridge, shown, order, onOrder }: PanelsProps) {
       from: new Date(shown.view.t0).toISOString(),
       to: new Date(shown.view.t1).toISOString(),
       order,
+      // The analysis view exports from its file (REQ-000033-sJpO9KMY).
+      file: shown.stream.kind === "file",
     });
     if (r.ok) void bridge.status.add(`Log exported: ${r.path} (${r.rows} entries)`);
     else if (!r.cancelled) void bridge.status.add(`Could not export log: ${r.message}`);

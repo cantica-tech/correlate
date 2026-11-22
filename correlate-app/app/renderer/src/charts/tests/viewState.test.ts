@@ -5,9 +5,11 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SPAN_MS } from "../strips.js";
 import {
+  bounded,
   countdown,
   countdownText,
   FOLLOW_LAG_MS,
+  fileState,
   followed,
   goLive,
   initialState,
@@ -109,5 +111,24 @@ describe("REQ-000031-sJpO9KMY: the navigator", () => {
     expect(thumbOf({ t0: 250, t1: 251 }, bounds, 400).width).toBe(8);
     expect(viewAtTrack({ t0: 0, t1: 100 }, bounds, 0.5)).toEqual({ t0: 450, t1: 550 });
     expect(viewDragged({ t0: 0, t1: 100 }, bounds, 40, 400)).toEqual({ t0: 100, t1: 200 });
+  });
+});
+
+describe("br-ANLYS-000003-sJpO9KMY: the analysis view stays within its file", () => {
+  const file = { from: 10_000, to: 70_000 };
+
+  it("opens on the file's range, never live", () => {
+    expect(fileState(file)).toEqual({
+      view: { t0: 10_000, t1: 70_000 },
+      live: false,
+      resumeAt: null,
+    });
+  });
+
+  it("keeps pans and zooms inside the file, no wider than it, 200 ms at least", () => {
+    expect(bounded({ t0: 0, t1: 5_000 }, file)).toEqual({ t0: 10_000, t1: 15_000 });
+    expect(bounded({ t0: 68_000, t1: 78_000 }, file)).toEqual({ t0: 60_000, t1: 70_000 });
+    expect(bounded({ t0: 0, t1: 1_000_000 }, file)).toEqual({ t0: 10_000, t1: 70_000 });
+    expect(bounded({ t0: 20_000, t1: 20_050 }, file)).toEqual({ t0: 20_000, t1: 20_200 });
   });
 });

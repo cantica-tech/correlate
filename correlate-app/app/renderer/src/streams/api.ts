@@ -8,7 +8,8 @@ import type { SumpErrorInfo, SumpRequester } from "../shell/bridge.js";
 /** A data stream, as the Sump lists it. */
 export interface Stream {
   id: string;
-  kind: "self" | "ssh";
+  /** `file`: an opened file in the analysis view (REQ-000033-sJpO9KMY). */
+  kind: "self" | "ssh" | "file";
   label: string;
   /** An SSH stream's host (REQ-000032-sJpO9KMY: the host block's title). */
   host?: string | null;

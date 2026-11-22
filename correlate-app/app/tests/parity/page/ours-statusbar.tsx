@@ -49,7 +49,11 @@ if (root) {
   createRoot(root).render(
     <div id="stage">
       <div className="filler" />
-      <StatusBar bridge={bridge} onStreamAction={() => {}} />
+      <StatusBar
+        bridge={bridge}
+        onStreamAction={() => {}}
+        mode={location.search.includes("analysis") ? "analysis" : "live"}
+      />
     </div>,
   );
 }

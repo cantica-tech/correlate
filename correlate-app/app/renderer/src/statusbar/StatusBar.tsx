@@ -49,6 +49,12 @@ export interface StatusBarProps {
    * cttc wrote it to the bar directly.
    */
   persistent?: string;
+  /**
+   * Which view the window shows (REQ-000033-sJpO9KMY): cttc's mode icon at
+   * the bar's start, live or analysis; in analysis, a click goes back to live.
+   */
+  mode?: "live" | "analysis";
+  onBackToLive?: () => void;
 }
 
 /** The status bar. */
@@ -58,6 +64,8 @@ export function StatusBar({
   onStreamAction,
   streamsVersion,
   persistent = "",
+  mode = "live",
+  onBackToLive,
 }: StatusBarProps) {
   const [visible, setVisible] = useState(true);
   const [history, setHistory] = useState<Notice[]>([]);
@@ -188,6 +196,33 @@ export function StatusBar({
 
   return (
     <div id="app-status-bar" className="app-status-bar" hidden={!visible}>
+      <span
+        id="status-bar-mode-live"
+        className="toolbar-mode-icon"
+        title="Live tracking"
+        hidden={mode !== "live"}
+      >
+        <Icon name="track" />
+      </span>
+      {/* biome-ignore lint/a11y/useSemanticElements: cttc's mode icon is a span; in analysis it is a button back to live. */}
+      <span
+        id="status-bar-mode-record"
+        className="toolbar-mode-icon"
+        title="Analysis mode -- click to show live data again"
+        hidden={mode !== "analysis"}
+        role="button"
+        tabIndex={mode === "analysis" ? 0 : -1}
+        onClick={() => onBackToLive?.()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onBackToLive?.();
+          }
+        }}
+      >
+        <Icon name="analysis-mode-status-bar" />
+      </span>
+      <span className="toolbar-mode-divider" />
       <span id="app-status-bar-text">{persistent || message}</span>
       <span className="status-bar-divider" />
       <div

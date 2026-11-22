@@ -4,8 +4,16 @@
  * the detached window, the sidebar alone. The layout comes from the main
  * process and every change goes back to it, so both windows show the same.
  */
-import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ChartBlock } from "../charts/ChartBlock.js";
+import type { ViewState } from "../charts/viewState.js";
 import { Button, Dialog, SegControl, Switch } from "../components/index.js";
 import { Lanes } from "../logs/Lanes.js";
 import { Panels, useLogPrefs } from "../logs/Panels.js";
@@ -60,6 +68,49 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   const logs = useLogPrefs(bridge);
   // A live view's pause countdown, held in the status bar (REQ-000031-sJpO9KMY).
   const [liveStatus, setLiveStatus] = useState("");
+  // The analysis view's open file, or null for the live view (REQ-000033-sJpO9KMY).
+  const [analysis, setAnalysis] = useState<{
+    path: string;
+    label: string;
+    from: number;
+    to: number;
+  } | null>(null);
+  // The live view, kept while a file is shown, restored on the way back.
+  const liveView = useRef<ViewState | null>(null);
+  const keepLiveView = useCallback((state: ViewState) => {
+    liveView.current = state;
+  }, []);
+
+  // A bridge answering from the open file: the views ask it as they ask a Sump,
+  // and nothing of it reaches one (br-ANLYS-000001-sJpO9KMY).
+  const fileBridge = useMemo<ShellBridge | null>(() => {
+    const files = bridge.analysis;
+    if (!analysis || !files) return null;
+    return {
+      ...bridge,
+      sump: { ...bridge.sump, request: files.request },
+      stream: { active: async () => "file", setActive: async () => ({ ok: true }) },
+      series: undefined,
+    };
+  }, [bridge, analysis]);
+
+  /** Open a cttc file in this window's analysis view (Open Project…, for now). */
+  const openFile = useCallback(async () => {
+    const r = await bridge.analysis?.open();
+    if (!r) return;
+    if (r.ok) {
+      setLiveStatus("");
+      setAnalysis({ path: r.path, label: r.label, from: r.from, to: r.to });
+      void bridge.status.add(`Opened ${r.label} in analysis mode`);
+      for (const warning of r.warnings) void bridge.status.add(`${r.label}: ${warning}`);
+    } else if (!r.cancelled && r.message) {
+      void bridge.status.add(r.message);
+    }
+  }, [bridge]);
+  const backToLive = useCallback(() => {
+    void bridge.analysis?.close();
+    setAnalysis(null);
+  }, [bridge]);
 
   useEffect(() => {
     let live = true;
@@ -90,6 +141,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
       if (name === "edit-data-streams") setStreams("edit");
       if (name === "remove-data-stream") setRemoving(true);
       if (name === "close-data-streams") void closeActive();
+      if (name === "open-project") void openFile();
       if (name === "preferences") {
         void bridge.theme.get().then(setTheme);
         void bridge.status.visible().then(setStatusBar);
@@ -97,7 +149,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
         setPreferences(true);
       }
     });
-  }, [bridge, detached, closeActive]);
+  }, [bridge, detached, closeActive, openFile]);
 
   /** Keep a live setting; the field shows what the main process kept. */
   const changeLive = useCallback(
@@ -158,14 +210,19 @@ export function Shell({ bridge, detached = false }: ShellProps) {
         <div id="action-bar-splitter" title="Drag to resize the sidebar" onMouseDown={drag} />
         <div id="main-content">
           <ChartBlock
-            bridge={bridge}
+            key={analysis ? `file:${analysis.path}` : "live"}
+            bridge={fileBridge ?? bridge}
             version={streamsVersion}
+            analysis={analysis}
+            onBackToLive={backToLive}
+            initialView={analysis ? null : liveView.current}
+            onViewState={analysis ? undefined : keepLiveView}
             onLiveStatus={setLiveStatus}
             hostOpen={logs.hostOpen}
             onHostToggle={logs.setHostOpen}
             lanes={(shown) => (
               <Lanes
-                request={bridge.sump.request}
+                request={(fileBridge ?? bridge).sump.request}
                 stream={shown.stream.id}
                 containers={shown.containers}
                 slots={shown.slots}
@@ -182,7 +239,12 @@ export function Shell({ bridge, detached = false }: ShellProps) {
               />
             )}
             panels={(shown) => (
-              <Panels bridge={bridge} shown={shown} order={logs.order} onOrder={logs.setOrder} />
+              <Panels
+                bridge={fileBridge ?? bridge}
+                shown={shown}
+                order={logs.order}
+                onOrder={logs.setOrder}
+              />
             )}
           />
         </div>
@@ -249,6 +311,8 @@ export function Shell({ bridge, detached = false }: ShellProps) {
         onStreamAction={action}
         streamsVersion={streamsVersion}
         persistent={liveStatus}
+        mode={analysis ? "analysis" : "live"}
+        onBackToLive={backToLive}
       />
     </>
   );
