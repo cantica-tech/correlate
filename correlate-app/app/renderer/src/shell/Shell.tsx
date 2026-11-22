@@ -18,6 +18,7 @@ import { Button, ContextMenu, Dialog, SegControl, Switch } from "../components/i
 import { Lanes } from "../logs/Lanes.js";
 import { Panels, useLogPrefs } from "../logs/Panels.js";
 import { MenuBar } from "../menubar/MenuBar.js";
+import { Transport } from "../recording/Transport.js";
 import { StatusBar } from "../statusbar/StatusBar.js";
 import { pauseStream } from "../streams/api.js";
 import { RemoveDialog } from "../streams/RemoveDialog.js";
@@ -26,6 +27,7 @@ import type {
   LayoutChange,
   LiveSettings,
   ProjectState,
+  RecordingState,
   ShellBridge,
   SidebarLayout,
   ThemeMode,
@@ -84,6 +86,9 @@ export function Shell({ bridge, detached = false }: ShellProps) {
   // A track's right-click menu and its Delay… dialog (REQ-000035-sJpO9KMY Requirement 5).
   const [trackMenu, setTrackMenu] = useState<{ name: string; x: number; y: number } | null>(null);
   const [delaying, setDelaying] = useState<{ name: string; secs: number } | null>(null);
+  // The recording session (REQ-000037-sJpO9KMY), and what Start would record.
+  const [recording, setRecording] = useState<RecordingState["status"]>("idle");
+  const recordTarget = useRef<{ stream: string; containers: string[]; host: boolean } | null>(null);
   const files = project?.open ?? { files: [], active: null };
   const analysis = files.files.find((f) => f.path === files.active) ?? null;
   // The live view, kept while a file is shown, restored on the way back.
@@ -259,6 +264,25 @@ export function Shell({ bridge, detached = false }: ShellProps) {
     };
   }, [bridge, analysis, take]);
 
+  // The session, told by the main process; a saved recording joined the project.
+  useEffect(() => {
+    if (detached || !bridge.recording) return;
+    void bridge.recording.get().then((r) => setRecording(r.status));
+    return bridge.recording.onChanged((r) => {
+      setRecording((before) => {
+        if (before === "stopped" && r.status === "idle")
+          void bridge.project?.get().then((p) => take(p));
+        return r.status;
+      });
+    });
+  }, [bridge, detached, take]);
+  const startRecording = useCallback(() => {
+    const target = recordTarget.current;
+    void bridge.recording?.start(target ?? undefined);
+  }, [bridge]);
+  const pauseRecording = useCallback(() => void bridge.recording?.pause(), [bridge]);
+  const stopRecording = useCallback(() => void bridge.recording?.stop(), [bridge]);
+
   /** Back to live tracking: the files stay open. */
   const backToLive = useCallback(() => {
     void bridge.analysis?.close();
@@ -344,9 +368,22 @@ export function Shell({ bridge, detached = false }: ShellProps) {
       if (name === "save-project") return saveProject();
       if (name === "save-project-as") return saveProjectAs();
       if (name === "add-files") return addFiles();
+      if (name === "start-recording") return startRecording();
+      if (name === "pause-recording") return pauseRecording();
+      if (name === "stop-recording") return stopRecording();
       void bridge.menu.action(name);
     },
-    [bridge, newProject, openProject, saveProject, saveProjectAs, addFiles],
+    [
+      bridge,
+      newProject,
+      openProject,
+      saveProject,
+      saveProjectAs,
+      addFiles,
+      startRecording,
+      pauseRecording,
+      stopRecording,
+    ],
   );
 
   // Drag the splitter to resize, as cttc's (app.js:4512-4536).
@@ -420,6 +457,17 @@ export function Shell({ bridge, detached = false }: ShellProps) {
             key={analysis ? `file:${analysis.path}:${shown}` : "live"}
             bridge={fileBridge ?? bridge}
             version={streamsVersion + tracksVersion}
+            transport={(target) => {
+              recordTarget.current = target;
+              return (
+                <Transport
+                  status={recording}
+                  onStart={startRecording}
+                  onPause={pauseRecording}
+                  onStop={stopRecording}
+                />
+              );
+            }}
             onLegendMenu={analysis ? (name, x, y) => setTrackMenu({ name, x, y }) : undefined}
             analysis={analysis}
             onBackToLive={backToLive}
@@ -601,6 +649,7 @@ export function Shell({ bridge, detached = false }: ShellProps) {
         streamsVersion={streamsVersion}
         persistent={liveStatus}
         mode={analysis ? "analysis" : "live"}
+        recording={recording}
         onBackToLive={backToLive}
       />
     </>

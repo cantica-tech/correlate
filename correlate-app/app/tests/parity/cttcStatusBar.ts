@@ -57,6 +57,14 @@ export function cttcStatusBar(open: StatusBarCase, times: Record<string, string>
     `<span id="status-bar-mode-live" class="toolbar-mode-icon"${open === "analysis" ? " hidden" : ""} title="Live tracking">${svg("track")}</span>` +
     `<span id="status-bar-mode-record" class="toolbar-mode-icon"${open === "analysis" ? "" : " hidden"} title="Analysis mode">${svg("analysis-mode-status-bar")}</span>` +
     '<span class="toolbar-mode-divider"></span>' +
+    // cttc's recording indicator (index.html:289-291), idle: hidden (REQ-000037-sJpO9KMY).
+    (open === "recording"
+      ? '<span id="status-bar-recording-dot" class="recording-dot" data-state="recording" title="Recording"></span>'
+      : '<span id="status-bar-recording-dot" class="recording-dot" hidden title="Recording"></span>') +
+    '<span id="status-bar-recording-glyph" hidden title="Recording paused">⏸</span>' +
+    (open === "recording"
+      ? '<span id="status-bar-recording-text">recording</span>'
+      : '<span id="status-bar-recording-text" hidden></span>') +
     `<span id="app-status-bar-text">${text(ARRIVING.text)}</span>` +
     '<span class="status-bar-divider"></span>' +
     `<div id="server-status" class="server-status${open === "switcher" ? " open" : ""}" data-state="up">` +

@@ -53,7 +53,8 @@
         "renderer/src/menubar/menubar.css",
         "renderer/src/streams/streams.css",
         "renderer/src/charts/charts.css",
-        "renderer/src/logs/logs.css"
+        "renderer/src/logs/logs.css",
+        "renderer/src/recording/recording.css"
       ],
       "linter": {
         "rules": {

@@ -18,10 +18,12 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, safeStorage } = 
 const path = require("node:path");
 const {
   ActiveStreams,
+  addFiles,
   ActiveSumps,
   Auditor,
   connectSsh,
   defaultSettingsPath,
+  diskDeps,
   fieldMenuTemplate,
   filesFromArgv,
   fileRequest,
@@ -39,6 +41,8 @@ const {
   OPENED_EXTENSIONS,
   OpenFiles,
   Projects,
+  RECORDING_CHANGED_EVENT,
+  RecordingSession,
   openCatalog,
   openVault,
   registerMenuIpc,
@@ -47,6 +51,7 @@ const {
   registerLiveIpc,
   registerLogsIpc,
   registerPickerIpc,
+  registerRecordingIpc,
   registerProjectIpc,
   registerSeriesIpc,
   registerProvisionIpc,
@@ -359,6 +364,42 @@ app.whenReady().then(() => {
   registerStatusIpc(ipcMain, notifications, settings, broadcast);
   // The live view's settings, every window told of a change (REQ-000031).
   registerLiveIpc(ipcMain, settings, broadcast);
+  // The recording session (REQ-037): one for the app; its segments come from
+  // the Sump it started on, saved where the user chooses, joining the project.
+  const dataDir = path.dirname(defaultSettingsPath(process.env));
+  const recording = new RecordingSession({
+    scratch: path.join(dataDir, "recording-in-progress.recording"),
+    fetchSegment: (sump, query) =>
+      handleSumpRequest(
+        { sump, method: "GET", path: "/records/segment", query },
+        sumps,
+        tokens,
+        relogin,
+        undefined,
+        lifecycle,
+      ),
+    ...diskDeps,
+    askSave: async (suggested) => {
+      const id = mainWindow?.webContents.id;
+      const file = id === undefined ? null : projects.view(id).file;
+      const options = {
+        title: "Save Recording",
+        defaultPath: path.join(file ? path.dirname(file) : dataDir, suggested),
+        filters: [{ name: "Recordings", extensions: ["recording"] }],
+      };
+      const r = mainWindow
+        ? await dialog.showSaveDialog(mainWindow, options)
+        : await dialog.showSaveDialog(options);
+      return r.canceled || !r.filePath ? null : r.filePath;
+    },
+    addToProject: (file) => {
+      if (mainWindow) projects.change(mainWindow.webContents.id, (p) => addFiles(p, [file]));
+    },
+    notify: (text) => notifications.add(text),
+    changed: (state) => broadcast(RECORDING_CHANGED_EVENT, state),
+  });
+  registerRecordingIpc(ipcMain, recording, (event) => activeSumps.get(event.sender.id));
+  recording.startTicking();
   // A Sump a window is on is probed every 5 s, the others every 30 s.
   const probe = new HealthProbe(lifecycle, sumps, { inUse: () => activeSumps.inUse() });
   probe.start();

@@ -15,7 +15,14 @@ import {
 } from "react";
 import { Button, ContextMenu, Dialog, type MenuEntry } from "../components/index.js";
 import { Icon } from "../icons/Icon.js";
-import type { ListedSump, Notice, ShellBridge, StateRecord } from "../shell/bridge.js";
+import { recordingText } from "../recording/Transport.js";
+import type {
+  ListedSump,
+  Notice,
+  RecordingState,
+  ShellBridge,
+  StateRecord,
+} from "../shell/bridge.js";
 import { NOT_YET } from "../shell/sections.js";
 import { StreamPill } from "../streams/StreamPill.js";
 import { PILL_WORDS, pillState, statusRows, whereIs } from "./pill.js";
@@ -55,6 +62,8 @@ export interface StatusBarProps {
    */
   mode?: "live" | "analysis";
   onBackToLive?: () => void;
+  /** The recording session's state: cttc's dot, pause glyph and text (REQ-000037-sJpO9KMY). */
+  recording?: RecordingState["status"];
 }
 
 /** The status bar. */
@@ -66,6 +75,7 @@ export function StatusBar({
   persistent = "",
   mode = "live",
   onBackToLive,
+  recording = "idle",
 }: StatusBarProps) {
   const [visible, setVisible] = useState(true);
   const [history, setHistory] = useState<Notice[]>([]);
@@ -223,6 +233,23 @@ export function StatusBar({
         <Icon name="analysis-mode-status-bar" />
       </span>
       <span className="toolbar-mode-divider" />
+      <span
+        id="status-bar-recording-dot"
+        className="recording-dot"
+        hidden={recording === "idle" || recording === "paused"}
+        data-state={recording}
+        title={recording === "stopped" ? "Recording stopped -- not yet saved" : "Recording"}
+      />
+      <span
+        id="status-bar-recording-glyph"
+        hidden={recording !== "paused"}
+        title="Recording paused"
+      >
+        ⏸
+      </span>
+      <span id="status-bar-recording-text" hidden={recording === "idle"}>
+        {recordingText(recording)}
+      </span>
       <span id="app-status-bar-text">{persistent || message}</span>
       <span className="status-bar-divider" />
       <div

@@ -1,0 +1,63 @@
+/*
+ * The recording controls (REQ-000037-sJpO9KMY, br-STYLE-000001-sJpO9KMY):
+ * cttc's rules, verbatim, each block headed by its lines in cttc's style.css.
+ */
+
+/* cttc style.css:308-359 */
+.recording-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 4px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+#btn-start-recording[data-state="recording"] .recording-dot,
+#status-bar-recording-dot[data-state="recording"] {
+  background: var(--critical);
+  animation: recording-pulse 1.5s ease-in-out infinite;
+}
+#btn-start-recording[data-state="stopped"] .recording-dot,
+#status-bar-recording-dot[data-state="stopped"] {
+  background: var(--warning);
+  animation: recording-pulse 1.5s ease-in-out infinite;
+}
+/* the button's own ⏺ glyph (white/light in dark mode, since it's plain
+   button text) would otherwise sit right next to the red dot, reading as
+   two dots at once -- hidden whenever the dot itself is showing a real
+   state (recording/stopped) so only one is ever visible. Paused is the
+   one exception: the glyph itself becomes the indicator there (solid
+   orange, not blinking -- blinking is reserved for the pause button/status
+   bar glyph below, so only one thing on screen blinks at a time), which
+   is why "paused" isn't in this hide list. */
+#btn-start-recording[data-state="recording"] #recording-glyph,
+#btn-start-recording[data-state="stopped"] #recording-glyph {
+  display: none;
+}
+#btn-start-recording[data-state="paused"] #recording-glyph {
+  color: var(--warning);
+}
+/* Pause button/status-bar pause glyph -- both blink orange while actually
+   paused, so "paused" reads clearly from either without relying solely on
+   the small recording-dot. #pause-glyph stays inside a disabled button
+   while paused (there's nothing left to pause further) -- opacity is
+   restored to 1 here, overriding the shared button:disabled dimming
+   below, since a dimmed "blinking orange" reads as barely-there instead
+   of as the state indicator it's meant to be. */
+#btn-pause-recording[data-state="paused"] {
+  opacity: 1;
+}
+#btn-pause-recording[data-state="paused"] #pause-glyph,
+#status-bar-recording-glyph {
+  color: var(--warning);
+  animation: recording-pulse 1.5s ease-in-out infinite;
+}
+@keyframes recording-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}

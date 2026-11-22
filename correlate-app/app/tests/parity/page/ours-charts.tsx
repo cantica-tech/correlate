@@ -12,6 +12,7 @@ import { createRoot } from "react-dom/client";
 import "../../../renderer/src/theme/tokens.css";
 import "../../../renderer/src/theme/cttc.generated.css";
 import { ChartBlock, type ChartsShown } from "../../../renderer/src/charts/ChartBlock.js";
+import { Transport } from "../../../renderer/src/recording/Transport.js";
 import type { ShellBridge } from "../../../renderer/src/shell/bridge.js";
 import { LivePreferences } from "../../../renderer/src/shell/LivePreferences.js";
 
@@ -43,6 +44,12 @@ function RecentreOnce({ shown }: { shown: ChartsShown }) {
 }
 
 const paused = location.search.includes("paused");
+// `?rec=<status>`: the recording transport in that state (REQ-000037-sJpO9KMY).
+const rec = new URLSearchParams(location.search).get("rec") as
+  | "idle"
+  | "recording"
+  | "paused"
+  | null;
 // `?file`: the analysis view's head, with "Back to live tracking" (REQ-000033-sJpO9KMY).
 const file = location.search.includes("file");
 // `?host-loading`: the host has no figures yet; `?host-folded`: its block folded (REQ-000032-sJpO9KMY).
@@ -71,6 +78,13 @@ if (root)
           bridge={bridge}
           panels={paused ? (shown) => <RecentreOnce shown={shown} /> : undefined}
           hostOpen={!hostFolded}
+          transport={
+            rec
+              ? () => (
+                  <Transport status={rec} onStart={() => {}} onPause={() => {}} onStop={() => {}} />
+                )
+              : undefined
+          }
           analysis={
             file ? { from: Date.UTC(2026, 7, 6, 12, 0), to: Date.UTC(2026, 7, 6, 12, 4) } : null
           }

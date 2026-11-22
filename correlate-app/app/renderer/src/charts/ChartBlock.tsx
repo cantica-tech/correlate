@@ -123,6 +123,12 @@ export interface ChartBlockProps {
   analysis?: { from: number; to: number } | null;
   /** "Back to live tracking" (REQ-000033-sJpO9KMY). */
   onBackToLive?: () => void;
+  /**
+   * The recording transport, in the live view's head (REQ-000037-sJpO9KMY),
+   * given what Start would record: the active stream, its followed
+   * containers, and whether its host is read.
+   */
+  transport?: (target: { stream: string; containers: string[]; host: boolean } | null) => ReactNode;
   /** A legend entry's right-click: the track's menu (REQ-000035-sJpO9KMY). */
   onLegendMenu?: (name: string, x: number, y: number) => void;
   /** The live view to start from (the one saved when a file was opened). */
@@ -172,6 +178,7 @@ export function ChartBlock({
   analysis = null,
   onBackToLive,
   onLegendMenu,
+  transport,
   initialView = null,
   onViewState,
 }: ChartBlockProps) {
@@ -467,6 +474,19 @@ export function ChartBlock({
         <div id="svc-graph" className="graph-block" ref={chartsBox}>
           <div id="chart-head">
             <span className="panel-head-title">Telemetry</span>
+            {!analysis && transport ? (
+              <div className="panel-head-right">
+                {transport(
+                  stream
+                    ? {
+                        stream: stream.id,
+                        containers: stream.followed?.containers ?? [],
+                        host: hostCollected(stream),
+                      }
+                    : null,
+                )}
+              </div>
+            ) : null}
             {analysis ? (
               <div className="panel-head-right">
                 <button

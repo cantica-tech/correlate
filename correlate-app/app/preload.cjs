@@ -30,7 +30,8 @@
  * settings (REQ-000031-sJpO9KMY); `window.correlate.analysis` the analysis
  * view's open files, read by the main process (REQ-000033-sJpO9KMY);
  * `window.correlate.project` the window's project (REQ-000035-sJpO9KMY);
- * `window.correlate.opened` the files the OS hands the app (REQ-000036-sJpO9KMY).
+ * `window.correlate.opened` the files the OS hands the app (REQ-000036-sJpO9KMY);
+ * `window.correlate.recording` the recording session (REQ-000037-sJpO9KMY).
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -92,6 +93,14 @@ const PROJECT_CHANNELS = {
 /** Must match the channels in `main/src/opened.ts`. */
 const OPEN_TAKE_CHANNEL = "open:take";
 const OPEN_FILES_EVENT = "open:files";
+/** Must match the channels in `main/src/recording/ipc.ts`. */
+const RECORDING_CHANNELS = {
+  get: "recording:get",
+  start: "recording:start",
+  pause: "recording:pause",
+  stop: "recording:stop",
+  changed: "recording:changed",
+};
 /** Must match the channels in `main/src/live.ts`. */
 const LIVE_GET_CHANNEL = "live:get";
 const LIVE_SET_CHANNEL = "live:set";
@@ -228,6 +237,18 @@ contextBridge.exposeInMainWorld("correlate", {
     change: (change) => ipcRenderer.invoke(PROJECT_CHANNELS.change, change),
     /** The shown file's tracks: `{ item, tracks }`. */
     tracks: () => ipcRenderer.invoke(PROJECT_CHANNELS.tracks),
+  },
+  recording: {
+    /** The recording session's state. */
+    get: () => ipcRenderer.invoke(RECORDING_CHANNELS.get),
+    /** Start recording `{ stream, containers, host }` on this window's Sump, or resume. */
+    start: (target) => ipcRenderer.invoke(RECORDING_CHANNELS.start, target),
+    /** Pause: the segment saved to the scratch recording. */
+    pause: () => ipcRenderer.invoke(RECORDING_CHANNELS.pause),
+    /** Stop: then the save dialog. */
+    stop: () => ipcRenderer.invoke(RECORDING_CHANNELS.stop),
+    /** Hear the session change; returns the function that stops listening. */
+    onChanged: (listener) => listen(RECORDING_CHANNELS.changed, listener),
   },
   opened: {
     /** The window is ready: the files the OS handed the app so far, and those ignored. */

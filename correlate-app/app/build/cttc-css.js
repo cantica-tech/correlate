@@ -29,6 +29,7 @@ export const SOURCES = [
   "streams/streams.css",
   "charts/charts.css",
   "logs/logs.css",
+  "recording/recording.css",
 ];
 
 /** Where the merged stylesheet goes. */

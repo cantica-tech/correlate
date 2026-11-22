@@ -39,7 +39,11 @@ export const ARRIVING: Notice = {
 };
 
 /** The cases, each with what is open. */
-/** `analysis`: the bar in the analysis view, its mode icon swapped (REQ-000033-sJpO9KMY). */
+/**
+ * `analysis`: the bar in the analysis view, its mode icon swapped
+ * (REQ-000033-sJpO9KMY); `recording`: its recording dot and text
+ * (REQ-000037-sJpO9KMY).
+ */
 export const STATUSBAR_CASES = [
   "bar",
   "switcher",
@@ -47,5 +51,6 @@ export const STATUSBAR_CASES = [
   "status",
   "history",
   "analysis",
+  "recording",
 ] as const;
 export type StatusBarCase = (typeof STATUSBAR_CASES)[number];

@@ -56,6 +56,22 @@ export function cttcBackToLive(): string {
   return `<div class="panel-head-right"><button id="btn-back-to-live" class="flat-action" title="Currently in analysis mode -- click to show live data again">${ICONS.track.replace("<svg ", '<svg class="flat-action-icon" ')}Back to live tracking</button></div>`;
 }
 
+/**
+ * cttc's recording transport (`index.html:183-187`) in a state, as
+ * `syncRecordingMenu` leaves it (`app.js:3316`), in the charts' head's
+ * right cluster, where the app puts it (REQ-000037-sJpO9KMY).
+ */
+export function cttcTransport(status: "idle" | "recording" | "paused"): string {
+  const startTitle =
+    status === "recording"
+      ? "Recording"
+      : status === "paused"
+        ? "Resume Recording"
+        : "Start Recording";
+  const off = (yes: boolean) => (yes ? " disabled" : "");
+  return `<div class="panel-head-right"><span class="btn-group" id="recording-transport"><button id="btn-start-recording" data-state="${status}" title="${startTitle}"${off(status === "recording")}><span id="recording-glyph">⏺</span><span id="recording-dot" class="recording-dot"></span></button><button id="btn-pause-recording" data-state="${status}" title="${status === "paused" ? "Recording Paused" : "Pause Recording"}"${off(status !== "recording")}><span id="pause-glyph">⏸</span></button><button id="btn-stop-recording" title="Stop Recording"${off(status === "idle")}>⏹</button></span></div>`;
+}
+
 /** cttc's navigator (`index.html:240-245`), "now" live or not. */
 export function cttcNav(live: boolean): string {
   return `<div id="chart-nav" class="timeline-nav" title="Drag the thumb or click the track to pan · click “now” to jump to the present and resume following it"><div class="tl-track"><div class="tl-thumb"></div><span class="tl-now-label" data-live="${live}">now</span></div></div>`;

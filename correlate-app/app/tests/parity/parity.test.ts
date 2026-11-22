@@ -25,6 +25,7 @@ import {
   cttcNav,
   cttcNavScript,
   cttcSwatchScript,
+  cttcTransport,
 } from "./cttcCharts.js";
 import { cttcLivePrefs } from "./cttcLive.js";
 import { cttcLanesHead, cttcPanels, cttcRowsScript } from "./cttcLogs.js";
@@ -177,7 +178,7 @@ async function captureStatusBar(
     await page.emulateMedia({ colorScheme: theme });
     for (const name of STATUSBAR_CASES) {
       const url = pathToFileURL(path.join(here, `page/${side}-statusbar.html`)).href;
-      await page.goto(name === "analysis" ? `${url}?analysis` : url);
+      await page.goto(name === "analysis" || name === "recording" ? `${url}?${name}` : url);
       if (side === "cttc") {
         const times: Record<string, string> = {};
         for (const n of [...HISTORY, ARRIVING]) {
@@ -368,6 +369,21 @@ async function captureCharts(side: "cttc" | "ours", pictures: Map<string, Buffer
         pictures.set(`host-loading-line-${theme}`, await shoot("#host-loading"));
       }
     }
+    // The recording transport, idle, recording and paused (REQ-000037-sJpO9KMY).
+    for (const status of ["idle", "recording", "paused"] as const) {
+      await page.goto(
+        `${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?rec=${status}`,
+      );
+      if (side === "cttc") {
+        await page.evaluate(
+          `(() => { document.getElementById("stage").innerHTML = ${JSON.stringify(cttcChartBlock())}; document.getElementById("chart-head").insertAdjacentHTML("beforeend", ${JSON.stringify(cttcTransport(status))}); })()`,
+        );
+      }
+      await page.waitForSelector("#recording-transport");
+      await page.mouse.move(1, 1);
+      await page.evaluate("document.fonts.ready.then(() => true)");
+      pictures.set(`recording-transport-${status}-${theme}`, await shoot("#recording-transport"));
+    }
     // The analysis view's head: "Back to live tracking" (REQ-000033-sJpO9KMY).
     await page.goto(`${pathToFileURL(path.join(here, `page/${side}-charts.html`)).href}?file`);
     if (side === "cttc") {
@@ -481,6 +497,9 @@ describe.skipIf(process.platform !== "darwin")(
       "charts-nav",
       "charts-nav-paused",
       "charts-head-analysis",
+      "recording-transport-idle",
+      "recording-transport-recording",
+      "recording-transport-paused",
       "host-head",
       "host-head-folded",
       "host-loading-line",

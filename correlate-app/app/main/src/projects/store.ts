@@ -47,7 +47,7 @@ export interface SessionView {
 }
 
 /** Write `text` to `file` atomically: a temporary file beside it, renamed over it. */
-export function writeAtomic(file: string, text: string): void {
+export function writeAtomic(file: string, text: string | Buffer): void {
   mkdirSync(path.dirname(file), { recursive: true });
   const temp = `${file}.${randomBytes(4).toString("hex")}.tmp`;
   writeFileSync(temp, text, { mode: 0o644 });

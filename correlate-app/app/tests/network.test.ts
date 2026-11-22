@@ -155,6 +155,7 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       "stream",
       "analysis",
       "project",
+      "recording",
       "opened",
       "live",
       "series",
@@ -198,6 +199,23 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       ["project:change", { op: "unbind" }],
       ["project:addPaths", ["/r.recording"]],
     ]);
+    // The recording session: only its own channels (REQ-000037-sJpO9KMY).
+    const rec = (exposed.correlate as { recording: Record<string, (m?: unknown) => unknown> })
+      .recording;
+    expect(Object.keys(rec)).toEqual(["get", "start", "pause", "stop", "onChanged"]);
+    await rec.get?.();
+    await rec.start?.({ stream: "self", containers: ["web"], host: true });
+    await rec.pause?.();
+    await rec.stop?.();
+    expect(invoked.splice(0)).toEqual([
+      ["recording:get"],
+      ["recording:start", { stream: "self", containers: ["web"], host: true }],
+      ["recording:pause"],
+      ["recording:stop"],
+    ]);
+    const stopRec = rec.onChanged?.(() => {}) as () => void;
+    expect(listeners.has("recording:changed")).toBe(true);
+    stopRec();
     // Files the OS handed the app: only their own channels (REQ-000036-sJpO9KMY).
     const opened = (exposed.correlate as { opened: Record<string, (m?: unknown) => unknown> })
       .opened;

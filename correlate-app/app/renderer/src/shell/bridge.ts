@@ -92,6 +92,14 @@ export interface OpenList {
   active: string | null;
 }
 
+/** The recording session, as the main process tells it (REQ-000037-sJpO9KMY). */
+export interface RecordingState {
+  status: "idle" | "recording" | "paused" | "stopped";
+  target: { sump: string; stream: string; containers: string[]; host: boolean } | null;
+  segments: { from: number; to: number }[];
+  segmentStart: number | null;
+}
+
 /** The window's project, as the main process answers (REQ-000035-sJpO9KMY). */
 export interface ProjectState {
   ok: boolean;
@@ -161,6 +169,18 @@ export interface ShellBridge {
       item: string | null;
       tracks: Record<string, { delaySecs: number; hidden: boolean }>;
     }>;
+  };
+  /** The recording session (REQ-000037-sJpO9KMY). */
+  recording?: {
+    get(): Promise<RecordingState>;
+    start(target?: {
+      stream: string;
+      containers: string[];
+      host: boolean;
+    }): Promise<RecordingState>;
+    pause(): Promise<RecordingState>;
+    stop(): Promise<RecordingState>;
+    onChanged(listener: (state: RecordingState) => void): () => void;
   };
   /** Files the OS handed the app (REQ-000036-sJpO9KMY). */
   opened?: {

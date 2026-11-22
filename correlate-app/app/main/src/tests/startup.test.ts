@@ -106,6 +106,9 @@ describe("main.cjs starts", () => {
       "open:take",
       "project:get",
       "project:addPaths",
+      "recording:get",
+      "recording:start",
+      "recording:stop",
     ]) {
       expect(channels).toContain(channel);
     }

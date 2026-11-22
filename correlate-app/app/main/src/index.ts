@@ -40,10 +40,13 @@ export { Notifications, notifyLifecycle, registerStatusIpc } from "./notify.js";
 export { filesFromArgv, Inbox, OPEN_FILES_EVENT, registerOpenIpc } from "./opened.js";
 export { registerPickerIpc } from "./picker.js";
 export { registerProjectIpc, shownTracks } from "./projects/ipc.js";
+export { addFiles } from "./projects/project.js";
 export { Projects } from "./projects/store.js";
 export { registerProvisionIpc } from "./provision/ipc.js";
 export { runCommand } from "./provision/runner.js";
 export { connectSsh } from "./provision/ssh.js";
+export { diskDeps, RECORDING_CHANGED_EVENT, registerRecordingIpc } from "./recording/ipc.js";
+export { RecordingSession } from "./recording/session.js";
 export { registerSeriesIpc } from "./series.js";
 export {
   registerSidebarIpc,

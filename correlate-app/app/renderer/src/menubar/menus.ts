@@ -32,13 +32,19 @@ export interface Menu {
   items: readonly MenuLine[];
 }
 
-/** The File menu's project entries, run by the window, not the main process (REQ-000035-sJpO9KMY). */
+/**
+ * The File menu's project (REQ-000035-sJpO9KMY) and recording
+ * (REQ-000037-sJpO9KMY) entries, run by the window, not the main process.
+ */
 export const PROJECT_ACTIONS: readonly string[] = [
   "new-project",
   "open-project",
   "save-project",
   "save-project-as",
   "add-files",
+  "start-recording",
+  "pause-recording",
+  "stop-recording",
 ];
 
 export const MENUS: readonly Menu[] = [
@@ -77,6 +83,23 @@ export const MENUS: readonly Menu[] = [
         icon: "opened-data",
         title: "Add cttc recordings or metrics to the project",
       },
+      "separator",
+      {
+        action: "start-recording",
+        label: "Start or Resume Recording",
+        title: "Record the active data stream, or resume a paused recording",
+      },
+      {
+        action: "pause-recording",
+        label: "Pause Recording",
+        title: "End this segment; Start resumes with a new one",
+      },
+      {
+        action: "stop-recording",
+        label: "Stop Recording…",
+        title: "Finish the recording and choose where to save it",
+      },
+      "separator",
       {
         action: "export",
         label: "Export…",

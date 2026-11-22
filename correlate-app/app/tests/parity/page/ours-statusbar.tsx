@@ -53,6 +53,7 @@ if (root) {
         bridge={bridge}
         onStreamAction={() => {}}
         mode={location.search.includes("analysis") ? "analysis" : "live"}
+        recording={location.search.includes("recording") ? "recording" : "idle"}
       />
     </div>,
   );
