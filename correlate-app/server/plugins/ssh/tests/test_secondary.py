@@ -2,7 +2,9 @@
 its secondary only through its own SSH forward, logged in with its key."""
 
 import asyncio
+import json
 import socket
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -10,10 +12,18 @@ import fakeredis.aioredis
 import httpx
 import pytest
 from sump_plugin_ssh.identity import ensure_identity
+from sump_plugin_ssh.plugin import SumpPluginSSH
 from sump_plugin_ssh.secondary import Forward, SecondaryClient, ssh_channel_opener
+from sump_plugin_ssh.streams import StreamDef
 
 from correlate_sump.app import create_app
+from correlate_sump.ingest import stream_key
 from correlate_sump.users import UserStore
+
+T0 = datetime(2026, 11, 22, 12, 0, tzinfo=UTC)
+
+#: Each secondary's Redis, by its transport, to put records in.
+_REDIS: dict[int, Any] = {}
 
 
 class SocketChannel:
@@ -131,12 +141,14 @@ def secondary(tmp_path: Path):
     store = UserStore(tmp_path / "secondary")
     store.set_owner("alice", ensure_identity(tmp_path / "owner").public_key())
     store.add_key("parent-sump", parent.public_key())
+    redis = fakeredis.aioredis.FakeRedis()
     app = create_app(
-        redis_client=fakeredis.aioredis.FakeRedis(),
+        redis_client=redis,
         env={"SUMP_DATA_DIR": str(tmp_path / "secondary")},
         start_ingest=False,
     )
-    return parent, httpx.ASGITransport(app=app)
+    _REDIS[id(transport := httpx.ASGITransport(app=app))] = redis
+    return parent, transport
 
 
 async def _url() -> str:
@@ -171,3 +183,55 @@ async def test_a_refused_login_and_an_unreachable_secondary_are_said(secondary, 
     lost = SecondaryClient("parent-sump", stranger.private_key, gone)
     status = await lost.check()
     assert status["reachable"] is False and "unreachable" in status["error"]
+
+
+async def _ingest(transport: httpx.ASGITransport, source: str, minutes: range) -> None:
+    redis = _REDIS[id(transport)]
+    for m in minutes:
+        ts = (T0 + timedelta(minutes=m)).isoformat()
+        record = {"ts": ts, "kind": "log", "source": source, "message": f"there {m}"}
+        await redis.xadd(stream_key(source, "log"), {"json": json.dumps(record)})
+
+
+async def test_fetches_the_secondary_s_records_page_after_page(secondary, monkeypatch) -> None:
+    parent, transport = secondary
+    await _ingest(transport, "self/web", range(0, 25))
+    monkeypatch.setattr("sump_plugin_ssh.secondary.RECORDS_PAGE", 4)
+    client = SecondaryClient("parent-sump", parent.private_key, _url, transport=transport)
+    got = await client.records("self/web", "log", T0 + timedelta(minutes=10))
+    assert [r["message"] for r in got] == [f"there {m}" for m in range(10, 25)]
+
+
+async def test_a_promoted_source_is_answered_from_self_on_its_secondary(
+    secondary, tmp_path, monkeypatch
+) -> None:
+    parent, transport = secondary
+    await _ingest(transport, "self/web", range(0, 3))
+    plugin = SumpPluginSSH({"SUMP_DATA_DIR": str(tmp_path / "parent-data")})
+    plugin.store().add(StreamDef("ssh:ops@lab:22", "ssh", user="ops", host="lab", port=22))
+    sid = "ssh:ops@lab:22"
+    plugin.store().set_secondary(
+        sid,
+        {
+            "host": "lab",
+            "ssh_port": 22,
+            "ssh_user": "ops",
+            "sump_port": 8775,
+            "owner": "alice",
+            "parent_user": "parent-sump",
+            "promoted_at": int((T0 + timedelta(minutes=1)).timestamp() * 1000),
+        },
+    )
+    client = SecondaryClient("parent-sump", parent.private_key, _url, transport=transport)
+    monkeypatch.setattr(plugin, "secondary_client", lambda _sid: client)
+    assert plugin.federated_source("self/web") is None
+    assert plugin.federated_source(sid) is None
+    federated = plugin.federated_source(f"{sid}/web")
+    assert federated is not None and federated.cut == T0 + timedelta(minutes=1)
+    got = await federated.fetch("log")
+    assert [(r["source"], r["message"]) for r in got] == [
+        (f"{sid}/web", "there 1"),
+        (f"{sid}/web", "there 2"),
+    ]
+    await _ingest(transport, "self/web", range(3, 4))
+    assert len(await federated.fetch("log")) == 2  # reused for a moment

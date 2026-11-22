@@ -100,6 +100,11 @@ class SumpHookSpecs:
     def contribute_routes(self, app: Any) -> None:
         """Optionally add custom API routes to the Sump's FastAPI app."""
 
+    @hookspec(firstresult=True)
+    def federated_source(self, source: str) -> Any:
+        """A `federation.Federated` when `source` is collected elsewhere from
+        some time on (a promoted stream, br-FED-000002-sJpO9KMY), else None."""
+
     @hookspec
     def on_health_check(self) -> bool | None:
         """Report this plugin's health. `None` means "not applicable"."""

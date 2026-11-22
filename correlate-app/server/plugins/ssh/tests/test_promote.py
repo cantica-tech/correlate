@@ -2,6 +2,7 @@
 secondary Sump on a stream's host through the parent's SSH access."""
 
 import base64
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -121,3 +122,22 @@ async def test_refuses_names_and_images_a_shell_would_read(override) -> None:
     with pytest.raises(PromoteError, match="check"):
         await _promote(shell, **override)
     assert shell.scripts == []
+
+
+async def test_the_secondary_follows_what_the_stream_followed_here() -> None:
+    """br-FED-000003-sJpO9KMY: it collects on its own, from its first start."""
+    shell = Shell()
+    await _promote(shell, followed={"containers": ["web", "db"], "services": ["api"]})
+    write = next(s for s in shell.scripts if "streams.json" in s)
+    inner = re.search(r"printf %s (\S+) \| base64 -d > /var/lib/correlate-sump/streams.json", write)
+    assert inner is not None
+    saved = json.loads(base64.b64decode(inner.group(1)))
+    assert saved["followed"] == {"self": {"containers": ["web", "db"], "services": ["api"]}}
+    after = shell.scripts[shell.scripts.index(write) + 1 :]
+    assert "restart sump" in after[0] and "exec -T sump python -c" in after[1]
+
+
+async def test_nothing_followed_writes_nothing() -> None:
+    shell = Shell()
+    await _promote(shell, followed={"containers": [], "services": []})
+    assert not any("streams.json" in s or "restart" in s for s in shell.scripts)

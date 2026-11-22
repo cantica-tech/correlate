@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import re
 import shlex
 from collections.abc import Awaitable, Callable
@@ -32,6 +33,8 @@ SECONDARY_PROJECT = "correlate-sump-secondary"
 SECONDARY_PORT = 8775
 SECONDARY_FLUENT_PORT = 5150
 DOCKER_SOCKET = "/var/run/docker.sock"
+#: The Sump's data folder in its container.
+DATA_DIR = "/var/lib/correlate-sump"
 #: A user name on a Sump, as `correlate_sump.users` accepts.
 _USER = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 #: An image reference: no shell character.
@@ -81,11 +84,11 @@ def compose_file(image: str, port: int, socket_group: int, fluent_port: int) -> 
             f'      - "127.0.0.1:{port}:8765"',
             f'      - "127.0.0.1:{fluent_port}:5140"',
             "    environment:",
-            "      SUMP_DATA_DIR: /var/lib/correlate-sump",
+            f"      SUMP_DATA_DIR: {DATA_DIR}",
             "    group_add:",
             f'      - "{socket_group}"',
             "    volumes:",
-            "      - sump-data:/var/lib/correlate-sump",
+            f"      - sump-data:{DATA_DIR}",
             f"      - {DOCKER_SOCKET}:{DOCKER_SOCKET}",
             "volumes:",
             "  sump-data:",
@@ -111,8 +114,12 @@ async def provision_secondary(
     health_timeout: float = 60.0,
     poll: float = 2.0,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    followed: dict[str, list[str]] | None = None,
 ) -> None:
-    """Provision the secondary on `shell`'s host, or leave nothing behind."""
+    """Provision the secondary on `shell`'s host, or leave nothing behind.
+    `followed` (`containers`, `services`) is what the stream followed here:
+    the secondary follows it on its own host ("self") from its first start
+    after provisioning (br-FED-000003)."""
     for name, value in (("owner", owner), ("parent", parent_user)):
         if not _USER.match(value):
             raise PromoteError("check", f"{name} {value!r} is not a user name")
@@ -159,17 +166,21 @@ async def provision_secondary(
             "import json,urllib.request;"
             "print(json.load(urllib.request.urlopen('http://127.0.0.1:8765/health'))['redis'])"
         )
-        waited = 0.0
-        while True:
-            result = await shell.run(
-                ["sh", "-c", f"{compose} exec -T sump python -c {shlex.quote(probe)}"]
-            )
-            if result.returncode == 0 and str(result.stdout).strip() == "True":
-                break
-            if waited >= health_timeout:
-                raise PromoteError("wait for the Sump", "no healthy answer on the host")
-            await sleep(poll)
-            waited += poll
+
+        async def healthy() -> None:
+            waited = 0.0
+            while True:
+                result = await shell.run(
+                    ["sh", "-c", f"{compose} exec -T sump python -c {shlex.quote(probe)}"]
+                )
+                if result.returncode == 0 and str(result.stdout).strip() == "True":
+                    return
+                if waited >= health_timeout:
+                    raise PromoteError("wait for the Sump", "no healthy answer on the host")
+                await sleep(poll)
+                waited += poll
+
+        await healthy()
         users = f"{compose} exec -T sump python -m correlate_sump.users"
         await must(
             "make you its owner",
@@ -179,6 +190,26 @@ async def provision_secondary(
             "add the parent as a user",
             f"printf %s {_b64(parent_key)} | base64 -d | {users} add-key --user {parent_user}",
         )
+        if followed and (followed.get("containers") or followed.get("services")):
+            streams = json.dumps(
+                {
+                    "streams": [],
+                    "followed": {
+                        "self": {
+                            "containers": list(followed.get("containers", [])),
+                            "services": list(followed.get("services", [])),
+                        }
+                    },
+                }
+            )
+            # Written by the Sump's own user, read at its next start.
+            await must(
+                "give it what the stream followed",
+                f"{compose} exec -T sump sh -c "
+                + shlex.quote(f"printf %s {_b64(streams)} | base64 -d > {DATA_DIR}/streams.json"),
+            )
+            await must("restart the Sump", f"{compose} restart sump")
+            await healthy()
     except Exception:
         if started:
             await shell.run(["sh", "-c", f"{compose} down -v --rmi local; rm -rf {SECONDARY_DIR}"])

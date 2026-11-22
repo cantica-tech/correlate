@@ -17,6 +17,7 @@ import contextlib
 import logging
 import threading
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -31,6 +32,9 @@ logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT_S = 20.0
 #: How much one relay read moves at a time.
 CHUNK = 65536
+#: Records asked for per page (the Sump's `MAX_LIMIT`), and at most how many pages.
+RECORDS_PAGE = 1000
+MAX_PAGES = 200
 
 
 class ChannelLike(Protocol):
@@ -208,3 +212,29 @@ class SecondaryClient:
             self.error = f"the secondary answered {response.status_code}"
             return {"reachable": False, "error": self.error}
         return {"reachable": True, "error": None}
+
+    async def records(self, source: str, kind: str, start: datetime) -> list[dict[str, Any]]:
+        """Every record of the secondary's `source` and `kind` from `start` on,
+        oldest first (`/records`, page after page). Raises `SecondaryError`."""
+        cursor_name = f"{kind}_cursor"
+        params: dict[str, Any] = {
+            "source": source,
+            "kind": kind,
+            "from": start.isoformat(),
+            "to": (datetime.now(UTC) + timedelta(minutes=1)).isoformat(),
+            "limit": RECORDS_PAGE,
+        }
+        found: list[dict[str, Any]] = []
+        for _ in range(MAX_PAGES):
+            response = await self.request("GET", "/records", params=params)
+            if response.status_code != 200:
+                self.error = f"the secondary answered {response.status_code} for {source}"
+                raise SecondaryError(self.error)
+            body = response.json()
+            found.extend(body.get("records", []))
+            cursor = body.get(f"next_{cursor_name}")
+            if not cursor:
+                return found
+            params[cursor_name] = cursor
+        logger.warning("secondary: %s %s cut at %d pages", source, kind, MAX_PAGES)
+        return found

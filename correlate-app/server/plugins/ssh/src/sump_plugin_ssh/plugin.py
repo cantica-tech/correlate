@@ -21,9 +21,11 @@ import re
 import socket
 import time
 from dataclasses import asdict
+from datetime import UTC, datetime
 from typing import Any
 
 from correlate_sump.datasource import DataSource
+from correlate_sump.federation import Federated
 from correlate_sump.plugins import hookimpl
 from correlate_sump.transport import Transport
 from correlate_sump.users import UserStore, data_dir_from_env
@@ -38,6 +40,8 @@ from sump_plugin_ssh.secondary import Forward, SecondaryClient, ssh_channel_open
 from sump_plugin_ssh.streams import SELF_ID, Followed, StreamDef, StreamStore
 from sump_plugin_ssh.transport import LocalTransport, SSHTransport, forget_host_key
 
+#: How long fetched secondary records are reused.
+FETCH_CACHE_S = 2.0
 logger = logging.getLogger(__name__)
 
 PLUGIN_NAME = "ssh"
@@ -76,6 +80,9 @@ class SumpPluginSSH:
         self._image: str | None = None
         #: Promoted streams' forwards and clients, made on first use.
         self._secondaries: dict[str, tuple[Forward, SecondaryClient]] = {}
+        #: The secondaries' records lately fetched, by (source, kind): one
+        #: chart's queries in a row ask the secondary once.
+        self._fetched: dict[tuple[str, str], tuple[float, list[dict[str, Any]]]] = {}
         self._image_warned = False
 
     def _data_dir(self):
@@ -152,6 +159,7 @@ class SumpPluginSSH:
             owner_key=owner_key,
             parent_user=parent_user,
             parent_key=parent_key,
+            followed=asdict(self.store().followed(stream_id)),
         )
         secondary = asdict(
             Secondary(
@@ -295,6 +303,32 @@ class SumpPluginSSH:
                 await collection.stop()
 
         manager.add_background_task("collection", collect)
+
+    @hookimpl
+    def federated_source(self, source: str) -> Federated | None:
+        """A promoted stream's source, joined at its promotion time
+        (br-FED-000002, REQ-000052-sJpO9KMY): on its secondary the host is
+        "self", so `<stream>/<name>` is asked there as `self/<name>`."""
+        stream_id, sep, name = source.partition("/")
+        if not sep or not name:
+            return None
+        secondary = self.store().secondary(stream_id)
+        client = self.secondary_client(stream_id) if secondary else None
+        if secondary is None or client is None:
+            return None
+        cut = datetime.fromtimestamp(int(secondary["promoted_at"]) / 1000, UTC)
+
+        async def fetch(kind: str) -> list[dict[str, Any]]:
+            key = (source, kind)
+            cached = self._fetched.get(key)
+            if cached is not None and time.monotonic() - cached[0] < FETCH_CACHE_S:
+                return cached[1]
+            records = await client.records(f"{SELF_ID}/{name}", kind, cut)
+            renamed = [{**r, "source": source} for r in records]
+            self._fetched[key] = (time.monotonic(), renamed)
+            return renamed
+
+        return Federated(cut=cut, fetch=fetch)
 
     @hookimpl
     def contribute_routes(self, app: Any) -> None:

@@ -37,6 +37,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from correlate_sump import __version__
 from correlate_sump.buckets import query_buckets
+from correlate_sump.federation import Federated, FederatedRedis
 from correlate_sump.ingest import (
     DEFAULT_HOST,
     DEFAULT_PORT,
@@ -373,6 +374,16 @@ def create_app(
             "unavailable_data_sources": runtime.unavailable_data_sources() if runtime else [],
         }
 
+    def _federated(source: str) -> Federated | None:
+        try:
+            return plugin_manager.hook.federated_source(source=source)
+        except Exception:  # a plugin's failure must not fail the query
+            logger.exception("federation: federated_source(%s) failed", source)
+            return None
+
+    #: The query routes' Redis: promoted streams joined at their cut (br-FED-000002).
+    queries = FederatedRedis(redis_client, _federated)
+
     @app.get("/records")
     async def records(
         source: str,
@@ -389,7 +400,7 @@ def create_app(
         """`source`'s records between `from` and `to` (br-RECORD-000003-sJpO9KMY)."""
         try:
             return await query_records(
-                redis_client,
+                queries,
                 source,
                 kind=kind,
                 start=start,
@@ -421,7 +432,7 @@ def create_app(
             # `field` repeated, or comma-separated (the app's bridge sends one value).
             fields = [name for item in field for name in item.split(",") if name]
             return await query_buckets(
-                redis_client,
+                queries,
                 source,
                 fields=fields,
                 start=start,
@@ -446,7 +457,7 @@ def create_app(
         (REQ-000029-sJpO9KMY), for a log panel's pages."""
         try:
             return await log_page(
-                redis_client, source, start=start, end=end, offset=offset, limit=limit, order=order
+                queries, source, start=start, end=end, offset=offset, limit=limit, order=order
             )
         except QueryError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -464,7 +475,7 @@ def create_app(
         """The next or previous row whose text contains `q` (REQ-000029-sJpO9KMY)."""
         try:
             return await find_row(
-                redis_client,
+                queries,
                 source,
                 start=start,
                 end=end,
@@ -486,7 +497,7 @@ def create_app(
     ) -> dict[str, Any]:
         """The index of `source`'s row nearest `t` (REQ-000030-sJpO9KMY)."""
         try:
-            return await nearest_row(redis_client, source, start=start, end=end, t=t, order=order)
+            return await nearest_row(queries, source, start=start, end=end, t=t, order=order)
         except QueryError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -495,7 +506,7 @@ def create_app(
         """The earliest and latest record of `sources`, comma-separated
         (REQ-000031-sJpO9KMY), for the live view's navigator."""
         try:
-            return await data_range(redis_client, [s for s in sources.split(",") if s])
+            return await data_range(queries, [s for s in sources.split(",") if s])
         except QueryError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -510,7 +521,7 @@ def create_app(
         a range, in the recording format's shapes (REQ-000037-sJpO9KMY)."""
         try:
             names = [s for s in sources.split(",") if s]
-            return await segment(redis_client, names, host=host or None, start=start, end=end)
+            return await segment(queries, names, host=host or None, start=start, end=end)
         except QueryError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -523,7 +534,7 @@ def create_app(
     ) -> dict[str, Any]:
         """How many log rows of `source` fall in each bucket (REQ-000029-sJpO9KMY)."""
         try:
-            return await log_density(redis_client, source, start=start, end=end, buckets=buckets)
+            return await log_density(queries, source, start=start, end=end, buckets=buckets)
         except QueryError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

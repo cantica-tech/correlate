@@ -218,6 +218,7 @@ def test_promotes_an_ssh_stream_for_the_owner_only(setup, monkeypatch) -> None:
     assert secondary["host"] == "lab" and secondary["owner"] == "alice"
     assert secondary["sump_port"] == 8775 and secondary["promoted_at"] > 0
     assert provisioned[0]["owner"] == "alice"
+    assert provisioned[0]["followed"] == {"containers": ["web"], "services": []}
     assert provisioned[0]["image"] == "ghcr.io/cantica/correlate-sump:1.2.3"
     assert provisioned[0]["parent_key"].startswith("ssh-ed25519 ")
     assert plugin.collection.applied[-1] == (sid, Followed())
