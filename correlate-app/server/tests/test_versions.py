@@ -3,6 +3,7 @@ release tag must equal it (`scripts/check_versions.py`)."""
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -10,7 +11,12 @@ _SCRIPT = ROOT / "scripts" / "check_versions.py"
 _spec = importlib.util.spec_from_file_location("check_versions", _SCRIPT)
 assert _spec is not None and _spec.loader is not None
 check_versions = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(check_versions)
+# No __pycache__ beside the repository's scripts (it is not tracked).
+_writes, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+try:
+    _spec.loader.exec_module(check_versions)
+finally:
+    sys.dont_write_bytecode = _writes
 
 
 def _repo(tmp_path: Path, app: str, server: str) -> Path:

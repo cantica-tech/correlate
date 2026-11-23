@@ -8,7 +8,7 @@
  * It runs with a throwaway home folder, so the user's own catalog, vault and
  * settings are never read or written.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,6 +42,13 @@ describe.skipIf(!executable)("br-BUILD-000010-sJpO9KMY: the packaged app", () =>
   it("starts from its archive, says its version and carries its build stamp", async () => {
     const home = mkdtempSync(path.join(tmpdir(), "correlate-packaged-"));
     const env = { ...process.env, HOME: home, USERPROFILE: home } as Record<string, string>;
+    if (process.platform === "win32") {
+      // Windows keeps app and Chromium data here, not under the home folder.
+      env.APPDATA = path.join(home, "AppData", "Roaming");
+      env.LOCALAPPDATA = path.join(home, "AppData", "Local");
+      mkdirSync(env.APPDATA, { recursive: true });
+      mkdirSync(env.LOCALAPPDATA, { recursive: true });
+    }
     delete env.ELECTRON_RUN_AS_NODE;
     // CI's Linux runners cannot use Chromium's sandbox for an unpacked build.
     const args = process.platform === "linux" ? ["--no-sandbox"] : [];
