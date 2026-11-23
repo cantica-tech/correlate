@@ -26,6 +26,7 @@ import type { SafeStorageLike } from "./vault/cipher.js";
 import { Vault, type VaultLogger } from "./vault/vault.js";
 
 export { aboutText, readBuildInfo, sumpAbout } from "./about.js";
+export { importCttc } from "./analysis/cttcImport.js";
 export {
   fileRequest,
   OPENED_EXTENSIONS,

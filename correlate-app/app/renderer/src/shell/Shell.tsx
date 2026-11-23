@@ -223,6 +223,15 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
     () => void bridge.project?.addFiles().then((r) => take(r, true)),
     [bridge, take],
   );
+  // cttc import (REQ-000055-sJpO9KMY): the summary said, the files shown.
+  const importCttc = useCallback(
+    () =>
+      void bridge.project?.importCttc?.().then((r) => {
+        take(r, true);
+        if (r?.ok && r.message) void bridge.status.add(r.message);
+      }),
+    [bridge, take],
+  );
   const showFile = useCallback(
     (id: string) => void bridge.project?.show(id).then((r) => take(r, true)),
     [bridge, take],
@@ -401,6 +410,7 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
       if (name === "new-project") newProject();
       if (name === "open-project") openProject();
       if (name === "add-files") addFiles();
+      if (name === "import-cttc") importCttc();
       if (name === "preferences") {
         void bridge.theme.get().then(setTheme);
         void bridge.status.visible().then(setStatusBar);
@@ -408,7 +418,7 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
         setPreferences(true);
       }
     });
-  }, [bridge, detached, closeActive, newProject, openProject, addFiles]);
+  }, [bridge, detached, closeActive, newProject, openProject, addFiles, importCttc]);
 
   /** Keep a live setting; the field shows what the main process kept. */
   const changeLive = useCallback(
@@ -501,6 +511,7 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
       if (name === "save-project") return saveProject();
       if (name === "save-project-as") return saveProjectAs();
       if (name === "add-files") return addFiles();
+      if (name === "import-cttc") return importCttc();
       if (name === "start-recording") return startRecording();
       if (name === "pause-recording") return pauseRecording();
       if (name === "stop-recording") return stopRecording();
@@ -517,6 +528,7 @@ function ShellBody({ bridge, detached = false }: ShellProps) {
       saveProject,
       saveProjectAs,
       addFiles,
+      importCttc,
       startRecording,
       pauseRecording,
       stopRecording,

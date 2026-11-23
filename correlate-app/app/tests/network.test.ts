@@ -189,6 +189,7 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
       "saveAs",
       "addFiles",
       "addPaths",
+      "importCttc",
       "show",
       "change",
       "tracks",
@@ -197,11 +198,13 @@ describe("br-CONN-000008-sJpO9KMY: the renderer cannot connect", () => {
     await project.openFile?.("/p.correlator");
     await project.change?.({ op: "unbind" });
     await project.addPaths?.(["/r.recording"]);
+    await project.importCttc?.();
     expect(invoked.splice(0)).toEqual([
       ["project:get"],
       ["project:openFile", "/p.correlator"],
       ["project:change", { op: "unbind" }],
       ["project:addPaths", ["/r.recording"]],
+      ["project:importCttc"],
     ]);
     // The recording session: only its own channels (REQ-000037-sJpO9KMY).
     const rec = (exposed.correlate as { recording: Record<string, (m?: unknown) => unknown> })

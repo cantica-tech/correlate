@@ -43,6 +43,7 @@ export const PROJECT_ACTIONS: readonly string[] = [
   "save-project",
   "save-project-as",
   "add-files",
+  "import-cttc",
   "start-recording",
   "pause-recording",
   "stop-recording",
@@ -85,6 +86,13 @@ export const MENUS: readonly Menu[] = [
         label: "Add Files…",
         icon: "opened-data",
         title: "Add cttc recordings or metrics to the project",
+      },
+      {
+        action: "import-cttc",
+        label: "Import cttc Files…",
+        icon: "load-data",
+        title:
+          "Write cttc's recordings and metrics as correlate-app files beside them; the originals are not changed",
       },
       "separator",
       {

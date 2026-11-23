@@ -80,6 +80,7 @@ const {
   SidebarHost,
   startForwards,
   writeAtomic,
+  importCttc,
   logPrefs,
   FiringsFollower,
   registerEventsIpc,
@@ -458,6 +459,28 @@ app.whenReady().then(() => {
         : await dialog.showSaveDialog(options);
       return r.canceled || !r.filePath ? null : r.filePath;
     },
+    // cttc import (REQ-055): files, and folders where the dialog allows both (macOS).
+    askImport: async (event) => {
+      const options = {
+        title: "Import cttc Files",
+        buttonLabel: "Import",
+        properties: [
+          "openFile",
+          "multiSelections",
+          ...(process.platform === "darwin" ? ["openDirectory"] : []),
+        ],
+        filters: [
+          { name: "cttc recordings and metrics", extensions: ["cttc-record", "cttc-metric"] },
+        ],
+      };
+      const window = windowOfEvent(event);
+      const r = window
+        ? await dialog.showOpenDialog(window, options)
+        : await dialog.showOpenDialog(options);
+      return r.canceled ? [] : r.filePaths;
+    },
+    // Written beside each original, never over a file, the original only read.
+    importCttc: (chosen) => importCttc(chosen),
     askFiles: async (event) => {
       const options = {
         title: "Add Files",

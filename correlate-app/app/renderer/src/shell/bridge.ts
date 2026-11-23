@@ -240,6 +240,8 @@ export interface ShellBridge {
     saveAs(): Promise<ProjectState>;
     addFiles(): Promise<ProjectState>;
     addPaths(paths: string[]): Promise<ProjectState>;
+    /** Import cttc's files as correlate-app's, then add and show them (REQ-000055-sJpO9KMY). */
+    importCttc?(): Promise<ProjectState>;
     show(id: string): Promise<ProjectState>;
     change(change: Record<string, unknown> & { op: string }): Promise<ProjectState>;
     tracks(): Promise<{

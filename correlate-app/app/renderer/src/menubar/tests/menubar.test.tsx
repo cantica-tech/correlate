@@ -34,6 +34,7 @@ describe("REQ-000023-sJpO9KMY: the menus", () => {
       "Save Project",
       "Save Project As…",
       "Add Files…",
+      "Import cttc Files…",
       "Start or Resume Recording",
       "Pause Recording",
       "Stop Recording…",

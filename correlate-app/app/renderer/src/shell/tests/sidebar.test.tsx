@@ -43,7 +43,7 @@ describe("br-STYLE-000001-sJpO9KMY: the sidebar", () => {
         "Remove Data Stream…",
         "—",
       ],
-      ["New Project…", "Open Project…", "Add Files…", "—"],
+      ["New Project…", "Open Project…", "Add Files…", "Import cttc Files…", "—"],
       ["Create Event…", "Edit Events…", "—"],
     ]);
   });

@@ -88,6 +88,7 @@ const PROJECT_CHANNELS = {
   saveAs: "project:saveAs",
   addFiles: "project:addFiles",
   addPaths: "project:addPaths",
+  importCttc: "project:importCttc",
   show: "project:show",
   change: "project:change",
   tracks: "project:tracks",
@@ -256,6 +257,8 @@ contextBridge.exposeInMainWorld("correlate", {
     addFiles: () => ipcRenderer.invoke(PROJECT_CHANNELS.addFiles),
     /** Add captures the OS handed the app (no dialog); the last is shown. */
     addPaths: (paths) => ipcRenderer.invoke(PROJECT_CHANNELS.addPaths, paths),
+    /** Import cttc's files as correlate-app's (the open dialog), then add and show them. */
+    importCttc: () => ipcRenderer.invoke(PROJECT_CHANNELS.importCttc),
     /** Show one of the project's files, by id. */
     show: (id) => ipcRenderer.invoke(PROJECT_CHANNELS.show, id),
     /** Change the project: `{ op, ... }`. */

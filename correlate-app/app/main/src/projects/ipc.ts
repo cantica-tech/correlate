@@ -10,6 +10,9 @@
  * - `project:addFiles` (the open dialog for captures): added to the
  *   project, read, the last shown; `project:addPaths` (paths the OS handed
  *   the app, REQ-000036-sJpO9KMY) alike, without the dialog.
+ * - `project:importCttc` (the open dialog for cttc's files and folders): each
+ *   written as correlate-app's file beside it (REQ-000055-sJpO9KMY), then
+ *   added and shown as Add Files…, the import's summary said.
  * - `project:show` (a file's id): read if not yet, and shown.
  * - `project:change` (an operation): new folder, rename, move, remove (a file
  *   closed too, falling back as br-ANLYS-000006-sJpO9KMY), a track's delay
@@ -19,6 +22,8 @@
  * Every answer carries the project and the window's open list, so the
  * renderer draws both from one reply.
  */
+
+import { type ImportResult, importSummary } from "../analysis/cttcImport.js";
 import type { OpenFiles, OpenList } from "../analysis/ipc.js";
 import { openFiles } from "../analysis/ipc.js";
 import { kindOf } from "../opened.js";
@@ -45,6 +50,7 @@ export const PROJECT_SAVE_AS_CHANNEL = "project:saveAs";
 export const PROJECT_ADD_FILES_CHANNEL = "project:addFiles";
 export const PROJECT_ADD_PATHS_CHANNEL = "project:addPaths";
 export const PROJECT_SHOW_CHANNEL = "project:show";
+export const PROJECT_IMPORT_CTTC_CHANNEL = "project:importCttc";
 export const PROJECT_CHANGE_CHANNEL = "project:change";
 export const PROJECT_TRACKS_CHANNEL = "project:tracks";
 
@@ -58,6 +64,10 @@ export interface ProjectDeps {
   askFiles: (event: IpcEventLike) => Promise<string[]>;
   size?: (file: string) => Promise<number>;
   read?: (file: string) => Promise<Buffer>;
+  /** The open dialog for importing cttc's files (and folders where it allows). */
+  askImport?: (event: IpcEventLike) => Promise<string[]>;
+  /** Import the chosen cttc files and folders (`cttcImport.ts`). */
+  importCttc?: (chosen: string[]) => ImportResult;
 }
 
 /** Every answer: the project and the window's open list, and what went wrong. */
@@ -68,6 +78,8 @@ export interface ProjectAnswer {
   /** Files refused, each with its reason. */
   refused?: string[];
   warnings?: string[];
+  /** An import's outcome (REQ-000055-sJpO9KMY). */
+  imported?: ImportResult;
   session: SessionView;
   open: OpenList;
   recent: string[];
@@ -224,6 +236,26 @@ export function registerProjectIpc(
         : [],
     ),
   );
+  // Importing cttc's files (br-ANLYS-000007 to -000009-sJpO9KMY): written
+  // beside the originals, then added and shown as Add Files…, the summary said.
+  ipcMain.handle(PROJECT_IMPORT_CTTC_CHANNEL, async (event) => {
+    const window = windowOf(event);
+    if (!deps.askImport || !deps.importCttc) {
+      return failed(window, new Error("importing is not available here"));
+    }
+    const chosen = await deps.askImport(event);
+    if (chosen.length === 0) return reply(window, { ok: false, cancelled: true });
+    const result = deps.importCttc(chosen);
+    const summary = importSummary(result);
+    if (result.imported.length === 0) {
+      return reply(window, { ok: false, message: summary, imported: result });
+    }
+    const added = await addPaths(
+      event,
+      result.imported.map((i) => i.to),
+    );
+    return { ...added, message: summary, imported: result };
+  });
   ipcMain.handle(PROJECT_SHOW_CHANNEL, async (event, id) => {
     const window = windowOf(event);
     const item = projects.session(window).project.items.find((i) => i.id === id);

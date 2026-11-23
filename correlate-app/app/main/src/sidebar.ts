@@ -37,6 +37,7 @@ export const SIDEBAR_ACTIONS = [
   "new-project",
   "open-project",
   "add-files",
+  "import-cttc",
   "create-event",
   "edit-events",
   "preferences",

@@ -102,6 +102,13 @@ export const SECTIONS: readonly SidebarSection[] = [
         icon: "opened-data",
         title: "Add cttc recordings or metrics to the project; they open in the analysis view",
       },
+      {
+        action: "import-cttc",
+        label: "Import cttc Files…",
+        icon: "load-data",
+        title:
+          "Write cttc's recordings and metrics as correlate-app files beside them; the originals are not changed",
+      },
       SEPARATOR,
     ],
   },
@@ -140,6 +147,8 @@ export const AVAILABLE: ReadonlySet<string> = new Set([
   "new-project",
   "open-project",
   "add-files",
+  // cttc import (REQ-000055-sJpO9KMY).
+  "import-cttc",
   "preferences",
   "about",
   "quit",

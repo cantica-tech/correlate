@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { ImportResult } from "../../analysis/cttcImport.js";
 import { OpenFiles } from "../../analysis/ipc.js";
 import { zip } from "../../analysis/tests/zipWriter.js";
 import { Settings } from "../../theme.js";
@@ -10,6 +11,7 @@ import {
   PROJECT_ADD_FILES_CHANNEL,
   PROJECT_CHANGE_CHANNEL,
   PROJECT_GET_CHANNEL,
+  PROJECT_IMPORT_CTTC_CHANNEL,
   PROJECT_NEW_CHANNEL,
   PROJECT_OPEN_CHANNEL,
   PROJECT_SAVE_AS_CHANNEL,
@@ -47,7 +49,13 @@ const archive = () =>
   });
 
 function setup(
-  answers: { files?: string[]; project?: string | null; saveAs?: string | null } = {},
+  answers: {
+    files?: string[];
+    project?: string | null;
+    saveAs?: string | null;
+    imports?: string[];
+    imported?: ImportResult;
+  } = {},
 ) {
   const projects = new Projects(
     dir,
@@ -59,6 +67,8 @@ function setup(
     askProject: async () => answers.project ?? null,
     askSaveAs: async () => answers.saveAs ?? null,
     askFiles: async () => answers.files ?? [],
+    askImport: async () => answers.imports ?? [],
+    importCttc: () => answers.imported ?? { imported: [], skipped: [] },
     size: async () => 100,
     read: async (f) => (f.endsWith("bad.cttc-record") ? Buffer.from("no") : archive()),
   });
@@ -134,3 +144,42 @@ describe("REQ-000035-sJpO9KMY: the window's project", () => {
     expect(await none.call(PROJECT_SAVE_AS_CHANNEL)).toMatchObject({ ok: false, cancelled: true });
   });
 });
+
+describe("br-ANLYS-000009-sJpO9KMY: importing cttc's files", () => {
+  it("adds and shows the imported files, and says what the import did", async () => {
+    const to = path.join(dir, "trip.recording");
+    const { call } = setup({
+      imports: [path.join(dir, "trip.cttc-record")],
+      imported: {
+        imported: [{ from: path.join(dir, "trip.cttc-record"), to, warnings: [] }],
+        skipped: [{ path: path.join(dir, "x.cttc-metric"), reason: "not a zip" }],
+      },
+    });
+    const r = await call(PROJECT_IMPORT_CTTC_CHANNEL);
+    expect(r.ok).toBe(true);
+    expect(r.session.project.items.map((i) => i.path)).toEqual([to]);
+    expect(r.open.active).toBe(to);
+    expect(r.message).toBe("Imported 1 cttc file; x.cttc-metric skipped: not a zip");
+  });
+
+  it("imports nothing on a cancel, and says when nothing could be imported", async () => {
+    expect(await call0()).toMatchObject({ ok: false, cancelled: true });
+    const { call } = setup({
+      imports: [path.join(dir, "x.cttc-metric")],
+      imported: {
+        imported: [],
+        skipped: [{ path: path.join(dir, "x.cttc-metric"), reason: "not a zip" }],
+      },
+    });
+    const r = await call(PROJECT_IMPORT_CTTC_CHANNEL);
+    expect(r).toMatchObject({
+      ok: false,
+      message: "No cttc file imported; x.cttc-metric skipped: not a zip",
+    });
+    expect(r.session.project.items).toEqual([]);
+  });
+});
+
+async function call0() {
+  return setup().call(PROJECT_IMPORT_CTTC_CHANNEL);
+}
