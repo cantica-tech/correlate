@@ -12,8 +12,11 @@ import { Icon } from "../icons/Icon.js";
 import { useConfirmAbandon } from "../recording/Abandon.js";
 import type { ShellBridge } from "../shell/bridge.js";
 import {
+  addLogSumpStream,
   addStream,
+  type LogSumpHost,
   listStreams,
+  logSumpHosts,
   type Stream,
   setFollowed,
   setPrivate,
@@ -25,6 +28,14 @@ import { followedFrom, initialChecked, TargetList } from "./TargetList.js";
 
 /** The choice that means "a new stream over SSH". */
 export const NEW_STREAM = "";
+/** The choice that means "a new stream from a log-sump" (REQ-000057-sJpO9KMY): no stream's id
+ * starts `new:`. */
+export const NEW_LOGSUMP = "new:logsump";
+
+/** A refusal's words, a Sump without the log-sump plugin said plainly. */
+export function logSumpMessage(message: string): string {
+  return message === "Not Found" ? "This Sump has no log-sump plugin" : message;
+}
 
 /** The dialog's props. */
 export interface StreamsDialogProps {
@@ -49,6 +60,12 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
   const [targets, setTargets] = useState<Targets | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [sumpId, setSumpId] = useState<string | null>(null);
+  // A new log-sump stream (br-STREAM-000012-sJpO9KMY): its server, its key
+  // (sent to the Sump, never shown again), and the Docker host chosen.
+  const [lsUrl, setLsUrl] = useState("");
+  const [lsKey, setLsKey] = useState("");
+  const [lsHosts, setLsHosts] = useState<LogSumpHost[]>([]);
+  const [lsHost, setLsHost] = useState("");
   /** A new stream's Private switch (br-STREAM-000009-sJpO9KMY): off, shared. */
   const [newPrivate, setNewPrivate] = useState(false);
 
@@ -77,6 +94,9 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
     setStatus("");
     setError("");
     setNewPrivate(false);
+    setLsKey("");
+    setLsHosts([]);
+    setLsHost("");
     if (!mode) return;
     void (async () => {
       const [list, key] = await Promise.all([listStreams(request), sumpPublicKey(request)]);
@@ -96,7 +116,42 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
     })();
   }, [mode]);
 
+  /** The log-sump's Docker hosts this key may read. */
+  const fetchHosts = async () => {
+    setBusy(true);
+    setError("");
+    setStatus(`Asking the log-sump at ${lsUrl} for its hosts…`);
+    const r = await logSumpHosts(request, lsUrl.trim(), lsKey);
+    setBusy(false);
+    setStatus("");
+    if (!r.ok) return setError(logSumpMessage(r.message));
+    setLsHosts(r.value);
+    setLsHost(r.value[0]?.id ?? "");
+    if (r.value.length === 0) setError("This key may read no Docker host on that log-sump");
+  };
+
+  /** Add the chosen log-sump host as a stream, then list what runs there. */
+  const addLogSump = async () => {
+    setBusy(true);
+    setError("");
+    setStatus(`Adding ${lsHost} from the log-sump…`);
+    const added = await addLogSumpStream(request, lsUrl.trim(), lsKey, lsHost, newPrivate);
+    setBusy(false);
+    if (!added.ok) {
+      setStatus("");
+      return setError(logSumpMessage(added.message));
+    }
+    // The Sump keeps the key; the dialog forgets it.
+    setLsKey("");
+    setLsHosts([]);
+    const list = await listStreams(request);
+    if (list.ok) setStreams(list.value);
+    setChosen(added.value.id);
+    await fetchTargets(added.value.id);
+  };
+
   const fetchSources = async () => {
+    if (chosen === NEW_LOGSUMP) return addLogSump();
     if (chosen !== NEW_STREAM) return fetchTargets(chosen);
     setBusy(true);
     setError("");
@@ -114,7 +169,7 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
   };
 
   const submit = async () => {
-    if (!targets || chosen === NEW_STREAM) return;
+    if (!targets || chosen === NEW_STREAM || chosen === NEW_LOGSUMP) return;
     // Editing the recording's stream, or switching to another, abandons it
     // (REQ-000039-sJpO9KMY).
     const current = (await bridge.stream?.active()) ?? null;
@@ -139,6 +194,7 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
   };
 
   const isNew = chosen === NEW_STREAM;
+  const isNewLogSump = chosen === NEW_LOGSUMP;
   const current = streams.find((s) => s.id === chosen);
   /** Make the chosen stream private or shared; a refusal is said in the Sump's words. */
   const changePrivate = async (stream: Stream, isPrivate: boolean) => {
@@ -152,7 +208,7 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
   // Drawn only when the Sump tells who added its streams (br-STREAM-000009):
   // a concept new to correlate-app, not in cttc's #dlg-set.
   const privacy =
-    isNew && streams.some((s) => s.private !== undefined) ? (
+    (isNew || isNewLogSump) && streams.some((s) => s.private !== undefined) ? (
       <Switch id="stream-private" checked={newPrivate} onChange={setNewPrivate}>
         Private: only you and the Sump's owner see it
       </Switch>
@@ -193,7 +249,7 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
             id="dlg-ok"
             kind="primary"
             title="Follow exactly the ticked containers and services"
-            disabled={busy || !targets || isNew}
+            disabled={busy || !targets || isNew || isNewLogSump}
             onClick={() => void submit()}
           >
             Follow Selected
@@ -224,6 +280,7 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
               </option>
             ))}
             <option value={NEW_STREAM}>New, over SSH…</option>
+            <option value={NEW_LOGSUMP}>New, from a log-sump…</option>
           </select>
         </label>
         {privacy}
@@ -263,12 +320,67 @@ export function StreamsDialog({ bridge, mode, onClose }: StreamsDialogProps) {
             </label>
           </>
         ) : null}
+        {isNewLogSump ? (
+          <>
+            <label className="ctl block">
+              log-sump URL
+              <input
+                id="logsump-url"
+                type="url"
+                placeholder="https://host:8080"
+                value={lsUrl}
+                onChange={(e) => setLsUrl(e.currentTarget.value)}
+              />
+            </label>
+            <label className="ctl block">
+              API key
+              <input
+                id="logsump-key"
+                type="password"
+                autoComplete="off"
+                value={lsKey}
+                onChange={(e) => setLsKey(e.currentTarget.value)}
+              />
+              <span className="tdoc">
+                (kept by the Sump, which reads the log-sump with it; never shown again)
+              </span>
+            </label>
+            <div className="ctl fetch-row">
+              <Button
+                id="btn-logsump-hosts"
+                kind="fetch"
+                title="Lists the Docker hosts this key may read on that log-sump"
+                disabled={busy || !/^https?:\/\/\S+/.test(lsUrl.trim()) || !lsKey.trim()}
+                onClick={() => void fetchHosts()}
+              >
+                Fetch Hosts
+              </Button>
+            </div>
+            {lsHosts.length > 0 ? (
+              <label className="ctl block">
+                Docker host
+                <select
+                  id="logsump-host"
+                  value={lsHost}
+                  onChange={(e) => setLsHost(e.currentTarget.value)}
+                >
+                  {lsHosts.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.id}
+                      {h.enabled ? "" : " (not collecting)"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </>
+        ) : null}
         <div className="ctl fetch-row">
           <Button
             id="btn-ps-refresh"
             kind="fetch"
             title="Lists the containers and services running there now"
-            disabled={busy || (isNew && !target.includes("@"))}
+            disabled={busy || (isNew && !target.includes("@")) || (isNewLogSump && !lsHost)}
             onClick={() => void fetchSources()}
           >
             Fetch Sources

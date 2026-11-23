@@ -8,8 +8,9 @@ import type { SecondaryInfo, SumpErrorInfo, SumpRequester } from "../shell/bridg
 /** A data stream, as the Sump lists it. */
 export interface Stream {
   id: string;
-  /** `file`: an opened file in the analysis view (REQ-000033-sJpO9KMY). */
-  kind: "self" | "ssh" | "file";
+  /** `file`: an opened file in the analysis view (REQ-000033-sJpO9KMY);
+   * `logsump`: a log-sump Docker host (REQ-000057-sJpO9KMY). */
+  kind: "self" | "ssh" | "file" | "logsump";
   label: string;
   /** An SSH stream's host (REQ-000032-sJpO9KMY: the host block's title). */
   host?: string | null;
@@ -99,6 +100,44 @@ export async function listStreams(request: SumpRequester): Promise<Outcome<Strea
 /** Add a stream over SSH; the Sump first reaches Docker there with its own key. */
 export function addStream(request: SumpRequester, target: string, port: number, isPrivate = false) {
   return call<Stream>(request, "POST", "/streams", { target, port, private: isPrivate });
+}
+
+/** A log-sump's Docker host, as its catalog lists it for a key. */
+export interface LogSumpHost {
+  id: string;
+  host: string;
+  enabled: boolean;
+}
+
+/** The Docker hosts a log-sump lets this key read (br-STREAM-000012-sJpO9KMY); the key is
+ * sent to the Sump for this call only. */
+export async function logSumpHosts(
+  request: SumpRequester,
+  url: string,
+  apiKey: string,
+): Promise<Outcome<LogSumpHost[]>> {
+  const r = await call<{ hosts: LogSumpHost[] }>(request, "POST", "/plugins/logsump/catalog", {
+    url,
+    api_key: apiKey,
+  });
+  return r.ok ? { ok: true, value: r.value.hosts } : r;
+}
+
+/** Add a log-sump Docker host as a stream; the Sump keeps the key and never sends it back. */
+export function addLogSumpStream(
+  request: SumpRequester,
+  url: string,
+  apiKey: string,
+  dockerHost: string,
+  isPrivate = false,
+) {
+  return call<Stream>(request, "POST", "/streams", {
+    kind: "logsump",
+    url,
+    api_key: apiKey,
+    docker_host: dockerHost,
+    private: isPrivate,
+  });
 }
 
 /** Make a stream private or shared (br-STREAM-000007-sJpO9KMY); its creator's and the owner's. */

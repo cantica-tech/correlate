@@ -4,7 +4,9 @@
  * code leaves it after a fetch (`set-dialog.ts`: the status line, the
  * `#docker-targets` groups with ✔ marks and a gone target), with
  * correlate-app's labels and data: a data stream select where cttc had its
- * connection fields, and no transforms box (correlate-app has none yet).
+ * connection fields (its choices correlate-app's, the log-sump one of
+ * REQ-000057-sJpO9KMY included), and no transforms box (correlate-app has
+ * none yet).
  */
 import { ICONS } from "../../renderer/src/icons/icons.generated.js";
 import { REMOVE_STREAMS, STREAMS, TARGETS } from "./page/streams-data.js";
@@ -34,7 +36,7 @@ export function cttcStreamsDialog(): string {
     <h2 id="dlg-set-title">Edit Data Streams</h2>
     <fieldset class="dlg-section" id="set-source-box">
       <legend>${svg("set-source", "legend-icon")}Set source</legend>
-      <label class="ctl block">Data stream <select id="stream-select">${options}<option value="">New, over SSH…</option></select></label>
+      <label class="ctl block">Data stream <select id="stream-select">${options}<option value="">New, over SSH…</option><option value="new:logsump">New, from a log-sump…</option></select></label>
       <div class="ctl fetch-row">
         <button id="btn-ps-refresh" class="btn-fetch" title="Lists the containers and services running there now">${svg("fetch", "btn-fetch-icon")}<span id="btn-ps-refresh-label">Fetch Sources</span></button>
       </div>
