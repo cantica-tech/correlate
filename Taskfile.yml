@@ -1,0 +1,146 @@
+# https://taskfile.dev
+#
+# The correlate repository's commands, from its root. correlate-app's own tasks
+# (install, check, lint, typecheck, test, format, build, start, versions,
+# app:package, ...) come from correlate-app/Taskfile.yml, as they are; the
+# cantica-tech code standards from a checkout of the standards repository next
+# to this one (STANDARDS_DIR); and the release process (REQ-000054-sJpO9KMY):
+#
+#   task release:checklist   what a release takes, in order
+#   task release             tag, wait for the build, publish (each step below)
+#   task release:tag         tag v<version> and push it: the Release workflow builds
+#   task release:wait        follow that build to its end
+#   task release:publish     copy its installers to the distribution repository
+#
+# Run `task --list` to see every task.
+
+version: "3"
+
+includes:
+  # correlate-app: its tasks at this root, run in correlate-app/ (br-BUILD-000002).
+  correlate:
+    taskfile: ./correlate-app/Taskfile.yml
+    dir: ./correlate-app
+    flatten: true
+    excludes: [default]
+  # cantica-tech code standards: `task standards:lint`, `task standards:sync`, ...
+  # from a checkout of the standards repository next to this one (STANDARDS_DIR).
+  standards:
+    taskfile: '{{.STANDARDS_DIR | default "../standards"}}/Taskfile.standards.yml'
+    optional: true
+    flatten: true
+    excludes: [lint, format, typecheck] # correlate-app's own, above, are the project's
+
+vars:
+  #: The version being released: the app's and the Sump's one version (br-BUILD-000007).
+  VERSION:
+    sh: node -p "require('./correlate-app/app/package.json').version"
+  TAG: v{{.VERSION}}
+  #: Where the release workflow builds, and where releases are distributed.
+  SOURCE_REPO: cantica-tech/correlate
+  #: The distribution repository's checkout (cantica-tech/cantica-tech).
+  PUBLISH_DIR: '{{.PUBLISH_DIR | default "../cantica-tech"}}'
+
+tasks:
+  default:
+    desc: List every task
+    silent: true
+    cmd: task --list
+
+  lint:standards:
+    desc: "Lint with the cantica-tech standards (Markdown, YAML, workflows, shell), as their CI does"
+    preconditions: &standards
+      # Without the standards checkout the include above is skipped (optional):
+      # stop and say so, rather than pass having checked nothing.
+      - sh: test -f "${STANDARDS_DIR:-../standards}/Taskfile.standards.yml"
+        msg: >-
+          The cantica-tech standards are not checked out at {{.STANDARDS_DIR | default "../standards"}}.
+          Clone git@github.com:cantica-tech/standards.git next to this repository, or set STANDARDS_DIR to its
+          checkout.
+    cmds:
+      - task: standards:lint
+
+  ci:
+    desc: "What CI runs, locally: correlate-app's checks (layout, corpus, versions, lint, type-check, tests) and the app's build"
+    cmds:
+      - task: check
+      - task: app:build
+
+  release:checklist:
+    desc: "Print what a correlate-app release takes, in order"
+    silent: true
+    cmd: |
+      cat <<'CHECKLIST'
+      correlate-app release checklist (in order):
+        1. The version: app/package.json (and package-lock.json's own two lines), server/pyproject.toml and
+           correlate_sump/__init__.py carry the new version; `task versions` agrees (br-BUILD-000007).
+        2. `task ci` passes; committed and pushed to main; CI green on that commit.
+        3. `task release:tag`: tags v<version> and pushes it. The Release workflow checks the tag against the
+           version, runs the checks, builds the installers on each system (starting each packaged app), pushes
+           the Sump image ghcr.io/cantica-tech/correlate-sump:<version>, and makes a draft release
+           (br-BUILD-000008 to -000010).
+        4. `task release:wait`: follows that build to its end.
+        5. `task release:publish`: copies the installers to the distribution repository's checkout
+           (PUBLISH_DIR, default ../cantica-tech): correlate/v<version>/ (manifest.json, README.md) and the
+           index, committed and pushed, the installers the assets of its release correlate-v<version>.
+        6. Once only: the Sump image's package public (github.com/orgs/cantica-tech/packages, correlate-sump,
+           Package settings, Change visibility), so Docker pulls it without logging in.
+        `task release` runs 3 to 5 in a row.
+      CHECKLIST
+
+  release:tag:
+    desc: "Tag v<version> on main and push it, once the tree is clean, pushed, the version agrees and CI is green; the Release workflow then builds"
+    prompt: "Tag {{.TAG}} on main and push it to {{.SOURCE_REPO}}? The Release workflow then builds and pushes the Sump image."
+    preconditions:
+      - sh: test -z "$(git status --porcelain)"
+        msg: "The working tree has uncommitted changes: commit or stash them first."
+      - sh: test "$(git rev-parse --abbrev-ref HEAD)" = main
+        msg: "Releases are tagged on main."
+      - sh: git fetch -q origin main && test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+        msg: "main is not pushed (or not up to date with origin): push or pull first."
+      - sh: test -z "$(git tag -l '{{.TAG}}')"
+        msg: "{{.TAG}} already exists: raise the version first (task release:checklist)."
+      - sh: uv run --no-project --python 3.13 python -B correlate-app/scripts/check_versions.py --tag {{.TAG}}
+        msg: "The app's and the Sump's versions do not both equal {{.VERSION}} (task versions)."
+      - sh: test "$(gh run list -R {{.SOURCE_REPO}} --workflow ci.yml --commit "$(git rev-parse HEAD)" --json conclusion -q '.[0].conclusion')" = success
+        msg: "CI has not passed on this commit (yet): wait for it, or look at it with gh run list."
+    cmds:
+      - git tag -a {{.TAG}} -m "correlate-app {{.VERSION}}"
+      - git push -q origin {{.TAG}}
+      - echo "Tagged {{.TAG}}; the Release workflow builds it (task release:wait)."
+
+  release:wait:
+    desc: "Follow the Release workflow's build of v<version> to its end; fails if it failed"
+    cmds:
+      - |
+        set -e
+        id=""
+        for _ in $(seq 1 30); do
+          id="$(gh run list -R {{.SOURCE_REPO}} --workflow release.yml --branch {{.TAG}} --json databaseId -q '.[0].databaseId')"
+          [ -n "$id" ] && break
+          sleep 10
+        done
+        [ -n "$id" ] || { echo "No Release run for {{.TAG}} (was it pushed?)." >&2; exit 1; }
+        gh run watch "$id" -R {{.SOURCE_REPO}} --exit-status --interval 30
+        gh release view {{.TAG}} -R {{.SOURCE_REPO}} --json isDraft,assets \
+          -q '"draft: \(.isDraft); " + ([.assets[].name] | join(", "))'
+
+  release:publish:
+    desc: "Copy v<version>'s installers to the distribution repository (PUBLISH_DIR, default ../cantica-tech): correlate/v<version>/ and its index, committed and pushed, the installers the assets of its release correlate-v<version>. task release:publish -- --replace redoes a version"
+    preconditions:
+      - sh: test -d "{{.PUBLISH_DIR}}/.git"
+        msg: "{{.PUBLISH_DIR}} is not a checkout of cantica-tech/cantica-tech (set PUBLISH_DIR)."
+    cmds:
+      - uv run --no-project --python 3.13 python -B correlate-app/scripts/publish_release.py --version {{.VERSION}} --publish-dir "{{.PUBLISH_DIR}}" --push {{.CLI_ARGS}}
+
+  release:publish:dry:
+    desc: "Write v<version>'s distribution files into PUBLISH_DIR without committing, pushing or releasing"
+    cmds:
+      - uv run --no-project --python 3.13 python -B correlate-app/scripts/publish_release.py --version {{.VERSION}} --publish-dir "{{.PUBLISH_DIR}}" {{.CLI_ARGS}}
+
+  release:
+    desc: "Release v<version>: tag it, wait for its build, publish it to the distribution repository (release:tag, release:wait, release:publish)"
+    cmds:
+      - task: release:tag
+      - task: release:wait
+      - task: release:publish

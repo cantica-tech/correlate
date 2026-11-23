@@ -52,3 +52,10 @@ The app and the Sump carry one version (`app/package.json` and
 The app provisions the Sump image of its own version,
 `ghcr.io/cantica-tech/correlate-sump:<version>`. `app/resources/icon.png`, the
 installers' icon, is rendered from the app's icon by `npm run icon`.
+
+A release is cut from the repository's root Taskfile: `task release:checklist`
+says what it takes; `task release` tags `v<version>` (the Release workflow
+then builds the installers and the Sump image), follows that build, and
+publishes the installers to the distribution repository's checkout
+(`../cantica-tech`, `correlate/v<version>/` and the release
+`correlate-v<version>` there).
