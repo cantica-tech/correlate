@@ -7,21 +7,29 @@ copies them to the distribution repository's checkout (`--publish-dir`,
 `cantica-tech/cantica-tech`), as its other products are distributed there:
 
 - `correlate/v<version>/manifest.json`: the version, the Sump image, and each
-  installer's file, system, architecture, size, SHA-256 and download link;
-- `correlate/v<version>/README.md`: how to install it;
+  file's system, architecture, size, SHA-256 and download link: the
+  installers, and the Sump image saved per architecture (for `docker load`);
+- `correlate/v<version>/*.zip.001`, `.002`, ...: each of those files zipped,
+  the zip cut into numbered pieces under GitHub's 100 MB (one `*.zip` when
+  it fits); 7-Zip opens `.001` directly, `cat` joins them elsewhere;
+- `correlate/v<version>/README.md`: how to install it, and open the zips;
 - `correlate/README.md`: the index of every version, made again from the
   manifests; and a line for `correlate/` in the repository's README.
 
 GitHub refuses files over 100 MB in git, and every installer is larger, so
-the installers themselves are the assets of a release `correlate-v<version>`
-of the distribution repository, which the manifests link to.
+the files whole are the assets of a release `correlate-v<version>` of the
+distribution repository, which the manifests link to; in git they are the
+zips' pieces. The image files come from the release workflow; for a version
+built before it saved them, `--image-dir` gives them (`docker save`). The
+pieces are an ordinary zip cut in order, not a `zip -s` split archive:
+macOS's `zip` 3.0 joins those wrongly.
 
 Without `--push` the files are written and nothing is committed, pushed or
 released. With it they are committed ("Deploy release: correlate-app
 v<version>") and pushed, then the release is made with the installers.
 
 Usage: python scripts/publish_release.py [--version X.Y.Z]
-       [--publish-dir ../../cantica-tech] [--push] [--replace]
+       [--publish-dir ../../cantica-tech] [--image-dir DIR] [--push] [--replace]
 Standard library only; GitHub through the `gh` CLI.
 """
 
@@ -34,6 +42,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import cast
 
@@ -49,7 +58,11 @@ FOLDER = "correlate"
 INSTALLER = re.compile(
     r"^correlate-app-(?P<version>[0-9.]+)-(?P<os>mac|win|linux)-(?P<arch>[A-Za-z0-9_]+)\.(?P<ext>dmg|exe|AppImage)$"
 )
+#: The Sump image saved for one architecture, as the release workflow names it.
+IMAGE_FILE = re.compile(r"^correlate-sump-(?P<version>[0-9.]+)-linux-(?P<arch>amd64|arm64)\.tar$")
 SYSTEMS = {"mac": "macOS", "win": "Windows", "linux": "Linux"}
+#: A zip's largest piece in git: under GitHub's 100 MB, with room.
+PART = 95 * 1024 * 1024
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -78,22 +91,61 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def is_release_file(name: str) -> bool:
+    """An installer, or the Sump image saved for one architecture."""
+    return bool(INSTALLER.match(name) or IMAGE_FILE.match(name))
+
+
 def describe(path: Path, version: str) -> dict[str, object]:
-    """One installer's entry in the manifest."""
+    """One file's entry in the manifest: an installer, or the Sump image."""
     found = INSTALLER.match(path.name)
-    if found is None or found["version"] != version:
-        raise PublishError(f"{path.name} is not a correlate-app {version} installer")
+    image = IMAGE_FILE.match(path.name)
+    if found is not None and found["version"] == version:
+        kind, system, arch = "installer", SYSTEMS[found["os"]], found["arch"]
+    elif image is not None and image["version"] == version:
+        kind, system, arch = "sump-image", "Linux (Docker)", image["arch"]
+    else:
+        raise PublishError(f"{path.name} is not a correlate-app {version} release file")
     return {
         "file": path.name,
-        "system": SYSTEMS[found["os"]],
-        "arch": found["arch"],
+        "kind": kind,
+        "system": system,
+        "arch": arch,
         "size": path.stat().st_size,
         "sha256": sha256(path),
         "url": f"https://github.com/{TARGET_REPO}/releases/download/{FOLDER}-v{version}/{path.name}",
     }
 
 
-def manifest(version: str, files: list[dict[str, object]]) -> dict[str, object]:
+def split_zip(source: Path, into: Path) -> list[dict[str, object]]:
+    """`source` zipped into `into`, the zip cut into pieces of at most `PART`
+    bytes (`<name>.zip.001`, `.002`, ...; `<name>.zip` alone when it fits);
+    the pieces, in the order to join them."""
+    name = source.name + ".zip"
+    for old in [*into.glob(name + ".[0-9][0-9][0-9]"), into / name]:
+        old.unlink(missing_ok=True)
+    whole = into / (name + ".tmp")
+    with zipfile.ZipFile(whole, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as z:
+        z.write(source, source.name)
+    if whole.stat().st_size <= PART:
+        whole.rename(into / name)
+        pieces = [into / name]
+    else:
+        pieces = []
+        with whole.open("rb") as f:
+            for n, block in enumerate(iter(lambda: f.read(PART), b""), start=1):
+                piece = into / f"{name}.{n:03d}"
+                piece.write_bytes(block)
+                pieces.append(piece)
+        whole.unlink()
+    return [{"file": p.name, "size": p.stat().st_size, "sha256": sha256(p)} for p in pieces]
+
+
+def manifest(
+    version: str,
+    files: list[dict[str, object]],
+    archives: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
     return {
         "id": "correlate-app",
         "name": "correlate-app",
@@ -104,7 +156,9 @@ def manifest(version: str, files: list[dict[str, object]]) -> dict[str, object]:
         ),
         "sumpImage": f"{IMAGE}:{version}",
         "release": f"{FOLDER}-v{version}",
-        "files": sorted(files, key=lambda f: (str(f["system"]), str(f["arch"]))),
+        "files": sorted(files, key=lambda f: (str(f["kind"]), str(f["system"]), str(f["arch"]))),
+        # Each file zipped in this folder: its parts, in the order to join them.
+        "archives": archives or [],
     }
 
 
@@ -114,11 +168,51 @@ def _row(f: dict[str, object]) -> str:
     return f"| {f['system']} | `{f['arch']}` | [`{f['file']}`]({f['url']}) | {size} MB |"
 
 
+def _zip_row(a: dict[str, object]) -> str:
+    """One zipped file's line: its parts, linked in this folder."""
+    parts = cast("list[dict[str, object]]", a["parts"])
+    links = ", ".join(f"[`{p['file']}`]({p['file']})" for p in parts)
+    return f"| `{a['of']}` | {links} |"
+
+
 def version_readme(m: dict[str, object]) -> str:
     """How to install one version."""
     version = m["version"]
     files = cast("list[dict[str, object]]", m["files"])
-    rows = "\n".join(_row(f) for f in files)
+    rows = "\n".join(_row(f) for f in files if f["kind"] == "installer")
+    images = "\n".join(_row(f) for f in files if f["kind"] == "sump-image")
+    archives = cast("list[dict[str, object]]", m.get("archives", []))
+    zips = "\n".join(_zip_row(a) for a in archives)
+    image_part = (
+        f"""
+The Sump image, saved per architecture, to load where the registry cannot be
+reached (`docker load -i <file>`; then the app provisions it as usual):
+
+| System | Architecture | Image | Size |
+| ------ | ------------ | ----- | ---- |
+{images}
+"""
+        if images
+        else ""
+    )
+    zip_part = (
+        f"""
+## The zips in this folder
+
+Each file above, zipped; a zip over 95 MB is cut into numbered pieces
+(`.001`, `.002`, ...). Download every piece of one file into one folder,
+then open its `.001` with 7-Zip, which joins them; or join them and unzip:
+`cat <name>.zip.0* > <name>.zip && unzip <name>.zip` (macOS, Linux), or
+`copy /b <name>.zip.001+<name>.zip.002 <name>.zip` (Windows, every piece in
+order).
+
+| File | Pieces |
+| ---- | ----- |
+{zips}
+"""
+        if zips
+        else ""
+    )
     return f"""# correlate-app {version}
 
 Installers for correlate-app {version}. The Sump it provisions is
@@ -128,12 +222,12 @@ Installers for correlate-app {version}. The Sump it provisions is
 | System | Architecture | Installer | Size |
 | ------ | ------------ | --------- | ---- |
 {rows}
-
+{image_part}
 The installers may be unsigned; the system then asks before opening them.
 On macOS, right-click the app and choose Open (or allow it in System
 Settings, Privacy & Security). On Windows, choose More info, then Run anyway.
 On Linux, make the AppImage executable (`chmod +x`) and run it.
-"""
+{zip_part}"""
 
 
 def index_readme(folder: Path) -> str:
@@ -196,7 +290,8 @@ def check_checkout(publish_dir: Path) -> None:
 
 
 def download(version: str, into: Path) -> list[Path]:
-    """The installers of the release `v<version>` of this repository (a draft too)."""
+    """The installers and image files of the release `v<version>` of this
+    repository (a draft too)."""
     run(["gh", "release", "view", f"v{version}", "-R", SOURCE_REPO, "--json", "assets"])
     run(
         [
@@ -211,13 +306,19 @@ def download(version: str, into: Path) -> list[Path]:
             "--clobber",
         ]
     )
-    found = sorted(p for p in into.iterdir() if INSTALLER.match(p.name))
-    if not found:
+    found = sorted(p for p in into.iterdir() if is_release_file(p.name))
+    if not any(INSTALLER.match(p.name) for p in found):
         raise PublishError(f"the release v{version} of {SOURCE_REPO} has no installers")
     return found
 
 
-def publish(version: str, publish_dir: Path, push: bool, replace: bool) -> str:
+def publish(
+    version: str,
+    publish_dir: Path,
+    push: bool,
+    replace: bool,
+    image_dir: Path | None = None,
+) -> str:
     """Write, and with `push` commit, push and release; what was done."""
     check_checkout(publish_dir)
     release = f"{FOLDER}-v{version}"
@@ -233,10 +334,22 @@ def publish(version: str, publish_dir: Path, push: bool, replace: bool) -> str:
         )
     with tempfile.TemporaryDirectory() as tmp:
         installers = download(version, Path(tmp))
-        m = manifest(version, [describe(p, version) for p in installers])
+        if image_dir is not None:
+            extra = [p for p in image_dir.iterdir() if IMAGE_FILE.match(p.name)]
+            have = {p.name for p in installers}
+            installers += sorted(p for p in extra if p.name not in have)
+        if not any(IMAGE_FILE.match(p.name) for p in installers):
+            raise PublishError(
+                f"no Sump image file for {version}: the release has none (built before the"
+                " workflow saved them); give them with --image-dir"
+            )
         folder = publish_dir / FOLDER
         target = folder / f"v{version}"
         target.mkdir(parents=True, exist_ok=True)
+        archives: list[dict[str, object]] = [
+            {"of": p.name, "parts": split_zip(p, target)} for p in installers
+        ]
+        m = manifest(version, [describe(p, version) for p in installers], archives)
         (target / "manifest.json").write_text(json.dumps(m, indent=2) + "\n", encoding="utf-8")
         (target / "README.md").write_text(version_readme(m), encoding="utf-8")
         (folder / "README.md").write_text(index_readme(folder), encoding="utf-8")
@@ -297,6 +410,11 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("--push", action="store_true", help="commit, push and make the release")
     parser.add_argument("--replace", action="store_true", help="redo a version already released")
+    parser.add_argument(
+        "--image-dir",
+        default=None,
+        help="a folder holding correlate-sump-<version>-linux-<arch>.tar files (docker save)",
+    )
     args = parser.parse_args(argv)
     try:
         print(
@@ -305,6 +423,7 @@ def main(argv: list[str]) -> int:
                 Path(args.publish_dir).resolve(),
                 args.push,
                 args.replace,
+                Path(args.image_dir).resolve() if args.image_dir else None,
             )
         )
     except PublishError as exc:

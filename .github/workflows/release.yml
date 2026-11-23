@@ -168,6 +168,23 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.check.outputs.version }}
+      # The same image as a file per architecture, for `docker load` where the
+      # registry cannot be reached (REQ-000054-sJpO9KMY); from the build's cache.
+      - name: Save the Sump image for each architecture
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          for arch in amd64 arm64; do
+            docker buildx build --platform "linux/$arch" --tag "$IMAGE:$VERSION" \
+              --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+              --label "org.opencontainers.image.version=$VERSION" \
+              --output "type=docker,dest=$RUNNER_TEMP/correlate-sump-$VERSION-linux-$arch.tar" server
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sump-image
+          if-no-files-found: error
+          path: ${{ runner.temp }}/correlate-sump-*.tar
 
   # A draft release with the installers, for the user to publish (br-BUILD-000008).
   release:
@@ -186,6 +203,10 @@ jobs:
           pattern: installers-*
           path: ${{ runner.temp }}/installers
           merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sump-image
+          path: ${{ runner.temp }}/installers
       - name: Make the draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -198,7 +219,9 @@ jobs:
 
           Installers: Windows x64 (NSIS), macOS for Apple silicon and Intel
           (DMG), Linux x64 (AppImage). The Sump it provisions is
-          \`$IMAGE:$VERSION\`, for amd64 and arm64.
+          \`$IMAGE:$VERSION\`, for amd64 and arm64; the same image is attached as a
+          file per architecture, for \`docker load -i <file>\` where the registry
+          cannot be reached.
 
           If these installers are unsigned, the system asks before opening
           them: on macOS, right-click the app and choose Open (or allow it in

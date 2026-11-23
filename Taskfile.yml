@@ -80,9 +80,10 @@ tasks:
            the Sump image ghcr.io/cantica-tech/correlate-sump:<version>, and makes a draft release
            (br-BUILD-000008 to -000010).
         4. `task release:wait`: follows that build to its end.
-        5. `task release:publish`: copies the installers to the distribution repository's checkout
-           (PUBLISH_DIR, default ../cantica-tech): correlate/v<version>/ (manifest.json, README.md) and the
-           index, committed and pushed, the installers the assets of its release correlate-v<version>.
+        5. `task release:publish`: copies the installers and the Sump image files (one per architecture, for
+           docker load) to the distribution repository's checkout (PUBLISH_DIR, default ../cantica-tech):
+           correlate/v<version>/ (manifest.json, README.md, each file zipped in pieces under 100 MB) and the
+           index, committed and pushed, the files whole the assets of its release correlate-v<version>.
         6. Once only: the Sump image's package public (github.com/orgs/cantica-tech/packages, correlate-sump,
            Package settings, Change visibility), so Docker pulls it without logging in.
         `task release` runs 3 to 5 in a row.
@@ -126,17 +127,17 @@ tasks:
           -q '"draft: \(.isDraft); " + ([.assets[].name] | join(", "))'
 
   release:publish:
-    desc: "Copy v<version>'s installers to the distribution repository (PUBLISH_DIR, default ../cantica-tech): correlate/v<version>/ and its index, committed and pushed, the installers the assets of its release correlate-v<version>. task release:publish -- --replace redoes a version"
+    desc: "Copy v<version>'s installers and Sump image files to the distribution repository (PUBLISH_DIR, default ../cantica-tech): correlate/v<version>/ with each zipped (in pieces under 100 MB) and its index, committed and pushed, the files whole the assets of its release correlate-v<version>. IMAGE_DIR gives image files the release lacks; task release:publish -- --replace redoes a version"
     preconditions:
       - sh: test -d "{{.PUBLISH_DIR}}/.git"
         msg: "{{.PUBLISH_DIR}} is not a checkout of cantica-tech/cantica-tech (set PUBLISH_DIR)."
     cmds:
-      - uv run --no-project --python 3.13 python -B correlate-app/scripts/publish_release.py --version {{.VERSION}} --publish-dir "{{.PUBLISH_DIR}}" --push {{.CLI_ARGS}}
+      - uv run --no-project --python 3.13 python -B correlate-app/scripts/publish_release.py --version {{.VERSION}} --publish-dir "{{.PUBLISH_DIR}}" {{if .IMAGE_DIR}}--image-dir "{{.IMAGE_DIR}}"{{end}} --push {{.CLI_ARGS}}
 
   release:publish:dry:
     desc: "Write v<version>'s distribution files into PUBLISH_DIR without committing, pushing or releasing"
     cmds:
-      - uv run --no-project --python 3.13 python -B correlate-app/scripts/publish_release.py --version {{.VERSION}} --publish-dir "{{.PUBLISH_DIR}}" {{.CLI_ARGS}}
+      - uv run --no-project --python 3.13 python -B correlate-app/scripts/publish_release.py --version {{.VERSION}} --publish-dir "{{.PUBLISH_DIR}}" {{if .IMAGE_DIR}}--image-dir "{{.IMAGE_DIR}}"{{end}} {{.CLI_ARGS}}
 
   release:
     desc: "Release v<version>: tag it, wait for its build, publish it to the distribution repository (release:tag, release:wait, release:publish)"
