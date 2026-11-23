@@ -1,0 +1,30 @@
+# The Sump's log-sump data-stream plugin (REQ-000057-sJpO9KMY): a log-sump
+# server's Docker hosts as data streams, their records polled and translated
+# to the Sump's, found through the `sump.plugins` entry point
+# (br-PLUGIN-000001-sJpO9KMY). A member of the server's uv workspace; adapted
+# from correlator's `sump-plugin-logstream` (D6).
+
+[project]
+name = "correlate-sump-plugin-logsump"
+version = "0.1.0"
+description = "correlate-app Sump plugin: a log-sump server's Docker hosts as data streams"
+readme = "README.md"
+requires-python = ">=3.13"
+# The Sump's plugin core, and httpx for log-sump's HTTP API.
+dependencies = ["correlate-sump", "httpx>=0.27"]
+
+# How the Sump finds this plugin.
+[project.entry-points."sump.plugins"]
+logsump = "sump_plugin_logsump.plugin:plugin"
+
+[tool.uv.sources]
+# The Sump from this workspace, not a registry.
+correlate-sump = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# The one import package this plugin ships.
+packages = ["src/sump_plugin_logsump"]
