@@ -97,6 +97,13 @@ class SumpHookSpecs:
         `register_transport`/`register_data_source`)."""
 
     @hookspec
+    def register_stream_kind(self, manager: PluginManager) -> None:
+        """Register the plugin's data streams' kind with
+        `manager.streams.add_kind(kind)` (a `correlate_sump.streams.StreamKind`,
+        br-PLUGIN-000010-sJpO9KMY): the core keeps its streams and their rules,
+        the kind makes, lists and collects them. May be `async def`."""
+
+    @hookspec
     def contribute_routes(self, app: Any) -> None:
         """Optionally add custom API routes to the Sump's FastAPI app."""
 
@@ -128,7 +135,13 @@ CORE_OWNER = "sump"
 LOADED, DISABLED, FAILED = "loaded", "disabled", "failed"
 
 #: Registration hooks, in the order `discover` runs them.
-REGISTRATION_HOOKS = ("register_transport", "register_data_source", "register_background_task")
+REGISTRATION_HOOKS = (
+    "register_transport",
+    "register_data_source",
+    # After the data sources ("self" detected), before the tasks that collect.
+    "register_stream_kind",
+    "register_background_task",
+)
 
 
 class PluginConflictError(ValueError):
@@ -179,6 +192,9 @@ class PluginManager:
         #: the logstream plugin) can build a task that ingests directly,
         #: without a Fluent-Bit/TCP round-trip (cor-CORE.DATASTREAM-003).
         self.ingest_adapter = ingest_adapter
+        #: Every plugin's data streams (`correlate_sump.streams.StreamRegistry`),
+        #: set by `create_app` before `discover()` runs (br-PLUGIN-000010).
+        self.streams: Any = None
 
     async def discover(self) -> list[str]:
         """Load every installed `sump.plugins` package not turned off, then

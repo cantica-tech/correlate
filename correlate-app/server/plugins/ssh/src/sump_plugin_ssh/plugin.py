@@ -1,9 +1,10 @@
 """The `sump.plugins` entry point (REQ-000024-sJpO9KMY).
 
 Registers the `local` and `ssh` transports (`ssh` with the Sump's own key),
-contributes `GET /plugins/ssh/public-key` and the data streams' routes
-(`/streams`, REQ-000025-sJpO9KMY), runs collection as its background task
-(resuming every saved followed set), and at start detects whether the
+its data streams' kind (`kind.py`; the streams, their store and routes are
+the core's, br-PLUGIN-000010-sJpO9KMY), `GET /plugins/ssh/public-key` and
+promotion's routes, runs collection as its background task (resuming every
+saved followed set), and at start detects whether the
 Sump's host runs Docker: through the host's Docker socket, mounted into the
 Sump's container by the app's provisioning (decided in
 FEAT-000025-sJpO9KMY). If it does, a "self" data source is registered, the
@@ -27,6 +28,7 @@ from typing import Any
 from correlate_sump.datasource import DataSource
 from correlate_sump.federation import Federated
 from correlate_sump.plugins import hookimpl
+from correlate_sump.streams import StreamRegistry
 from correlate_sump.transport import Transport
 from correlate_sump.users import UserStore, data_dir_from_env
 from sump_plugin_ssh import __version__
@@ -34,8 +36,9 @@ from sump_plugin_ssh.collect import Collection
 from sump_plugin_ssh.datasource import DockerHostDataSource
 from sump_plugin_ssh.host import SCRIPT, helper_name, self_reader_args
 from sump_plugin_ssh.identity import SumpIdentity, ensure_identity
+from sump_plugin_ssh.kind import SSHStreamKind
 from sump_plugin_ssh.promote import SECONDARY_PORT, PromoteError, Secondary, provision_secondary
-from sump_plugin_ssh.routes import add_removal_routes, add_stream_routes
+from sump_plugin_ssh.routes import add_promote_routes
 from sump_plugin_ssh.secondary import Forward, SecondaryClient, ssh_channel_opener
 from sump_plugin_ssh.streams import SELF_ID, Followed, StreamDef, StreamStore
 from sump_plugin_ssh.transport import LocalTransport, SSHTransport, forget_host_key
@@ -70,7 +73,10 @@ class SumpPluginSSH:
     def __init__(self, env: dict[str, str] | None = None) -> None:
         self._env = env
         self._identity: SumpIdentity | None = None
-        self._store: StreamStore | None = None
+        #: The Sump's stream registry (the core's, from `register_stream_kind`;
+        #: else its own, when the plugin runs alone, as in its tests).
+        self._registry: StreamRegistry | None = None
+        self.kind = SSHStreamKind(self)
         #: The "self" data source, once detected.
         self.self_source: DataSource | None = None
         #: The running collection, once the background task has started.
@@ -102,20 +108,24 @@ class SumpPluginSSH:
             self._identity = ensure_identity(self._data_dir())
         return self._identity
 
+    def registry(self) -> StreamRegistry:
+        """The Sump's streams: the core's registry, or one of its own (alone)."""
+        if self._registry is None:
+            self.identity()  # makes the data directory owner-only too
+            self._registry = StreamRegistry(self._data_dir() / "streams.json", self.sump_owner)
+            self._registry.add_kind(self.kind)
+        return self._registry
+
     def store(self) -> StreamStore:
         """The data streams and followed sets (`SUMP_DATA_DIR/streams.json`)."""
-        if self._store is None:
-            self.identity()  # makes the data directory owner-only too
-            self._store = StreamStore(self._data_dir() / "streams.json")
-        return self._store
+        return self.registry().store()
 
     def streams(self) -> list[StreamDef]:
-        """Every stream: "self" first when detected, then the SSH ones."""
-        found = [StreamDef(SELF_ID, "self")] if self.self_source is not None else []
-        return found + self.store().streams()
+        """Every stream the Sump has: "self" first when detected, then the kept ones."""
+        return self.registry().streams()
 
     def stream(self, stream_id: str) -> StreamDef | None:
-        return next((s for s in self.streams() if s.id == stream_id), None)
+        return self.registry().stream(stream_id)
 
     def ssh_transport(self, stream: StreamDef) -> SSHTransport:
         return SSHTransport(stream.host, stream.user, port=stream.port, identity=self.identity())
@@ -123,14 +133,15 @@ class SumpPluginSSH:
     def remove_stream(self, stream_id: str) -> StreamDef | None:
         """Stop the stream's collection, then forget it and its host key
         (br-STREAM-000004-sJpO9KMY); its records stay."""
-        if self.collection is not None:
-            self.collection.apply(stream_id, Followed())
-        stream = self.store().remove(stream_id)
-        self._ssh.pop(stream_id, None)
+        stream = self.stream(stream_id)
         if stream is not None:
-            forget_host_key(self.identity(), stream.host, stream.port)
-            logger.info("streams: removed %s; its collection stopped", stream_id)
+            self.registry().remove(stream)
         return stream
+
+    def forget_stream(self, stream: StreamDef) -> None:
+        """A removed SSH stream's transport and host key, forgotten."""
+        self._ssh.pop(stream.id, None)
+        forget_host_key(self.identity(), stream.host, stream.port)
 
     async def promote_stream(self, stream_id: str, owner: str, owner_key: str) -> dict[str, Any]:
         """Promote an SSH stream to a secondary Sump on its host (br-FED-000001,
@@ -179,20 +190,14 @@ class SumpPluginSSH:
         return secondary
 
     def creator(self, stream_id: str) -> str | None:
-        """Who added the stream; the Sump's owner for "self" and streams from
-        before (br-STREAM-000006-sJpO9KMY)."""
-        return self.store().creator(stream_id) or self.sump_owner()
+        """Who added the stream (br-STREAM-000006-sJpO9KMY), as the core says."""
+        return self.registry().creator(stream_id)
 
     def may_see(self, stream_id: str, user: str | None) -> bool:
-        """A shared stream, or the caller its creator or the Sump's owner
-        (br-STREAM-000007-sJpO9KMY)."""
-        if not self.store().private(stream_id):
-            return True
-        return user is not None and user in (self.creator(stream_id), self.sump_owner())
+        return self.registry().may_see(stream_id, user)
 
     def may_change(self, stream_id: str, user: str | None) -> bool:
-        """The caller is the stream's creator or the Sump's owner (br-STREAM-000008)."""
-        return user is not None and user in (self.creator(stream_id), self.sump_owner())
+        return self.registry().may_change(stream_id, user)
 
     def secondary_client(self, stream_id: str) -> SecondaryClient | None:
         """The parent's client of a promoted stream's secondary (br-FED-000002,
@@ -219,11 +224,9 @@ class SumpPluginSSH:
 
     def pause_stream(self, stream_id: str, paused: bool) -> None:
         """Close Data Streams: stop collecting, the followed set kept; or resume."""
-        self.store().set_paused(stream_id, paused)
-        if self.collection is not None:
-            followed = Followed() if paused else self.store().followed(stream_id)
-            self.collection.apply(stream_id, followed)
-        logger.info("streams: %s %s", stream_id, "paused" if paused else "resumed")
+        stream = self.stream(stream_id)
+        if stream is not None:
+            self.registry().pause(stream, paused)
 
     def transport_for(self, stream_id: str) -> Any:
         """A stream's transport: "self"'s local one, or one SSH transport per stream."""
@@ -311,8 +314,7 @@ class SumpPluginSSH:
             self.collection = collection
             try:
                 # Resume what was followed before the Sump stopped.
-                for stream_id, followed in self.store().all_followed().items():
-                    collection.apply(stream_id, followed)
+                self.registry().resume(self.kind)
                 await asyncio.Event().wait()
             finally:
                 self.collection = None
@@ -321,13 +323,17 @@ class SumpPluginSSH:
         manager.add_background_task("collection", collect)
 
     @hookimpl
+    def register_stream_kind(self, manager: Any) -> None:
+        """Its streams' kind, in the core's registry (br-PLUGIN-000010-sJpO9KMY)."""
+        registry = getattr(manager, "streams", None)
+        if registry is not None:
+            registry.add_kind(self.kind)
+            self._registry = registry
+
     def source_hidden(self, source: str, user: str | None) -> bool | None:
-        """A source of a stream hidden from `user` (br-STREAM-000007-sJpO9KMY);
-        None for a source that is not a stream's here."""
-        stream_id, sep, _name = source.partition("/")
-        if not sep or self.stream(stream_id) is None:
-            return None
-        return not self.may_see(stream_id, user)
+        """A source of a stream hidden from `user` (br-STREAM-000007-sJpO9KMY),
+        as the core rules it; None for a source that is no stream's."""
+        return self.registry().source_hidden(source, user)
 
     @hookimpl
     def federated_source(self, source: str) -> Federated | None:
@@ -365,8 +371,7 @@ class SumpPluginSSH:
             `authorized_keys`; the private key never leaves the Sump."""
             return {"public_key": identity.public_key()}
 
-        add_stream_routes(app, self)
-        add_removal_routes(app, self)
+        add_promote_routes(app, self)
 
 
 #: The instance the `sump.plugins` entry point names.

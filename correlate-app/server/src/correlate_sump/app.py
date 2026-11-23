@@ -62,6 +62,8 @@ from correlate_sump.sessions import (
 )
 from correlate_sump.span import data_range
 from correlate_sump.sshsig import LOGIN_NAMESPACE, SignatureError, verify
+from correlate_sump.stream_routes import add_stream_routes
+from correlate_sump.streams import StreamRegistry
 from correlate_sump.users import (
     CorruptKeyStore,
     UserError,
@@ -210,6 +212,10 @@ def create_app(
         plugin_manager = PluginManager(disabled=disabled, disable_autoload=autoload_off)
     adapter = IngestAdapter(redis_client, maxlen=maxlen, metrics=SumpMetrics())
     plugin_manager.ingest_adapter = adapter
+    users = UserStore(data_dir_from_env(env))
+    # Every plugin's data streams, kept and ruled by the core (br-PLUGIN-000010).
+    streams = StreamRegistry(data_dir_from_env(env) / "streams.json", users.owner)
+    plugin_manager.streams = streams
     ingest_host = env.get("SUMP_INGEST_HOST", DEFAULT_HOST)
     ingest_port = int(env.get("SUMP_INGEST_PORT", DEFAULT_PORT))
 
@@ -241,7 +247,6 @@ def create_app(
             await runtime.stop()
 
     sessions = SessionStore(redis_client, idle_seconds, max_seconds)
-    users = UserStore(data_dir_from_env(env))
     # The Sump's own recent lines, for Ship Logs when Docker cannot be read.
     recent_lines = keep_recent_lines()
     app = FastAPI(title="correlate-sump", version=__version__, lifespan=lifespan)
@@ -249,7 +254,9 @@ def create_app(
     app.state.adapter = adapter
     app.state.sessions = sessions
     app.state.users = users
+    app.state.streams = streams
     app.add_middleware(SessionGuard, sessions=sessions)
+    add_stream_routes(app, streams)
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -388,6 +395,10 @@ def create_app(
 
     def _hidden(source: str, user: str | None) -> bool:
         try:
+            # A stream's source by the core's rules, else whatever a plugin says.
+            ruled = streams.source_hidden(source, user)
+            if ruled is not None:
+                return ruled
             return bool(plugin_manager.hook.source_hidden(source=source, user=user))
         except Exception:  # a plugin's failure hides nothing it did not say
             logger.exception("access: source_hidden(%s) failed", source)

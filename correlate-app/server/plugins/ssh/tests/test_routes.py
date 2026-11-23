@@ -14,6 +14,7 @@ from sump_plugin_ssh.datasource import DockerHostDataSource
 from sump_plugin_ssh.plugin import SumpPluginSSH
 from sump_plugin_ssh.streams import Followed
 
+from correlate_sump.stream_routes import add_stream_routes
 from correlate_sump.transport import ExecResult, Transport
 
 
@@ -72,6 +73,8 @@ def setup(tmp_path: Path, monkeypatch):
         return await call_next(request)
 
     plugin.contribute_routes(app)
+    # The data streams' routes are the core's (br-PLUGIN-000010), as in the Sump.
+    add_stream_routes(app, plugin.registry())
     return plugin, docker, TestClient(app)
 
 
@@ -150,7 +153,7 @@ async def test_the_sump_keeps_the_routes_behind_its_session(tmp_path: Path, monk
 
     monkeypatch.setenv("SUMP_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(module.plugin, "_identity", None)
-    monkeypatch.setattr(module.plugin, "_store", None)
+    monkeypatch.setattr(module.plugin, "_registry", None)
     eps = [ep for ep in entry_points(group="sump.plugins") if ep.name == "ssh"]
     monkeypatch.setattr(
         "correlate_sump.plugins._discover_entry_points", lambda group="sump.plugins": eps
@@ -221,6 +224,8 @@ def test_promotes_an_ssh_stream_for_the_owner_only(setup, monkeypatch) -> None:
         return await call_next(request)
 
     plugin.contribute_routes(app)
+    # The data streams' routes are the core's (br-PLUGIN-000010), as in the Sump.
+    add_stream_routes(app, plugin.registry())
     client = TestClient(app)
 
     body = {"owner_key": "ssh-ed25519 AAAAowner alice@laptop"}

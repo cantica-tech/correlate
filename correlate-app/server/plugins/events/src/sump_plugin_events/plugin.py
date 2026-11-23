@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Callable
 from typing import Any
 
 from correlate_sump.plugins import hookimpl
@@ -40,6 +41,25 @@ async def run(engine: Engine, every: float = TICK_SECONDS, ticks: int | None = N
         await asyncio.sleep(every)
 
 
+def hidden_for(manager: Any) -> Callable[[str, str], bool]:
+    """Whether a source is hidden from a user, for events and their artifacts:
+    the core's streams say (br-STREAM-000007, br-PLUGIN-000010), else
+    whatever a plugin says; a failure hides nothing."""
+
+    def hidden(source: str, user: str) -> bool:
+        try:
+            streams = getattr(manager, "streams", None)
+            ruled = streams.source_hidden(source, user) if streams is not None else None
+            if ruled is not None:
+                return bool(ruled)
+            return bool(manager.hook.source_hidden(source=source, user=user))
+        except Exception:
+            logger.exception("events: source_hidden(%s) failed", source)
+            return False
+
+    return hidden
+
+
 class SumpPluginEvents:
     """The plugin: its hooks, and the Sump's Redis once it is given."""
 
@@ -60,13 +80,7 @@ class SumpPluginEvents:
     def register_background_task(self, manager: Any) -> None:
         adapter = manager.ingest_adapter
 
-        def hidden(source: str, user: str) -> bool:
-            # The stream plugins say what is hidden from whom (br-STREAM-000007).
-            try:
-                return bool(manager.hook.source_hidden(source=source, user=user))
-            except Exception:
-                logger.exception("events: source_hidden(%s) failed", source)
-                return False
+        hidden = hidden_for(manager)
 
         if adapter is not None:
             self.store = EventStore(adapter.redis)
