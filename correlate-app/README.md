@@ -1,6 +1,6 @@
 # correlate-app
 
-[![CI](https://github.com/oliben67/correlate/actions/workflows/ci.yml/badge.svg)](https://github.com/oliben67/correlate/actions/workflows/ci.yml)
+[![CI](https://github.com/cantica-tech/correlate/actions/workflows/ci.yml/badge.svg)](https://github.com/cantica-tech/correlate/actions/workflows/ci.yml)
 
 correlate-app correlates container telemetry with service logs on one shared,
 clickable timeline. It is a from-scratch rewrite of cttc; the plan is in
@@ -50,5 +50,5 @@ or starts `chore:` (rules `br-BUILD-000004` and `br-BUILD-000005`).
 The app and the Sump carry one version (`app/package.json` and
 `server/pyproject.toml`); `task versions` checks it (rule `br-BUILD-000007`).
 The app provisions the Sump image of its own version,
-`ghcr.io/oliben67/correlate-sump:<version>`. `app/resources/icon.png`, the
+`ghcr.io/cantica-tech/correlate-sump:<version>`. `app/resources/icon.png`, the
 installers' icon, is rendered from the app's icon by `npm run icon`.

@@ -5,7 +5,7 @@
 # one version, the installers built each on its own system (NSIS for Windows
 # x64, DMGs for macOS arm64 and x64, an AppImage for Linux x64), the Sump
 # image built for amd64 and arm64 and pushed as
-# ghcr.io/oliben67/correlate-sump:<version>, then a draft GitHub Release with
+# ghcr.io/cantica-tech/correlate-sump:<version>, then a draft GitHub Release with
 # the installers, for the user to publish.
 #
 # Run by hand (Actions > Release > Run workflow), it builds everything and
@@ -37,7 +37,7 @@ defaults:
     working-directory: correlate-app
 
 env:
-  IMAGE: ghcr.io/oliben67/correlate-sump
+  IMAGE: ghcr.io/cantica-tech/correlate-sump
   # A tag run publishes; a manual run never does (br-BUILD-000008).
   PUBLISH: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
 

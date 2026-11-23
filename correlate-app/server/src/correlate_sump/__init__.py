@@ -7,4 +7,4 @@ the transport and data-source contracts it registers (`transport`,
 comes in Phase 1 of `docs/roadmap/correlate-app-rewrite.md`.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

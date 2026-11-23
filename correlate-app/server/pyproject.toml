@@ -4,7 +4,7 @@
 [project]
 # Distribution name; the import package is `correlate_sump`.
 name = "correlate-sump"
-version = "0.1.0"
+version = "0.1.1"
 description = "correlate-app's Sump: the containerized telemetry and log collector"
 readme = "README.md"
 # Python 3.13, pinned by .python-version (br-BUILD-000003).

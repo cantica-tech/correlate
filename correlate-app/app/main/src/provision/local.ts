@@ -2,7 +2,7 @@
  * Provisioning a Sump on this machine (REQ-000014-sJpO9KMY Requirement 3).
  *
  * The compose file goes to `~/.correlate/sumps/local/`, with the Sump's image
- * (`CORRELATE_SUMP_IMAGE`, else `ghcr.io/oliben67/correlate-sump:<version>`),
+ * (`CORRELATE_SUMP_IMAGE`, else `ghcr.io/cantica-tech/correlate-sump:<version>`),
  * its ports on 127.0.0.1 only (br-SUMP-000009-sJpO9KMY) and its data volume.
  * Docker starts it; the user becomes its owner with the identity key
  * (br-CONN-000007-sJpO9KMY); the app logs in; only then is the Sump recorded
@@ -29,7 +29,7 @@ import { dockerAvailable } from "./plan.js";
 import { mustRun, ProvisionError, type Runner } from "./runner.js";
 
 /** The registry image, tagged with the app's version (FEAT-000015-sJpO9KMY). */
-export const IMAGE_REPOSITORY = "ghcr.io/oliben67/correlate-sump";
+export const IMAGE_REPOSITORY = "ghcr.io/cantica-tech/correlate-sump";
 
 /** The compose project of the local Sump. */
 export const LOCAL_PROJECT = "correlate-sump-local";
