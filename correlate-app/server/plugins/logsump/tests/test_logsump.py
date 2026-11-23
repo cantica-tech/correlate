@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import stat
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -278,8 +279,9 @@ async def test_a_stream_is_made_from_its_catalog_and_its_key_kept_owner_only(
     )
     assert kind.describe(stream) == {"server": URL}
     # Kept owner-only, in an owner-only folder; a second add never replaces it.
-    assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(store.path.parent.stat().st_mode) == 0o700
+    if sys.platform != "win32":  # POSIX file modes; the Sump runs on Linux
+        assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
+        assert stat.S_IMODE(store.path.parent.stat().st_mode) == 0o700
     fake.keys["other"] = ["prod"]
     await kind.create({"url": URL, "api_key": "other", "docker_host": "prod"})
     assert (store.get(stream.id) or {})["api_key"] == KEY
